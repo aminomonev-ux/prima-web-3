@@ -224,6 +224,8 @@ const F_ENTRY = 'app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx'
 const F_TIPE = 'app/(dashboard)/rencana-aksi/_lib/types.ts'
 const F_DATA = 'lib/data/rencana-aksi.ts'
 const entry = kode(baca(F_ENTRY))
+// Tabel pindah ke komponen sendiri (konsep tabel-data-entry); form tetap di DataEntryForm.
+const tabelEntry = kode(baca('app/(dashboard)/rencana-aksi/_components/DataEntryTabel.tsx'))
 
 cek('empat kelompok isian target minta 2 desimal',
   (entry.match(/desimal=\{2\}/g) ?? []).length === 4,
@@ -234,16 +236,16 @@ cek('target bulanan ikut berdesimal',
 cek('kosong pada target bulanan tetap null, bukan nol',
   /e\.target\.value === '' \? null : \(parseFloat\(e\.target\.value\) \|\| 0\)/.test(entry), 'R3')
 
-cek('tabel Data Entry: RPJMD berkoma', /\{tulisDesimal\(row\.target_rpjmd\)\}/.test(entry))
-cek('tabel Data Entry: tahunan berkoma', /\{tulisDesimal\(row\.target_tahunan\)\}/.test(entry))
-cek('tabel Data Entry: realisasi TW belum diisi "—"', /\{tulisRealisasi\(q\.r\)\}/.test(entry))
-cek('tidak ada lagi {row.target_tahunan} mentah', !/\{row\.target_tahunan\}/.test(entry))
+cek('tabel Data Entry: RPJMD berkoma', /\{tulisDesimal\(r\.target_rpjmd\)\}/.test(tabelEntry))
+cek('tabel Data Entry: tahunan berkoma', /\{tulisDesimal\(r\.target_tahunan\)\}/.test(tabelEntry))
+cek('tabel Data Entry: realisasi TW belum diisi "—"', /\{tulisRealisasi\(q\.r\)\}/.test(tabelEntry))
+cek('tidak ada lagi {row.target_tahunan} mentah', !/\{(row|r)\.target_tahunan\}/.test(entry + tabelEntry))
 cek('spanduk "target diubah" berkoma',
   /\{tulisDesimal\(barisAsli\.target_tahunan\)\}/.test(entry) && /\{tulisDesimal\(targetTahunan\)\}/.test(entry),
   'angka sebelum→sesudah dibaca orang, bukan mesin')
 cek('pratinjau TW turunan berkoma',
-  (entry.match(/\{tulisDesimal\(derivedQ\[i\]\)\}/g) ?? []).length === 2,
-  'TW hanya-baca + pratinjau bulanan')
+  (entry.match(/\{tulisDesimal\(derivedQ\[i\]\)\}/g) ?? []).length === 1,
+  'TW hanya-baca di panel; kartu pratinjau terpisah dibuang karena TW kini tepat di bawah isian bulanan')
 cek('total/akhir pratinjau berkoma', /tulisDesimal\(derivedQ\.reduce/.test(entry))
 
 // ─── Penjumlahan: tempat lahirnya 10,370000000000001 ────────────────────────

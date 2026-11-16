@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Database, Plus, Edit, Sliders, Tag, AlertCircle, FolderOpen, FileUp, AlertTriangle,
+  Database, Plus, Sliders, Tag, AlertCircle, FileUp, AlertTriangle, X,
 } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -15,14 +15,14 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { usePenanda } from '../_lib/penanda';
-import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
+import { deriveTargetQuarters, BULAN_LABELS, capaianTahunan } from '../_lib/types';
 import {
   apiUpsert, apiDelete, apiList, apiPaguPerubahan, apiPaguRko, apiUbahPaguPerubahan, PaguRenaksiError, TautanAnakError,
   VersionConflictError, PAGU_RKO_KOSONG, type AgregatSubRko, type PaguRkoTahun, type UpsertPayload,
 } from '../_lib/api';
 import { tanyaAlasanPagu } from '@/components/renaksi/alasan-pagu';
 import {
-  alasanTolakRincian, jumlahPerSumber, kunciSumber, paguSendiri, rapikanSumber, totalBerlaku, tulisPerSumber, type RincianPagu,
+  alasanTolakRincian, jumlahPerSumber, kunciSumber, paguSendiri, rapikanSumber, totalBerlaku, type RincianPagu,
 } from '@/lib/renaksi/pagu';
 import { kunciSub, terpakaiRkoSub } from '@/lib/kinerja/pagu-renaksi';
 import PaguSumberEditor from './PaguSumberEditor';
@@ -30,6 +30,7 @@ import { kalimatPemakai } from '@/lib/renaksi/pemakai';
 import { INDUK_LEVEL, namaEntitas, indikatorInduk, entitasAnak, indikatorEntitas, denganNilaiTersimpan } from '@/lib/renaksi/rantai';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
 import ImportRenaksiModal from './ImportRenaksiModal';
+import DataEntryTabel from './DataEntryTabel';
 
 interface Props {
   level: RaLevel;
@@ -52,7 +53,11 @@ function rincianTersimpan(row: RaRow): RincianPagu[] {
 export default function DataEntryForm({ level, rows, selectedYear, onReload, notify, fokusEditId }: Props) {
   const penanda = usePenanda();
   const [importOpen, setImportOpen] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  // Form hidup di panel samping supaya tabel bisa selebar halaman (konsep tabel-data-entry, pilihan B).
+  const [panelTerbuka, setPanelTerbuka] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Potret isian saat panel dibuka; menutup panel dengan isian yang berbeda ditanya dulu.
+  const dasarRef = useRef<string | null>(null);
 
   const [sasaran, setSasaran]       = useState('');
   const [tujuan, setTujuan]         = useState('');
@@ -246,6 +251,35 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setIndikatorBaru(false);
     setEditingId(null);
     setEditingVersion(null);
+    setPanelTerbuka(false);
+    dasarRef.current = null;
+  }
+
+  const potretForm = JSON.stringify([
+    sasaran, tujuan, outcomeProgram, outcomeKegiatan, outcomeSubKegiatan, program, kegiatan, subKegiatan,
+    indikator, kode, satuan, jenis, targetRpjmd, targetTahunan, q1, q2, q3, q4, paguRincian, bulanTarget,
+    indukIndikatorId, programIndikatorId,
+  ]);
+  useEffect(() => {
+    if (panelTerbuka && dasarRef.current === null) dasarRef.current = potretForm;
+  }, [panelTerbuka, potretForm]);
+
+  function bukaTambah() {
+    resetForm();
+    setPanelTerbuka(true);
+  }
+
+  async function tutupPanel() {
+    if (busy) return;
+    if (dasarRef.current !== null && dasarRef.current !== potretForm) {
+      const buang = await confirmDialog({
+        title: 'Buang isian yang belum disimpan?',
+        message: 'Isian di form ini belum disimpan. Kalau panel ditutup, isian itu hilang.',
+        confirmLabel: 'Buang isian', cancelLabel: 'Kembali ke form', variant: 'warning',
+      });
+      if (!buang) return;
+    }
+    resetForm();
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -402,7 +436,10 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setPaguRincian(rincianTersimpan(row));
     setBulanTarget(Array.isArray(row.bulan_target) && row.bulan_target.length === 12
       ? row.bulan_target.slice() : Array(12).fill(null));
-    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    // Potret baru diambil sesudah isian baris ini terpasang (efek di atas).
+    dasarRef.current = null;
+    setPanelTerbuka(true);
+    panelRef.current?.scrollTo({ top: 0 });
   }, [level, indukRows]);
 
   // Baris asli yang sedang diedit — pembanding untuk memberi tahu akibat perubahan
@@ -553,25 +590,87 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         </div>
       </div>
 
-      {/* Grid form + table */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        {/* Form */}
-        <div className="xl:col-span-1">
-          <form ref={formRef} onSubmit={handleSubmit} className="rounded-2xl bg-white p-6 shadow-xs border border-slate-100 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="space-y-4">
+        <DataEntryTabel
+          key={level}
+          level={level}
+          rows={levelRows}
+          busy={busy}
+          onEdit={handleEdit}
+          onHapus={row => setConfirmDelete(row)}
+          aksiKepala={<>
+            <PrimaButton variant="purple" size="sm" iconLeft={<Plus size={14} />} onClick={bukaTambah}>
+              Tambah Data
+            </PrimaButton>
+            <Tip label={`Import file untuk level ${level.replace('-', ' ')}`}>
+              <button
+                type="button"
+                onClick={() => setImportOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#7C5CFC]/45 px-2.5 py-1.5 text-[11px] font-bold text-[#6D28D9] transition-colors hover:bg-[#7C5CFC]/8 cursor-pointer"
+              >
+                <FileUp className="h-3.5 w-3.5" />
+                Import
+              </button>
+            </Tip>
+            {/* Unduhan selalu SEMUA baris level ini, bukan hasil saringan — angkanya disebut di tombol
+                supaya tidak ada dokumen yang diam-diam kurang (keputusan pemilik). */}
+            <DownloadButton
+              variant="excel"
+              label={`Excel (${levelRows.length})`}
+              disabled={!levelRows.length}
+              onClick={async () => {
+                try { await exportListXlsx(levelRows, selectedYear, level, indukRows); notify('Excel diunduh', 'success'); }
+                catch (e) { notify((e as Error).message, 'error'); }
+              }}
+            />
+            <DownloadButton
+              variant="pdf"
+              label={`PDF (${levelRows.length})`}
+              disabled={!levelRows.length}
+              onClick={async () => {
+                try { await exportListPdf(levelRows, selectedYear, level); notify('PDF diunduh', 'success'); }
+                catch (e) { notify((e as Error).message, 'error'); }
+              }}
+            />
+          </>}
+        />
+
+        {/* Info board */}
+        <div className="rounded-2xl bg-[#378ADD]/5 p-4 border border-[#378ADD]/20 flex gap-3 text-[#1F3F73]">
+          <AlertCircle className="h-5 w-5 text-[#378ADD] mt-0.5 shrink-0" />
+          <div className="text-xs space-y-1">
+            <strong className="block text-slate-900">Hubungan Data Kinerja:</strong>
+            <p className="leading-relaxed">
+              Setiap data yang Anda tambahkan/edit di sini otomatis terhubung ke menu <strong>Realisasi Kinerja</strong>. Ketika Anda buka tab Kinerja dan memilih Indikator yang sudah Anda tambahkan, angka realisasi, target tahunan, target RPJMD, hingga triwulanan yang ditampilkan adalah data kustomisasi Anda.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {panelTerbuka && (
+        <div className="fixed inset-0 z-[55] flex justify-end">
+          <div className="absolute inset-0 bg-[#0f172a]/55" onClick={() => void tutupPanel()} />
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingId ? 'Ubah indikator' : 'Tambah indikator'}
+            className="relative h-full w-full max-w-[640px] overflow-y-auto bg-[#EEF2F6] shadow-2xl"
+          >
+          <form onSubmit={handleSubmit} className="min-h-full bg-white p-5 space-y-4 md:p-6">
+            <div className="sticky top-0 z-[5] -mx-5 -mt-5 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-3 md:-mx-6 md:-mt-6 md:px-6">
               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
                 <Sliders className="h-4 w-4 text-[#EF9F27]" />
-                {editingId ? 'Mode Edit Data' : 'Form Entri Target & Triwulan'}
+                {editingId ? `Ubah ${level.replace('-', ' ')}` : `Tambah ${level.replace('-', ' ')}`}
               </span>
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="text-[10px] font-bold text-[#E24B4A] hover:underline"
-                >
-                  Batal Edit
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => void tutupPanel()}
+                aria-label="Tutup panel"
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-50 hover:text-[#E24B4A]"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
             {/* Sasaran — dropdown utk level=program (parent reference dari menu Sasaran) */}
@@ -1042,6 +1141,50 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
               </div>
             )}
 
+            {/* Target bulanan (sub kegiatan saja) — sumber TW I–IV di bawahnya */}
+            {isSub && (
+              <div className="rounded-xl border border-[#7C5CFC]/20 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100 bg-[#7C5CFC]/5 flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                      <Tag className="h-3.5 w-3.5 text-[#7C5CFC]" />
+                      Target Bulanan
+                    </span>
+                    <p className="text-[10.5px] text-slate-400 font-medium">
+                      TW I–IV dihitung otomatis sesuai jenis evaluasi (<strong>{jenis}</strong>). Tahunan/RPJMD tetap diisi sendiri.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBulanTarget(Array(12).fill(null))}
+                    className="text-[10px] font-bold text-[#E24B4A] hover:underline shrink-0"
+                  >
+                    Kosongkan
+                  </button>
+                </div>
+                <div className="p-4 grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  {BULAN_LABELS.map((bln, i) => (
+                    <div key={bln} className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{bln}</label>
+                      <PrimaNumberField
+                        size="sm"
+                        min={0}
+                        desimal={2}
+                        value={bulanTarget[i] == null ? '' : bulanTarget[i]}
+                        placeholder="—"
+                        inputClassName="text-right"
+                        onChange={(e) => {
+                          // R3: kosong = belum diisi (null); "0" = nol nyata. R6: desimal boleh.
+                          const v = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
+                          setBulanTarget(prev => prev.map((x, idx) => (idx === i ? v : x)));
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
               <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-widest block border-b border-slate-100 pb-1">
                 📅 TARGET TRIWULANAN{isSub && <span className="ml-1 text-[#7C5CFC] normal-case tracking-normal">— otomatis dari target bulanan</span>}
@@ -1097,7 +1240,21 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
               />
             )}
 
-            <div className="flex justify-end pt-3">
+            {isSub && (
+              <p className="text-[10.5px] text-slate-500">
+                {jenis === 'Akumulatif' ? 'Total setahun' : 'Target akhir'} dari target bulanan:{' '}
+                <b className="font-mono text-[#7C5CFC]">
+                  {jenis === 'Akumulatif'
+                    ? tulisDesimal(derivedQ.reduce((a, b) => a + b, 0))
+                    : tulisDesimal((() => { for (let i = 11; i >= 0; i--) { const v = bulanTarget[i]; if (v != null) return v; } return 0; })())}
+                </b>
+              </p>
+            )}
+
+            <div className="sticky bottom-0 z-[5] -mx-5 -mb-5 flex justify-end gap-2 border-t border-slate-100 bg-white px-5 py-3 md:-mx-6 md:-mb-6 md:px-6">
+              <PrimaButton variant="ghost" size="md" onClick={() => void tutupPanel()} disabled={busy}>
+                Batal
+              </PrimaButton>
               <PrimaButton menulis
                 type="submit"
                 variant={editingId ? 'primary' : 'purple'}
@@ -1109,371 +1266,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
               </PrimaButton>
             </div>
           </form>
-        </div>
-
-        {/* Table */}
-        <div className="xl:col-span-2 space-y-4">
-          <div className="rounded-2xl bg-white shadow-xs border border-slate-100 overflow-hidden">
-            <div className="relative z-20 px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-              <div>
-                <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Tag className="h-4 w-4 text-[#1D9E75]" />
-                  Basis Data Kertas Kinerja: {level.toUpperCase()}
-                </span>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Menampilkan {levelRows.length} entri konfigurasi yang tersimpan di sistem.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Tip label={`Import file untuk level ${level.replace('-', ' ')}`}>
-                  <button
-                    type="button"
-                    onClick={() => setImportOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#7C5CFC]/45 px-2.5 py-1.5 text-[11px] font-bold text-[#6D28D9] transition-colors hover:bg-[#7C5CFC]/8 cursor-pointer"
-                  >
-                    <FileUp className="h-3.5 w-3.5" />
-                    Import
-                  </button>
-                </Tip>
-                <DownloadButton
-                  variant="excel"
-                  label="Excel"
-                  disabled={!levelRows.length}
-                  onClick={async () => {
-                    try { await exportListXlsx(levelRows, selectedYear, level, indukRows); notify('Excel diunduh', 'success'); }
-                    catch (e) { notify((e as Error).message, 'error'); }
-                  }}
-                />
-                <DownloadButton
-                  variant="pdf"
-                  label="PDF"
-                  disabled={!levelRows.length}
-                  onClick={async () => {
-                    try { await exportListPdf(levelRows, selectedYear, level); notify('PDF diunduh', 'success'); }
-                    catch (e) { notify((e as Error).message, 'error'); }
-                  }}
-                />
-                <span className="text-[9.5px] font-mono rounded-full bg-slate-200 text-slate-700 px-2.5 py-0.5 font-bold uppercase">
-                  {level}
-                </span>
-              </div>
-            </div>
-
-            {levelRows.length === 0 ? (
-              <div className="p-12 text-center text-slate-400 space-y-3">
-                <FolderOpen className="h-12 w-12 text-slate-300 mx-auto" />
-                <p className="text-xs font-semibold">Tidak ada kertas kerja indikator untuk level ini.</p>
-                <p className="text-[11px] leading-normal text-slate-400 max-w-sm mx-auto">
-                  Gunakan form di sebelah kiri untuk membuat entri indikator baru dan mengaitkannya dengan rincian triwulan.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-auto" style={levelRows.length > 5 ? { maxHeight: 'calc((5 * 4.75rem + 5rem) * 0.6375)' } : undefined}>
-                <table className="w-full text-left text-xs text-slate-600 border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                      <th rowSpan={2} className="px-5 py-3.5 w-12">No</th>
-                      {level === 'tujuan' && (
-                        <th rowSpan={2} className="px-5 py-3.5 max-w-[200px]">Tujuan</th>
-                      )}
-                      {level === 'sasaran' && (
-                        <>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[180px]">Tujuan</th>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[180px]">Sasaran</th>
-                        </>
-                      )}
-                      {level === 'program' && (
-                        <>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[180px]">Sasaran</th>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[180px]">Program</th>
-                        </>
-                      )}
-                      {level === 'kegiatan' && (
-                        <>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[180px]">Program</th>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[180px]">Kegiatan</th>
-                        </>
-                      )}
-                      {level === 'sub-kegiatan' && (
-                        <>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[160px]">Program</th>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[160px]">Kegiatan</th>
-                          <th rowSpan={2} className="px-5 py-3.5 max-w-[160px]">Sub Kegiatan</th>
-                          <th rowSpan={2} className="px-5 py-3.5 text-right max-w-[140px]">Anggaran (Rp)</th>
-                        </>
-                      )}
-                      <th rowSpan={2} className="px-5 py-3.5">Indikator</th>
-                      {level !== 'sasaran' && level !== 'tujuan' && (
-                        <th rowSpan={2} className="px-5 py-3.5 max-w-[220px]">Sasaran (Outcome)</th>
-                      )}
-                      <th rowSpan={2} className="px-5 py-3.5 text-center">Target RPJMD</th>
-                      <th rowSpan={2} className="px-5 py-3.5 text-center">Target Tahunan</th>
-                      <th rowSpan={2} className="px-5 py-3.5 text-center">Satuan</th>
-                      <th rowSpan={2} className="px-5 py-3.5 text-center">Jenis</th>
-                      {level === 'sub-kegiatan' && (
-                        <th colSpan={12} className="px-3 py-2 text-center border-l border-slate-200 text-[#7C5CFC]">Target Bulanan</th>
-                      )}
-                      {[1, 2, 3, 4].map(q => (
-                        <th key={q} colSpan={2} className="px-3 py-2 text-center border-l border-slate-200">TW{q}</th>
-                      ))}
-                      <th rowSpan={2} className="px-5 py-3.5 text-right w-24 border-l border-slate-200">Aksi</th>
-                    </tr>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                      {level === 'sub-kegiatan' && BULAN_LABELS.map((b, i) => (
-                        <th key={`bln${i}`} className={`px-1.5 py-1.5 text-center ${i === 0 ? 'border-l border-slate-200' : ''}`}>{b}</th>
-                      ))}
-                      {[1, 2, 3, 4].map(q => [
-                        <th key={`t${q}`} className="px-2 py-1.5 text-center border-l border-slate-200">T</th>,
-                        <th key={`r${q}`} className="px-2 py-1.5 text-center">R</th>,
-                      ])}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {levelRows.map((row, idx) => (
-                      <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
-                        <td className="px-5 py-4 font-semibold text-slate-400">{idx + 1}</td>
-                        {level === 'tujuan' && (
-                          <td className="px-5 py-4 max-w-[200px] leading-relaxed">
-                            <span className="font-bold text-[#7C5CFC] text-[11px] block">
-                              {penanda.nama(row.program, 'tujuan')}
-                            </span>
-                          </td>
-                        )}
-                        {level === 'sasaran' && (
-                          <>
-                            <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-semibold text-[#7C5CFC] text-[11px] block">
-                                {penanda.nama(row.tujuan, 'tujuan') || <span className="text-slate-300 font-normal">—</span>}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-bold text-[#10B981] text-[11px] block">
-                                {penanda.nama(row.program, 'sasaran')}
-                              </span>
-                            </td>
-                          </>
-                        )}
-                        {level === 'program' && (
-                          <>
-                            <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-semibold text-[#10B981] text-[11px] block">
-                                {penanda.nama(row.sasaran, 'sasaran') || <span className="text-slate-300 font-normal">—</span>}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-bold text-[#378ADD] text-[11px] block">
-                                {penanda.nama(row.program, 'program')}
-                              </span>
-                            </td>
-                          </>
-                        )}
-                        {level === 'kegiatan' && (
-                          <>
-                            <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-semibold text-[#378ADD] text-[11px] block">
-                                {penanda.nama(row.program, 'program')}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-bold text-[#EC4899] text-[11px] block">
-                                {penanda.nama(row.kegiatan, 'kegiatan') || <span className="text-slate-300 font-normal">—</span>}
-                              </span>
-                            </td>
-                          </>
-                        )}
-                        {level === 'sub-kegiatan' && (
-                          <>
-                            <td className="px-5 py-4 max-w-[160px] leading-relaxed">
-                              <span className="font-semibold text-[#378ADD] text-[11px] block">
-                                {penanda.nama(row.program, 'program')}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 max-w-[160px] leading-relaxed">
-                              <span className="font-semibold text-[#EC4899] text-[11px] block">
-                                {penanda.nama(row.kegiatan, 'kegiatan') || <span className="text-slate-300 font-normal">—</span>}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 max-w-[160px] leading-relaxed">
-                              <span className="font-bold text-[#F59E0B] text-[11px] block">
-                                {penanda.nama(row.sub_kegiatan, 'sub-kegiatan') || <span className="text-slate-300 font-normal">—</span>}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 text-right font-bold text-slate-700 whitespace-nowrap max-w-[140px]"
-                                style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                              {row.anggaran_nominal != null
-                                ? `Rp ${row.anggaran_nominal.toLocaleString('id-ID')}`
-                                : <span className="text-slate-300 font-normal">—</span>}
-                              {(() => {
-                                const p = paguSendiri(row);
-                                const rinci = tulisPerSumber(p);
-                                const tanpa = p?.perSumber.some(s => s.sumber === '') && p.perSumber.length > 0;
-                                return rinci
-                                  ? <span className="block text-[10px] font-normal text-slate-500 whitespace-normal">{rinci}</span>
-                                  : tanpa ? <span className="block text-[10px] font-normal text-[#BA7517]">tanpa sumber — atur lewat ✎</span> : null;
-                              })()}
-                            </td>
-                          </>
-                        )}
-                        <td className="px-5 py-4 font-bold text-slate-700 leading-normal max-w-[220px]">
-                          {penanda.indikator(row)}
-                        </td>
-                        {level !== 'sasaran' && level !== 'tujuan' && (
-                          <td className="px-5 py-4 italic text-slate-600 leading-normal max-w-[220px] text-[11px]">
-                            {outcomeOf(row) || <span className="text-slate-300 not-italic">—</span>}
-                          </td>
-                        )}
-                        <td className="px-5 py-4 text-center font-bold text-slate-700 whitespace-nowrap"
-                            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                          {tulisDesimal(row.target_rpjmd)}
-                        </td>
-                        <td className="px-5 py-4 text-center font-bold text-[#1D9E75] whitespace-nowrap"
-                            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                          {tulisDesimal(row.target_tahunan)}
-                        </td>
-                        <td className="px-5 py-4 text-center">
-                          <span className="bg-[#378ADD]/10 text-[#378ADD] px-2 py-0.5 rounded-sm text-[9.5px] font-bold inline-block">
-                            {row.satuan}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-center text-[10px] text-slate-500 font-medium"
-                            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                          {row.jenis}
-                        </td>
-                        {level === 'sub-kegiatan' && (Array.isArray(row.bulan_target) && row.bulan_target.length === 12
-                          ? row.bulan_target
-                          : Array(12).fill(0)
-                        ).map((v: number, i: number) => (
-                          <td key={`bln${i}`} className={`px-1.5 py-4 text-center text-slate-500 ${i === 0 ? 'border-l border-slate-100' : ''}`}
-                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                            {v > 0 ? tulisDesimal(v) : <span className="text-slate-300">—</span>}
-                          </td>
-                        ))}
-                        {[
-                          { t: row.q1_target, r: row.q1_realisasi },
-                          { t: row.q2_target, r: row.q2_realisasi },
-                          { t: row.q3_target, r: row.q3_realisasi },
-                          { t: row.q4_target, r: row.q4_realisasi },
-                        ].map((q, i) => [
-                          <td key={`t${i}`} className="px-2 py-4 text-center text-slate-500 border-l border-slate-100"
-                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.t)}</td>,
-                          <td key={`r${i}`} className={`px-2 py-4 text-center font-bold ${q.r == null ? 'text-slate-300' : q.r > 0 ? 'text-[#1D9E75]' : 'text-slate-500'}`}
-                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisRealisasi(q.r)}</td>,
-                        ])}
-                        <td className="px-5 py-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Tip label="Edit Kertas Kerja"><button
-                              onClick={() => handleEdit(row)}
-                              className="p-1.5 text-slate-500 hover:text-[#EF9F27] hover:bg-[#EF9F27]/20 rounded-lg transition-all"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button></Tip>
-                            <Tip label="Hapus Kertas Kerja"><button
-                              onClick={() => setConfirmDelete(row)}
-                              disabled={busy}
-                              className="p-1.5 text-slate-500 hover:text-[#E24B4A] hover:bg-[#E24B4A]/20 rounded-lg transition-all disabled:opacity-40"
-                            >
-                              <DeleteIcon size={16} />
-                            </button></Tip>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Form Target Bulanan (L-shape, sub-kegiatan saja) — sumber derive q1-q4 */}
-          {isSub && (
-            <div className="rounded-2xl bg-white shadow-xs border border-slate-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-[#7C5CFC]/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-[#7C5CFC]" />
-                    Target Bulanan {editingId ? '(Mode Edit)' : '(Entri Baru)'}
-                  </span>
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    Isi target tiap bulan — TW I–IV otomatis terhitung sesuai jenis evaluasi (<strong>{jenis}</strong>). Tahunan/RPJMD tetap manual.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBulanTarget(Array(12).fill(null))}
-                  className="text-[10px] font-bold text-[#E24B4A] hover:underline self-start sm:self-auto"
-                >
-                  Kosongkan
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {BULAN_LABELS.map((bln, i) => (
-                    <div key={bln} className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{bln}</label>
-                      <PrimaNumberField
-                        size="sm"
-                        min={0}
-                        desimal={2}
-                        value={bulanTarget[i] == null ? '' : bulanTarget[i]}
-                        placeholder="—"
-                        inputClassName="text-right"
-                        onChange={(e) => {
-                          // R3: kosong = belum diisi (null); "0" = nol nyata. R6: desimal boleh.
-                          const v = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
-                          setBulanTarget(prev => prev.map((x, idx) => (idx === i ? v : x)));
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="rounded-xl border border-[#7C5CFC]/20 bg-[#7C5CFC]/5 p-3">
-                  <span className="text-[9.5px] font-bold text-[#7C5CFC] uppercase tracking-widest block mb-2">
-                    Pratinjau Triwulan (otomatis)
-                  </span>
-                  <div className="grid grid-cols-5 gap-2 text-center">
-                    {(['TW I', 'TW II', 'TW III', 'TW IV'] as const).map((lbl, i) => (
-                      <div key={lbl}>
-                        <span className="text-[9px] font-semibold text-slate-400 block">{lbl}</span>
-                        <span className="text-sm font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                          {tulisDesimal(derivedQ[i])}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="border-l border-[#7C5CFC]/20">
-                      <span className="text-[9px] font-semibold text-[#7C5CFC] block">
-                        {jenis === 'Akumulatif' ? 'TOTAL' : 'AKHIR'}
-                      </span>
-                      <span className="text-sm font-bold text-[#7C5CFC]" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                        {jenis === 'Akumulatif'
-                          ? tulisDesimal(derivedQ.reduce((a, b) => a + b, 0))
-                          : tulisDesimal((() => { for (let i = 11; i >= 0; i--) { const v = bulanTarget[i]; if (v != null) return v; } return 0; })())}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                    {jenis === 'Akumulatif'
-                      ? 'Akumulatif: TW = jumlah 3 bulan. Tekan Simpan/Tambah di form kiri untuk menyimpan.'
-                      : 'Progres/Pengulangan: TW = bulan terakhir terisi di triwulan itu (snapshot). Tekan Simpan/Tambah di form kiri untuk menyimpan.'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Info board */}
-          <div className="rounded-2xl bg-[#378ADD]/5 p-4 border border-[#378ADD]/20 flex gap-3 text-[#1F3F73]">
-            <AlertCircle className="h-5 w-5 text-[#378ADD] mt-0.5 shrink-0" />
-            <div className="text-xs space-y-1">
-              <strong className="block text-slate-900">Hubungan Data Kinerja:</strong>
-              <p className="leading-relaxed">
-                Setiap data yang Anda tambahkan/edit di sini otomatis terhubung ke menu <strong>Realisasi Kinerja</strong>. Ketika Anda buka tab Kinerja dan memilih Indikator yang sudah Anda tambahkan, angka realisasi, target tahunan, target RPJMD, hingga triwulanan yang ditampilkan adalah data kustomisasi Anda.
-              </p>
-            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {importOpen && (
         <ImportRenaksiModal
