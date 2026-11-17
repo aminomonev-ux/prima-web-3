@@ -1,6 +1,6 @@
 # Konsep — Kertas F4, margin per dokumen, dan arsip PDF LKJIP
 
-Status: **K1–K8 disetujui sesuai usulan (2026-11-17)**; K8 = seluruh pengguna yang punya akses LKJIP. **Bagian B selesai (2026-11-17)**, catatan di §B.4; bagian A dikerjakan sesudahnya. Lanjutan `docs/CONCEPT-lkjip-pratinjau-dan-word.md`. Di sana kertas F4 dan margin masuk §7 "Sengaja tidak", dan arsip PDF masuk keputusan D10 "nanti". Pemilik meminta keduanya dikerjakan (2026-11-17). Catatan kaki (Tahap 5 konsep itu) dibatalkan.
+Status: **K1–K8 disetujui sesuai usulan (2026-11-17)**; K8 = seluruh pengguna yang punya akses LKJIP. **Bagian A & B selesai (2026-11-17)**, catatan di §A.6 dan §B.4. Lanjutan `docs/CONCEPT-lkjip-pratinjau-dan-word.md`. Di sana kertas F4 dan margin masuk §7 "Sengaja tidak", dan arsip PDF masuk keputusan D10 "nanti". Pemilik meminta keduanya dikerjakan (2026-11-17). Catatan kaki (Tahap 5 konsep itu) dibatalkan.
 
 Ada dua bagian yang saling lepas dan bisa dipasang sendiri:
 
@@ -91,6 +91,22 @@ Sesudah Simpan Pengaturan, layar menyebut bila ada yang terdampak, misalnya "3 g
 6. **Impor Word:** berkas A4, F4, Letter, dan margin aneh.
 7. **Peramban:** ganti F4 + margin → penggaris, garis batas tabel, dan "Di Word" gambar berubah; ponsel 375 px.
 8. Uji mutasi.
+
+### A.6 Catatan pelaksanaan (2026-11-17)
+
+- **Satu sumber:** `geometri(cfg)` di `halaman.ts`.
+  - Docgen menghitungnya sekali di `buildBody`/`rakitDocx` lalu meneruskannya sebagai parameter ke `sectProps`, tabel, gambar, grafik, dan footer. Tidak lewat variabel modul: perakitan Word bersifat async, jadi dua permintaan bisa saling timpa.
+  - Setiap parameter baru punya bawaan `GEO_BAWAAN` (A4 + margin lama), jadi pemanggil dan uji lama tidak berubah.
+- **Byte-sama, dibuktikan:** salinan kode HEAD (git worktree sementara) dan kode baru merakit dokumen yang sama dengan 4 setelan (bawaan, footer, header, penomoran arab). Dokumennya memuat tabel melintang, gambar berdampingan, dan gambar kebesaran. Hasilnya 0 berkas berbeda di dalam .docx.
+- **Batas data gambar** (Zod `lebarEmu`/`tinggiEmu`) kini MUTLAK, yaitu kertas terbesar dengan margin 1 cm. Penjepit ke dokumen terjadi saat digambar (`batasGambar(geo)`). Isian lebar gambar tidak lagi mentok di 15,5 cm.
+- **Penggaris:** `geserPenanda`/`posisiPenanda`/`jepitInden` menerima lebar dokumen; kotak narasi & satuan indent di layar lewat variabel CSS `--lk-tulis-px`/`--lk-tulis-dxa`.
+  - **Batasan yang diterima:** penjepit indent TERSIMPAN (`indenBerlaku`/`keTersimpan`/`xmlInden`) tetap berbatas lebar A4. Indent yang ditaruh di ± 0,5 cm terakhir bidang tulis yang lebih lebar dari A4 dijepit ke batas A4. Memperbaikinya berarti meneruskan lebar dokumen ke `narasiToXml` dan ke penyaring; ini tidak dikerjakan karena hampir tidak pernah dipakai.
+- **Editor tabel bersama** (`components/tabel/TabelEditor.tsx`) menerima `lkjip.lebarTulis`. IKI tidak mengirimnya, jadi tetap memakai kertasnya sendiri.
+- **Dampak** (`lib/lkjip/dampak-kertas.ts`): sesudah Simpan Pengaturan, toast menyebut gambar berukuran pasti dan tabel yang kini lebih lebar dari bidang tulis.
+- **Dibuka di Microsoft Word:** 5 section, tegak 21,5 × 33 cm dan melintang 33 × 21,5 cm, margin 3/2/2/4 cm terbaca di tiap section, jarak header 1,25 cm.
+- **Peramban (dokumen 2040, dikembalikan sesudahnya):** F4 + margin kiri 4 cm → keterangan "Bidang tulis 15 × 28 cm (melintang 26,5 cm)", kotak narasi 612 → 597 px, `--lk-tulis-dxa` 8505.
+- **Regresi:** `npx tsx scripts/test-lkjip-kertas-margin.mts` (40; bagian F PDF LibreOffice: halaman 21,5 × 33 cm, teks mulai tepat di margin kiri), 22 uji mutasi tertangkap.
+  - Dua sempat LOLOS karena data uji: margin F4 kiri 4 + kanan 2 menghasilkan bidang tulis 8.789 dxa, nyaris A4 (8.788), jadi lebar kolom yang keliru memakai A4 tetap cocok. Selain itu belum ada tabel uji yang lebih lebar dari bidang tulis. Data uji kini memakai margin yang jauh dari A4 (9.922 dxa), dan pemeriksaannya dikunci ke sel tabel gambar.
 
 ---
 

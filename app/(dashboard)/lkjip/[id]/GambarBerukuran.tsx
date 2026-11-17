@@ -6,7 +6,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import {
-  EMU_PER_PX, LEBAR_MAKS_CM, LEBAR_MAKS_EMU, LEBAR_MIN_CM, cmDariEmu, emuDariCm, gayaPratinjau, kembalikanProporsi,
+  EMU_PER_PX, LEBAR_MAKS_EMU, TINGGI_MAKS_EMU, LEBAR_MIN_CM, cmDariEmu, emuDariCm, gayaPratinjau, kembalikanProporsi,
   proporsiMenyimpang, ubahLebar, ukuranTampilEmu, type UkuranAlami, type UkuranGambar,
 } from '@/lib/lkjip/ukuran-gambar';
 import type { AturGambar, RataGambar } from '@/lib/lkjip/atur-gambar';
@@ -15,26 +15,26 @@ const RATA_FLEX: Record<RataGambar, string> = { kiri: 'flex-start', tengah: 'cen
 
 const isianDari = (u: UkuranGambar): number | '' => (u.lebarEmu ? cmDariEmu(u.lebarEmu) : '');
 
-export function IsianLebar({ ukuran, onUbah, alami, readOnly, petunjuk, lebarMaks = LEBAR_MAKS_EMU }: {
-  ukuran: UkuranGambar; onUbah: (u: UkuranGambar) => void; alami: UkuranAlami | null; readOnly: boolean; petunjuk?: string; lebarMaks?: number;
+export function IsianLebar({ ukuran, onUbah, alami, readOnly, petunjuk, lebarMaks = LEBAR_MAKS_EMU, tinggiMaks = TINGGI_MAKS_EMU }: {
+  ukuran: UkuranGambar; onUbah: (u: UkuranGambar) => void; alami: UkuranAlami | null; readOnly: boolean; petunjuk?: string; lebarMaks?: number; tinggiMaks?: number;
 }) {
   const [isian, setIsian] = useState<number | ''>(() => isianDari(ukuran));
-  const tampil = alami ? ukuranTampilEmu(ukuran, alami, lebarMaks) : null;
+  const tampil = alami ? ukuranTampilEmu(ukuran, alami, lebarMaks, tinggiMaks) : null;
   return (
     <div className="lk-gbr-isian">
       {!readOnly && (
         <label>Lebar (cm)
           <PrimaNumberField
-            size="sm" desimal={2} min={LEBAR_MIN_CM} max={Math.min(LEBAR_MAKS_CM, cmDariEmu(lebarMaks))} step={0.5} placeholder="Otomatis" className="lk-gbr-lebar"
+            size="sm" desimal={2} min={LEBAR_MIN_CM} max={cmDariEmu(lebarMaks)} step={0.5} placeholder="Otomatis" className="lk-gbr-lebar"
             value={isian}
             onChange={e => {
               const v = e.target.value;
               setIsian(v === '' ? '' : Number(v));
               // Kosong baru berlaku saat keluar: menghapus angka sebelum mengetik yang baru tidak boleh melepas proporsi.
-              if (v !== '') onUbah(ubahLebar(ukuran, emuDariCm(Number(v)), lebarMaks));
+              if (v !== '') onUbah(ubahLebar(ukuran, emuDariCm(Number(v)), lebarMaks, tinggiMaks));
             }}
             onBlur={() => {
-              if (isian === '') { if (ukuran.lebarEmu) onUbah(ubahLebar(ukuran, null, lebarMaks)); return; }
+              if (isian === '') { if (ukuran.lebarEmu) onUbah(ubahLebar(ukuran, null, lebarMaks, tinggiMaks)); return; }
               setIsian(isianDari(ukuran));
             }}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
@@ -48,11 +48,11 @@ export function IsianLebar({ ukuran, onUbah, alami, readOnly, petunjuk, lebarMak
   );
 }
 
-function PratinjauGambar({ fileId, ukuran, alami, onAlami, alt, atur, lebarMaks }: {
-  fileId: string; ukuran: UkuranGambar; alami: UkuranAlami | null; onAlami: (a: UkuranAlami) => void; alt: string; atur: AturGambar; lebarMaks: number;
+function PratinjauGambar({ fileId, ukuran, alami, onAlami, alt, atur, lebarMaks, tinggiMaks }: {
+  fileId: string; ukuran: UkuranGambar; alami: UkuranAlami | null; onAlami: (a: UkuranAlami) => void; alt: string; atur: AturGambar; lebarMaks: number; tinggiMaks: number;
 }) {
   const [gagal, setGagal] = useState(false);
-  const g = alami ? gayaPratinjau(ukuran, alami, lebarMaks) : null;
+  const g = alami ? gayaPratinjau(ukuran, alami, lebarMaks, tinggiMaks) : null;
   const selesai = (el: HTMLImageElement) => {
     if (el.naturalWidth) onAlami({ wEmu: el.naturalWidth * EMU_PER_PX, hEmu: el.naturalHeight * EMU_PER_PX });
     else setGagal(true);
@@ -82,16 +82,16 @@ function PratinjauGambar({ fileId, ukuran, alami, onAlami, alt, atur, lebarMaks 
 }
 
 /** Pemanggil memberi `key={fileId}`: berkas lain = ukuran alami lain, jadi state di sini harus mulai ulang. */
-export default function GambarBerukuran({ fileId, ukuran, onUbah, readOnly, alt, atur = { rata: 'tengah', bingkai: false }, lebarMaks = LEBAR_MAKS_EMU }: {
+export default function GambarBerukuran({ fileId, ukuran, onUbah, readOnly, alt, atur = { rata: 'tengah', bingkai: false }, lebarMaks = LEBAR_MAKS_EMU, tinggiMaks = TINGGI_MAKS_EMU }: {
   fileId: string; ukuran: UkuranGambar; onUbah: (u: UkuranGambar) => void; readOnly: boolean; alt: string;
   /** Perataan & bingkai blok (konsep pratinjau-dan-word §4); lebarMaks = lebar kolom bila berdampingan. */
-  atur?: AturGambar; lebarMaks?: number;
+  atur?: AturGambar; lebarMaks?: number; tinggiMaks?: number;
 }) {
   const [alami, setAlami] = useState<UkuranAlami | null>(null);
   return (
     <div className="lk-gbr">
-      <PratinjauGambar fileId={fileId} ukuran={ukuran} alami={alami} onAlami={setAlami} alt={alt} atur={atur} lebarMaks={lebarMaks} />
-      <IsianLebar ukuran={ukuran} onUbah={onUbah} alami={alami} readOnly={readOnly} lebarMaks={lebarMaks} />
+      <PratinjauGambar fileId={fileId} ukuran={ukuran} alami={alami} onAlami={setAlami} alt={alt} atur={atur} lebarMaks={lebarMaks} tinggiMaks={tinggiMaks} />
+      <IsianLebar ukuran={ukuran} onUbah={onUbah} alami={alami} readOnly={readOnly} lebarMaks={lebarMaks} tinggiMaks={tinggiMaks} />
       {alami && proporsiMenyimpang(ukuran, alami) && (
         <div className="lk-grafik-basi lk-gbr-gepeng">
           <span>Bentuk gambar ini tidak sesuai aslinya (tampak gepeng atau memanjang), persis seperti di berkas Word asalnya.</span>

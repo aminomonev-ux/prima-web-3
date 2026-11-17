@@ -44,7 +44,11 @@ import { bacaSalinan, type SalinanModul } from '@/lib/lkjip/salinan-modul';
 import { fetchJson } from '@/lib/shared/api';
 import { cariDiDokumen, type OpsiCari, type Temuan } from '@/lib/lkjip/cari-ganti';
 import { aturSorotCari } from '@/lib/lkjip/sorot-cari';
-import { TANPA_UKURAN, bacaUkuran, lebarMaksEmu, lepasDariBerkas, type UkuranGambar } from '@/lib/lkjip/ukuran-gambar';
+import { TANPA_UKURAN, bacaUkuran, batasGambar, lebarMaksEmu, lepasDariBerkas, type UkuranGambar } from '@/lib/lkjip/ukuran-gambar';
+import { BATAS_MARGIN_CM, MARGIN_BAWAAN_CM, PILIHAN_KERTAS, UKURAN_KERTAS, cmTeks, geometri, type Geometri, type JenisKertas, type MarginCm } from '@/lib/lkjip/halaman';
+import { dampakKertas, kalimatDampak } from '@/lib/lkjip/dampak-kertas';
+
+const SISI_MARGIN: [keyof MarginCm, string][] = [['atas', 'Margin atas'], ['bawah', 'Margin bawah'], ['kiri', 'Margin kiri'], ['kanan', 'Margin kanan']];
 import { BATAS_SUB_GAMBAR, BATAS_TAMBAHAN_GAMBAR, RATA_GAMBAR, bacaAturGambar, daftarGambar, type AturGambar, type RataGambar } from '@/lib/lkjip/atur-gambar';
 import GambarBerukuran, { IsianLebar } from './GambarBerukuran';
 import TabelEditor from '@/components/tabel/TabelEditor';
@@ -118,6 +122,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   const [renameModal, setRenameModal] = useState<{ id: number; judul: string } | null>(null);
   const [styleModal, setStyleModal] = useState(false);
   const [styleForm, setStyleForm] = useState<StyleConfig>(initialDetail.style_config);
+  const geoForm = useMemo(() => geometri(styleForm), [styleForm]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [versiList, setVersiList] = useState<VersiMeta[]>([]);
   const [panduanOpen, setPanduanOpen] = useState(false);
@@ -369,7 +374,12 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
 
   async function saveStyle() {
     const ok = await call(`/api/lkjip/${detail.id}`, 'PATCH', { expected_version: detail.version, style_config: styleForm });
-    if (ok) { setStyleModal(false); await refresh(); toast.success('Pengaturan dokumen disimpan'); }
+    if (!ok) return;
+    setStyleModal(false);
+    await refresh();
+    // A.3: isi yang jadi lebih lebar dari bidang tulis disebut — datanya tidak diubah, Word yang mengecilkan.
+    const dampak = kalimatDampak(dampakKertas(detail.tree, geometri(styleForm)));
+    if (dampak) toast.warning(`Pengaturan dokumen disimpan · ${dampak}`); else toast.success('Pengaturan dokumen disimpan');
   }
 
   // ── Tabel & angka tertaut: periksa kesegaran (hanya membaca; memperbarui lewat tombol di bloknya) ──
@@ -765,6 +775,26 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     setStyleForm({ ...styleForm, firstLineIndentCm: Math.min(BATAS_INDENT_CM, Math.max(0, v)) });
                   }} />
               </label>
+              {/* Kertas & margin per dokumen (konsep kertas-margin-arsip-pdf A). Satu geometri untuk Word, penggaris, tabel, gambar. */}
+              <label>Ukuran kertas
+                <select value={styleForm.kertas ?? 'A4'} onChange={e => setStyleForm({ ...styleForm, kertas: e.target.value as JenisKertas })}>
+                  {PILIHAN_KERTAS.map(k => <option key={k} value={k}>{k} ({UKURAN_KERTAS[k].cm})</option>)}
+                </select>
+              </label>
+              {SISI_MARGIN.map(([sisi, label]) => (
+                <label key={sisi}>{label} (cm)
+                  <PrimaNumberField desimal={2} min={BATAS_MARGIN_CM.min} max={BATAS_MARGIN_CM.max} step={0.1} value={(styleForm.marginCm ?? MARGIN_BAWAAN_CM)[sisi]}
+                    onChange={e => {
+                      const v = Number(e.target.value);
+                      if (!Number.isFinite(v)) return;
+                      setStyleForm({ ...styleForm, marginCm: { ...(styleForm.marginCm ?? MARGIN_BAWAAN_CM), [sisi]: Math.min(BATAS_MARGIN_CM.max, Math.max(BATAS_MARGIN_CM.min, v)) } });
+                    }} />
+                </label>
+              ))}
+              <p className="lk-hint">
+                Bidang tulis {cmTeks(geoForm.lebarTulis)} × {cmTeks(geoForm.tinggiTulis)} cm (halaman melintang: lebar {cmTeks(geoForm.lebarTulisMelintang)} cm). Margin {BATAS_MARGIN_CM.min}–{BATAS_MARGIN_CM.max} cm tiap sisi.{' '}
+                <button type="button" className="lk-tautan-kecil" onClick={() => setStyleForm({ ...styleForm, kertas: 'A4', marginCm: { ...MARGIN_BAWAAN_CM } })}>Kembalikan bawaan (A4, 2,5 / 2,5 / 2,5 / 3 cm)</button>
+              </p>
               <label>Nomor halaman
                 <select value={styleForm.pageNumber ? '1' : '0'} onChange={e => setStyleForm({ ...styleForm, pageNumber: e.target.value === '1' })}>
                   <option value="1">Aktif</option>
@@ -1107,6 +1137,8 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
   const laporKotor = useCallback((kotor: boolean) => onKotor?.(block.id, kotor), [block.id, onKotor]);
   // Pindah bab melepas editornya, jadi ketikannya memang sudah tak ada lagi di layar.
   useEffect(() => () => onKotor?.(block.id, false), [block.id, onKotor]);
+  // Kertas & margin dokumen (konsep kertas-margin A): satu geometri untuk penggaris, tabel, dan gambar — sama dengan Word.
+  const geo = useMemo(() => geometri(gaya), [gaya]);
   return (
     <div className="lk-block">
       <div className="lk-block-head">
@@ -1130,9 +1162,9 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
           gaya={gaya}
           onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
-      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} onUbah={() => laporKotor(true)} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }} />}
-      {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} onKotor={laporKotor} />}
-      {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} onKotor={laporKotor} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} />}
+      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} onUbah={() => laporKotor(true)} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal, lebarTulis: { tegak: geo.lebarTulis, melintang: geo.lebarTulisMelintang } }} />}
+      {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} onKotor={laporKotor} geo={geo} />}
+      {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} onKotor={laporKotor} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} geo={geo} />}
     </div>
   );
 }
@@ -1175,7 +1207,7 @@ function IsianAturGambar({ atur, onUbah, readOnly, sebaris }: { atur: AturGambar
 }
 
 type GambarIsian = { fileId: string; ukuran: UkuranGambar; sub: string };
-function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onKotor: (kotor: boolean) => void }) {
+function GambarEditor({ block, readOnly, onSave, onKotor, geo }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onKotor: (kotor: boolean) => void; geo: Geometri }) {
   const p0 = block.payload as { judul?: string; caption?: string };
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
@@ -1209,7 +1241,8 @@ function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; 
     });
   };
   const sebaris = gambar.length > 1;
-  const lebarMaks = lebarMaksEmu(gambar.length);
+  const lebarMaks = lebarMaksEmu(gambar.length, geo.lebarTulis);
+  const { tinggiMaks } = batasGambar(geo);
   const tombolBerkas = (i: number, teks: string) => (
     <label className="lk-upbtn">
       <Upload size={14} /> {mengunggah === i ? 'Mengunggah…' : teks}
@@ -1231,7 +1264,7 @@ function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; 
                 {!g.fileId && <span className="lk-uphint">Belum ada gambar — placeholder di Word</span>}
               </div>
             )}
-            {g.fileId && <GambarBerukuran key={`${g.fileId}-${gambar.length}`} fileId={g.fileId} ukuran={g.ukuran} onUbah={u => ubah(i, { ukuran: u })} readOnly={readOnly} alt={judul || 'Gambar'} atur={sebaris ? { ...atur, rata: 'tengah' } : atur} lebarMaks={lebarMaks} />}
+            {g.fileId && <GambarBerukuran key={`${g.fileId}-${gambar.length}`} fileId={g.fileId} ukuran={g.ukuran} onUbah={u => ubah(i, { ukuran: u })} readOnly={readOnly} alt={judul || 'Gambar'} atur={sebaris ? { ...atur, rata: 'tengah' } : atur} lebarMaks={lebarMaks} tinggiMaks={tinggiMaks} />}
             {(sebaris || g.sub) && (
               <input className="lk-gbr-sub" value={g.sub} readOnly={readOnly} maxLength={BATAS_SUB_GAMBAR} placeholder={`Teks di bawah gambar, mis. (${String.fromCharCode(97 + i)}) Rapat koordinasi`} onChange={e => ubah(i, { sub: e.target.value })} />
             )}
@@ -1295,7 +1328,7 @@ function GrafikRender({ type, data }: { type: 'pie' | 'bar' | 'line'; data: Graf
 // recharts butuh DOM → render client-only (cegah SSR; section pertama auto-terpilih saat load).
 const GrafikRenderClient = dynamic(() => Promise.resolve({ default: GrafikRender }), { ssr: false });
 
-function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onKotor: (kotor: boolean) => void; tableBlocks: BlockNode[]; nomorBlok?: NomorBlok }) {
+function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok, geo }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onKotor: (kotor: boolean) => void; tableBlocks: BlockNode[]; nomorBlok?: NomorBlok; geo: Geometri }) {
   const p0 = block.payload as Partial<GrafikP>;
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
@@ -1453,7 +1486,7 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
 
       <IsianAturGambar atur={atur} onUbah={u => setAtur(a => ({ ...a, ...u }))} readOnly={readOnly} />
       {source === 'gambar' && gambarKini
-        ? <GambarBerukuran key={gambarKini} fileId={gambarKini} ukuran={ukuran} onUbah={setUkuran} readOnly={readOnly} alt={judul || 'Grafik'} atur={atur} />
+        ? <GambarBerukuran key={gambarKini} fileId={gambarKini} ukuran={ukuran} onUbah={setUkuran} readOnly={readOnly} alt={judul || 'Grafik'} atur={atur} {...batasGambar(geo)} />
         : (
           <>
             <div className="lk-grafik-preview" ref={chartRef} style={{ justifyContent: atur.rata === 'kiri' ? 'flex-start' : atur.rata === 'kanan' ? 'flex-end' : 'center' }}>
@@ -1464,7 +1497,7 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
                   // Garis bingkai di pembungkus, bukan di kanvas: kanvas itu yang difoto jadi gambar Word, bingkainya ditulis Word sendiri.
                   : <div className={atur.bingkai ? 'lk-gbr-garis' : undefined}><div className="lk-grafik-canvas"><GrafikRenderClient type={chartType} data={chartData} /></div></div>}
             </div>
-            {source !== 'gambar' && !readOnly && <IsianLebar ukuran={ukuran} onUbah={setUkuran} alami={null} readOnly={readOnly} petunjuk="Tinggi mengikuti grafik. Kosong = otomatis." />}
+            {source !== 'gambar' && !readOnly && <IsianLebar ukuran={ukuran} onUbah={setUkuran} alami={null} readOnly={readOnly} petunjuk="Tinggi mengikuti grafik. Kosong = otomatis." {...batasGambar(geo)} />}
           </>
         )}
       {source === 'gambar' && !readOnly && (
@@ -1729,6 +1762,8 @@ ${TABEL_CSS}
   .lk-modal input { width: 100%; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 9px 11px; color: #E6F1FB; font-size: 14px; margin-bottom: 14px; }
   .lk-modal input:focus { outline: none; border-color: #185FA5; }
   .lk-hint { font-size: 11.5px; color: #85B7EB; line-height: 1.5; margin: 0 0 14px; }
+  .lk-tautan-kecil { background: none; border: none; padding: 0; color: #EF9F27; font-size: 11.5px; text-decoration: underline; cursor: pointer; }
+  [data-theme="light"] .lk-tautan-kecil { color: #BA7517; }
   .lk-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
   .lk-modal-wide { width: 560px; }
   .lk-versi-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; margin-bottom: 16px; }

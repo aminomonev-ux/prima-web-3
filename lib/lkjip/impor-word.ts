@@ -10,7 +10,7 @@ import {
 } from './tabel';
 import { MAX_DEPTH } from './numbering';
 import { judulBabWajib } from './aturan-bab';
-import { indentTwips, spasiBawaan, spasiKeTersimpan, BATAS_INDENT_CM, TWIPS_PER_CM, type Inden, type IndenTersimpan, type Spasi } from './halaman';
+import { indentTwips, spasiBawaan, spasiKeTersimpan, cmTeks, BATAS_INDENT_CM, BATAS_MARGIN_CM, PILIHAN_KERTAS, TWIPS_PER_CM, UKURAN_KERTAS, type Inden, type IndenTersimpan, type JenisKertas, type MarginCm, type Spasi } from './halaman';
 import { gayaDariWord, teksNomor, type KodeGaya } from './gaya-daftar';
 import { susunNarasi } from './susun-daftar';
 import { stabiloDariWord, type KodeStabilo } from './format-teks';
@@ -59,6 +59,8 @@ export interface HasilImporWord {
   spasiBawaan: { lineSpacing: number; spaceAfterPt: number } | null;
   /** Huruf isi paling lazim bila ada di daftar → huruf dokumen; null = ikut bawaan (konsep pratinjau-dan-word §3.2). */
   hurufBawaan: NamaHuruf | null;
+  /** Kertas & margin berkas (konsep kertas-margin A.4); null = tidak terbaca/di luar pilihan → bawaan. */
+  halaman: { kertas: JenisKertas | null; marginCm: MarginCm | null };
   /** Teks polos header/footer bawaan section isi → headerText/footerText (konsep pratinjau-dan-word §2). '' = tidak ada. */
   kepalaKaki: { header: string; footer: string };
   bagian: BagianImpor[];
@@ -401,6 +403,41 @@ function gambarDariDrawing(x: El): Omit<GambarPar, 'rid'> {
 }
 
 const EMU_PER_SATUAN_CSS: Record<string, number> = { pt: 12700, in: 914400, cm: EMU_PER_CM, mm: EMU_PER_CM / 10, px: EMU_PER_PX };
+/** Toleransi ukuran kertas: 2 mm. "Folio" 8,5 × 13 inci (21,59 × 33,02 cm) ikut terbaca F4. */
+const TOLERANSI_KERTAS_DXA = Math.round(0.2 * TWIPS_PER_CM);
+/**
+ * Kertas & margin berkas (konsep kertas-margin A.4, K5): `sectPr` TEGAK terakhir — section melintang adalah halaman tabel.
+ * Yang tidak cocok A4/F4 atau di luar batas margin jatuh ke bawaan, dengan peringatan.
+ */
+export function halamanBerkas(body: El): { kertas: JenisKertas | null; marginCm: MarginCm | null; peringatan: string[] } {
+  const peringatan: string[] = [];
+  const tegak = cariSemua(body, 'w:sectPr').filter(sp => anak(sp, 'w:pgSz') && !melintangSect(sp));
+  const sp = tegak[tegak.length - 1];
+  if (!sp) return { kertas: null, marginCm: null, peringatan };
+  const sz = anak(sp, 'w:pgSz');
+  const w = angkaAtr(sz, 'w:w') ?? 0, h = angkaAtr(sz, 'w:h') ?? 0;
+  const kertas = (PILIHAN_KERTAS as readonly JenisKertas[]).find(k => Math.abs(UKURAN_KERTAS[k].lebar - w) <= TOLERANSI_KERTAS_DXA && Math.abs(UKURAN_KERTAS[k].tinggi - h) <= TOLERANSI_KERTAS_DXA) ?? null;
+  if (!kertas) peringatan.push(`Ukuran kertas berkas ${cmTeks(w)} × ${cmTeks(h)} cm bukan A4 atau F4 — dokumen memakai A4.`);
+  const mar = anak(sp, 'w:pgMar');
+  let marginCm: MarginCm | null = null;
+  if (mar) {
+    const cm = (n: string) => Math.round((Math.abs(angkaAtr(mar, n) ?? 0) / TWIPS_PER_CM) * 100) / 100;
+    const m = { atas: cm('w:top'), kanan: cm('w:right'), bawah: cm('w:bottom'), kiri: cm('w:left') };
+    if (Object.values(m).every(v => v >= BATAS_MARGIN_CM.min && v <= BATAS_MARGIN_CM.max)) marginCm = m;
+    else {
+      const t = (v: number) => String(v).replace('.', ',');
+      peringatan.push(`Margin berkas (atas ${t(m.atas)}, kanan ${t(m.kanan)}, bawah ${t(m.bawah)}, kiri ${t(m.kiri)} cm) di luar batas ${BATAS_MARGIN_CM.min}–${BATAS_MARGIN_CM.max} cm — dokumen memakai margin bawaan.`);
+    }
+  }
+  return { kertas, marginCm, peringatan };
+}
+
+/** `halamanBerkas` dari teks `word/document.xml` — untuk uji tanpa merakit berkas .docx. */
+export function halamanDariDokumenXml(docXml: string): ReturnType<typeof halamanBerkas> | null {
+  const body = anak(anak(uraiXml(docXml), 'w:document'), 'w:body');
+  return body ? halamanBerkas(body) : null;
+}
+
 function panjangCssEmu(style: string, nama: string): number | null {
   const m = new RegExp(`(?:^|;)\\s*${nama}\\s*:\\s*([\\d.]+)(pt|in|cm|mm|px)`, 'i').exec(style);
   const n = m ? parseFloat(m[1]) * EMU_PER_SATUAN_CSS[m[2].toLowerCase()] : 0;
@@ -909,6 +946,8 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const body = anak(anak(uraiXml(docXml), 'w:document'), 'w:body');
   if (!body) throw new ImporWordError('Isi dokumen Word tidak terbaca.');
   const { unsur, akhirMelintang } = kumpulkanUnsur(body, ctx);
+  const kertasBerkas = halamanBerkas(body);
+  peringatan.push(...kertasBerkas.peringatan);
 
   // Setelan dokumen = indent baris pertama yang paling banyak dipakai isi berkas (ditimbang panjang teks,
   // supaya label pendek tidak mengalahkan paragraf isi). Sisanya membawa angkanya sendiri lewat `data-ind-*`,
@@ -1419,7 +1458,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const tahunTebakan = tahunDari(baris.flatMap(b => (b.jenis === 'penanda' ? [b.teks] : b.jenis === 'objek' ? [b.judul] : [])));
 
   const kepalaKaki = teksKepalaKaki(docXml, rels, nama => teksZip(zip, nama));
-  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, spasiBawaan: spasiBawaanDok, hurufBawaan, kepalaKaki, bagian, gambar, baris, ringkasan: ring, peringatan };
+  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, spasiBawaan: spasiBawaanDok, hurufBawaan, halaman: { kertas: kertasBerkas.kertas, marginCm: kertasBerkas.marginCm }, kepalaKaki, bagian, gambar, baris, ringkasan: ring, peringatan };
 }
 
 const BATAS_TEKS_KEPALA_KAKI = 120;   // = StyleConfigSchema.headerText / footerText

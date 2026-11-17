@@ -10,10 +10,11 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { Eye, EyeOff, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import {
-  CM_TULIS, LEBAR_DXA, PX_TULIS, TWIPS_PER_CM, LANGKAH_DXA, LANGKAH_BESAR_DXA, BUTIR_GANTUNG_DXA,
+  LEBAR_DXA, PX_TULIS, TWIPS_PER_CM, LANGKAH_DXA, LANGKAH_BESAR_DXA, BUTIR_GANTUNG_DXA,
   bidangBerubah, cmTeks, geserPenanda, posisiPenanda, ringkasInden,
   type Inden, type JenisInden, type Penanda,
 } from '@/lib/lkjip/halaman';
+import { DXA_PER_PX } from '@/lib/lkjip/tabel';
 
 const KUNCI_SEMBUNYI = 'lk.penggaris.narasi';
 const PERISTIWA_SEMBUNYI = 'lk-penggaris-sembunyi';
@@ -36,7 +37,7 @@ const NAMA_PENANDA: Record<Penanda, string> = {
   kiri: 'Indent kiri',
   kanan: 'Indent kanan',
 };
-const persen = (dxa: number) => `${(dxa / LEBAR_DXA) * 100}%`;
+
 const angkaCm = (dxa: number) => Math.round((dxa / TWIPS_PER_CM) * 100) / 100;
 const dxaDariCm = (v: string) => { const n = parseFloat(v); return Number.isFinite(n) ? Math.round(n * TWIPS_PER_CM) : 0; };
 
@@ -52,9 +53,14 @@ interface Props {
   tinggiTeks: () => number;
   onUbah: (ubah: Partial<Inden>) => void;
   onBawaan: () => void;
+  /** Lebar bidang tulis dokumen, dxa (kertas & margin per dokumen). Bawaan A4. */
+  lebarDxa?: number;
 }
 
-export default function PenggarisNarasi({ inden, jenis, campur = false, punyaIsian = false, tinggiTeks, onUbah, onBawaan }: Props) {
+export default function PenggarisNarasi({ inden, jenis, campur = false, punyaIsian = false, tinggiTeks, onUbah, onBawaan, lebarDxa = LEBAR_DXA }: Props) {
+  const pxTulis = Math.floor(lebarDxa / DXA_PER_PX);
+  const cmTulis = lebarDxa / TWIPS_PER_CM;
+  const persen = (dxa: number) => `${(dxa / lebarDxa) * 100}%`;
   const sembunyi = useSyncExternalStore(langgananSembunyi, bacaSembunyi, () => false);
   const [seret, setSeret] = useState<{ penanda: Penanda; tinggi: number; draf: Inden } | null>(null);
   const [panel, setPanel] = useState(false);
@@ -65,10 +71,10 @@ export default function PenggarisNarasi({ inden, jenis, campur = false, punyaIsi
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => { const w = el.getBoundingClientRect().width; if (w > 0) setSkala(w / PX_TULIS); });
+    const ro = new ResizeObserver(() => { const w = el.getBoundingClientRect().width; if (w > 0) setSkala(w / pxTulis); });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [sembunyi]);
+  }, [sembunyi, pxTulis]);
 
   if (sembunyi) {
     return (
@@ -83,15 +89,15 @@ export default function PenggarisNarasi({ inden, jenis, campur = false, punyaIsi
 
   const xDari = (clientX: number) => {
     const r = trackRef.current?.getBoundingClientRect();
-    return r && r.width ? ((clientX - r.left) / r.width) * LEBAR_DXA : 0;
+    return r && r.width ? ((clientX - r.left) / r.width) * lebarDxa : 0;
   };
   const mulaiSeret = (p: Penanda) => (e: ReactPointerEvent<HTMLSpanElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    setSeret({ penanda: p, tinggi: tinggiTeks(), draf: geserPenanda(inden, p, xDari(e.clientX), jenis) });
+    setSeret({ penanda: p, tinggi: tinggiTeks(), draf: geserPenanda(inden, p, xDari(e.clientX), jenis, lebarDxa) });
   };
   const gerakSeret = (e: ReactPointerEvent<HTMLSpanElement>) => {
-    if (seret) setSeret({ ...seret, draf: geserPenanda(inden, seret.penanda, xDari(e.clientX), jenis) });
+    if (seret) setSeret({ ...seret, draf: geserPenanda(inden, seret.penanda, xDari(e.clientX), jenis, lebarDxa) });
   };
   const lepasSeret = () => {
     if (!seret) return;
@@ -104,22 +110,22 @@ export default function PenggarisNarasi({ inden, jenis, campur = false, punyaIsi
     const arah = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : 0;
     if (!arah) return;
     e.preventDefault();
-    const baru = geserPenanda(inden, p, posisiPenanda(inden, p) + arah * (e.shiftKey ? LANGKAH_BESAR_DXA : LANGKAH_DXA), jenis);
+    const baru = geserPenanda(inden, p, posisiPenanda(inden, p, lebarDxa) + arah * (e.shiftKey ? LANGKAH_BESAR_DXA : LANGKAH_DXA), jenis, lebarDxa);
     const ubah = bidangBerubah(inden, baru);
     if (Object.keys(ubah).length) onUbah(ubah);
   };
 
   const tampil = seret?.draf ?? inden;
-  const jumlahCm = Math.floor(CM_TULIS);
+  const jumlahCm = Math.floor(cmTulis);
   // Di kartu sempit angka tiap 1 cm berdesakan — cukup tiap 5 cm.
   const jarakAngka = skala < 0.75 ? 5 : 1;
   const garis: number[] = [];
-  for (let i = 0; i <= jumlahCm * 2 + 1; i++) if (i * 0.5 <= CM_TULIS) garis.push(i * 0.5);
+  for (let i = 0; i <= jumlahCm * 2 + 1; i++) if (i * 0.5 <= cmTulis) garis.push(i * 0.5);
   const penanda = (p: Penanda, kelas: string) => (
-    <span key={p} className={`lk-pg-p ${kelas}`} style={{ left: persen(posisiPenanda(tampil, p)) }}
+    <span key={p} className={`lk-pg-p ${kelas}`} style={{ left: persen(posisiPenanda(tampil, p, lebarDxa)) }}
       role="slider" tabIndex={0} aria-label={NAMA_PENANDA[p]} aria-orientation="horizontal"
-      aria-valuemin={0} aria-valuemax={angkaCm(LEBAR_DXA)} aria-valuenow={angkaCm(posisiPenanda(tampil, p))}
-      aria-valuetext={`${cmTeks(posisiPenanda(tampil, p))} cm`}
+      aria-valuemin={0} aria-valuemax={angkaCm(lebarDxa)} aria-valuenow={angkaCm(posisiPenanda(tampil, p, lebarDxa))}
+      aria-valuetext={`${cmTeks(posisiPenanda(tampil, p, lebarDxa))} cm`}
       data-tooltip={NAMA_PENANDA[p]} data-tooltip-pos="below"
       onMouseDown={e => e.preventDefault()} onPointerDown={mulaiSeret(p)} onPointerMove={gerakSeret}
       onPointerUp={lepasSeret} onPointerCancel={() => setSeret(null)} onKeyDown={tekanTombol(p)}>
@@ -167,16 +173,16 @@ export default function PenggarisNarasi({ inden, jenis, campur = false, punyaIsi
         <span className="lk-pg-tepi" style={{ left: 0, width: persen(tampil.kiri) }} aria-hidden="true" />
         <span className="lk-pg-tepi" style={{ right: 0, width: persen(tampil.kanan) }} aria-hidden="true" />
         {garis.map(cm => (
-          <span key={cm} className={`lk-pg-garis${Number.isInteger(cm) ? ' besar' : ''}`} style={{ left: `${(cm / CM_TULIS) * 100}%` }} aria-hidden="true" />
+          <span key={cm} className={`lk-pg-garis${Number.isInteger(cm) ? ' besar' : ''}`} style={{ left: `${(cm / cmTulis) * 100}%` }} aria-hidden="true" />
         ))}
         {garis.filter(cm => Number.isInteger(cm) && cm % jarakAngka === 0).map(cm => (
-          <span key={cm} className="lk-pg-angka" style={{ left: `${(cm / CM_TULIS) * 100}%` }} aria-hidden="true">{cm}</span>
+          <span key={cm} className="lk-pg-angka" style={{ left: `${(cm / cmTulis) * 100}%` }} aria-hidden="true">{cm}</span>
         ))}
         {penanda('pertama', 'lk-pg-p-pertama')}
         {penanda('gantung', 'lk-pg-p-gantung')}
         {penanda('kiri', 'lk-pg-p-kiri')}
         {penanda('kanan', 'lk-pg-p-kanan')}
-        {seret && <span className="lk-pg-panduan" style={{ left: persen(posisiPenanda(seret.draf, seret.penanda)), height: seret.tinggi }} aria-hidden="true" />}
+        {seret && <span className="lk-pg-panduan" style={{ left: persen(posisiPenanda(seret.draf, seret.penanda, lebarDxa)), height: seret.tinggi }} aria-hidden="true" />}
       </div>
       {panel && (
         <div className="lk-pg-panel">
@@ -217,7 +223,7 @@ const PG_CSS = `
   .lk-pg-tombol:disabled { opacity: .4; cursor: default; }
   .lk-pg-sembunyi { border: 1px solid #0C447C; border-bottom: none; padding: 2px 14px; display: flex; justify-content: flex-end; background: #020F1C; }
   /* Baris: ▽ baris pertama (0–9) · pita skala (9–23) · △ gantung & kanan (23–32) · ▭ kiri (32–38). */
-  .lk-pg-track { position: relative; height: 38px; width: min(${PX_TULIS}px, 100%); }
+  .lk-pg-track { position: relative; height: 38px; width: min(var(--lk-tulis-px, ${PX_TULIS}px), 100%); }
   .lk-pg-pita { position: absolute; left: 0; right: 0; top: 9px; height: 14px; background: rgba(181,212,244,.12); border-radius: 2px; }
   .lk-pg-tepi { position: absolute; top: 9px; height: 14px; background: rgba(2,15,28,.55); pointer-events: none; }
   .lk-pg-garis { position: absolute; top: 19px; width: 1px; height: 4px; background: rgba(181,212,244,.45); pointer-events: none; }

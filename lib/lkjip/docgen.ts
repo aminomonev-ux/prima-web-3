@@ -9,15 +9,18 @@ import { getDokumenDetail } from './data';
 import { flattenTree, nomorObjek, sebutObjek, type SectionNode, type BlockNode, type JenisObjek, type NomorObjek } from './numbering';
 import { DEFAULT_STYLE, type StyleConfig } from './schemas';
 import {
-  normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord, bacaAtur, lebarTulisDxa, teksSumber, gayaSel, selBergaya, nomorUlang, tinggiBarisTegak,
-  LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
+  normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord, bacaAtur, teksSumber, gayaSel, selBergaya, nomorUlang, tinggiBarisTegak,
+  LEBAR_TULIS_DXA,
 } from './tabel';
 // Geometri halaman SATU sumber dengan penggaris editor (`docs/konsep/lkjip/CONCEPT-lkjip-penggaris-narasi.md` §3).
-import { LEBAR_DXA, PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
+import { geometri, type Geometri, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, TINGKAT_DAFTAR, adalahBullet, gantungDxa, gayaDariTagDaftar, susunanPenuh, tagGaya, tulisSusunan, xmlTingkatWord, type KodeGaya } from './gaya-daftar';
 import { POLA_STABILO, STABILO, stabiloSah, szDariGaya } from './format-teks';
 import { hurufDariGaya } from './style-constants';
-import { EMU_PER_PX, JARAK_SEL_DXA, bacaUkuran, lebarMaksEmu, ukuranTampilEmu, xmlPotongan, type UkuranGambar } from './ukuran-gambar';
+import { EMU_PER_PX, JARAK_SEL_DXA, bacaUkuran, batasGambar, lebarMaksEmu, ukuranTampilEmu, xmlPotongan, type UkuranGambar } from './ukuran-gambar';
+
+/** A4 + margin lama — untuk pemanggil yang tidak membawa dokumen (uji lama, IKI). Sama persis dengan konstanta lama. */
+const GEO_BAWAAN = geometri();
 import { JC_RATA, TEBAL_BINGKAI_EMU, bacaAturGambar, berkasBlok, daftarGambar, type AturGambar, type GambarSebaris } from './atur-gambar';
 import { getDriveClient } from '@/lib/services/drive';
 
@@ -386,7 +389,7 @@ export function runSel(teks: string, font: string, sz: number, f: { b?: boolean;
   return `<w:r>${pr}${teks.split('\n').map(t => `<w:t xml:space="preserve">${escapeXml(t)}</w:t>`).join('<w:br/>')}</w:r>`;
 }
 
-export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string, nomor: number | NomorJudul = 1): string {
+export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string, nomor: number | NomorJudul = 1, geo: Geometri = GEO_BAWAAN): string {
   const p = (payload ?? {}) as { judul?: string; kolom?: string[]; align?: string[]; colWidths?: number[]; rows?: unknown };
   const kolom = Array.isArray(p.kolom) ? p.kolom : [];
   const colAlign = Array.isArray(p.align) ? p.align : [];
@@ -400,7 +403,7 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
   const meta = buildTableMeta(rows, ncol);
   // Lebar kolom: colWidths (px → dxa) bila lengkap, selain itu bagi rata; disusutkan ke lebar kertas (T3),
   // lebar kertas melintang bila tabel dicetak melintang, direntangkan bila posisinya "selebar kertas".
-  const widths = lebarKolomWord(p.colWidths, ncol, lebarTulisDxa(atur.melintang), atur.posisi === 'penuh');
+  const widths = lebarKolomWord(p.colWidths, ncol, atur.melintang ? geo.lebarTulisMelintang : geo.lebarTulis, atur.posisi === 'penuh');
   const sumber = teksSumber(atur.sumber);
   const spanW = (c: number, cs: number) => { let s = 0; for (let i = c; i < c + cs && i < ncol; i++) s += widths[i]; return s; };
   const border = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>`;
@@ -509,13 +512,13 @@ function imgDimsEmu(buf: Buffer, ext: string): { wEmu: number; hEmu: number } {
   if (!w || !h) { w = 480; h = 360; }
   return { wEmu: w * EMU_PER_PX, hEmu: h * EMU_PER_PX };
 }
-interface OpsiGambar { jc?: 'left' | 'center' | 'right'; bingkai?: boolean; lebarMaks?: number }
+interface OpsiGambar { jc?: 'left' | 'center' | 'right'; bingkai?: boolean; lebarMaks?: number; tinggiMaks?: number }
 function drawingPara(info: ImageInfo, ukuran: UkuranGambar, o: OpsiGambar = {}): string {
   const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
   const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
   // Per blok, bukan per berkas: satu berkas bisa dipakai dua blok dengan ukuran berbeda.
-  const { wEmu, hEmu } = ukuranTampilEmu(ukuran, info, o.lebarMaks);
+  const { wEmu, hEmu } = ukuranTampilEmu(ukuran, info, o.lebarMaks, o.tinggiMaks);
   // Bingkai = garis bentuk gambar (§4.2): ikut gambarnya bila dipindah di Word. Urutan skema spPr: xfrm → geom → ln.
   const garis = o.bingkai ? `<a:ln w="${TEBAL_BINGKAI_EMU}"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>` : '';
   // keepNext: gambar tidak boleh terpisah dari judulnya yang ada di bawahnya (W1).
@@ -545,14 +548,15 @@ function subGambar(teks: string, font: string, sz: number, jc: string): string {
  * Gambar berdampingan (§4.3): tabel tanpa garis, satu kolom per gambar, lebar bidang tulis dibagi rata. Ukuran tiap
  * gambar dibatasi lebar kolomnya lewat `lebarMaksEmu` — aturan yang sama dengan editor.
  */
-function tabelGambarSebaris(gambar: GambarSebaris[], atur: AturGambar, font: string, sz: number, imgMap: Map<string, ImageInfo>): string {
+function tabelGambarSebaris(gambar: GambarSebaris[], atur: AturGambar, font: string, sz: number, imgMap: Map<string, ImageInfo>, geo: Geometri): string {
   const n = gambar.length;
-  const kolom = Math.floor(LEBAR_DXA / n);
-  const lebarMaks = lebarMaksEmu(n);
+  const kolom = Math.floor(geo.lebarTulis / n);
+  const lebarMaks = lebarMaksEmu(n, geo.lebarTulis);
+  const { tinggiMaks } = batasGambar(geo);
   const tanpaGaris = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(s => `<w:${s} w:val="nil"/>`).join('');
   const sel = gambar.map(g => {
     const info = g.fileId ? imgMap.get(g.fileId) : undefined;
-    const isi = info ? drawingPara(info, g.ukuran, { bingkai: atur.bingkai, lebarMaks }) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
+    const isi = info ? drawingPara(info, g.ukuran, { bingkai: atur.bingkai, lebarMaks, tinggiMaks }) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
     return `<w:tc><w:tcPr><w:tcW w:w="${kolom}" w:type="dxa"/><w:vAlign w:val="bottom"/></w:tcPr>${isi}${subGambar(g.sub, font, sz, 'center')}</w:tc>`;
   }).join('');
   return `<w:tbl><w:tblPr><w:tblW w:w="${kolom * n}" w:type="dxa"/><w:jc w:val="${JC_RATA[atur.rata]}"/><w:tblBorders>${tanpaGaris}</w:tblBorders>` +
@@ -560,29 +564,30 @@ function tabelGambarSebaris(gambar: GambarSebaris[], atur: AturGambar, font: str
     `<w:tblGrid>${`<w:gridCol w:w="${kolom}"/>`.repeat(n)}</w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sel}</w:tr></w:tbl>`;
 }
 
-export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1): string {
+export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1, geo: Geometri = GEO_BAWAAN): string {
+  const batas = batasGambar(geo);
   const text = teksKeterangan('GAMBAR', payload);
   const atur = bacaAturGambar(payload);
   const jc = JC_RATA[atur.rata];
   const gambar = daftarGambar(payload);
   let body: string;
-  if (gambar.length > 1) body = tabelGambarSebaris(gambar, atur, font, sz, imgMap);
+  if (gambar.length > 1) body = tabelGambarSebaris(gambar, atur, font, sz, imgMap, geo);
   else {
     const info = gambar[0].fileId ? imgMap.get(gambar[0].fileId) : undefined;
-    body = (info ? drawingPara(info, gambar[0].ukuran, { jc, bingkai: atur.bingkai }) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' }))
+    body = (info ? drawingPara(info, gambar[0].ukuran, { jc, bingkai: atur.bingkai, ...batas }) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' }))
       + subGambar(gambar[0].sub, font, sz, jc);
   }
   // Keterangan ikut perataan gambarnya (§4.1).
   return body + caption('Gambar', text, font, sz, false, judulNomor(nomor), jc) + para('', font, sz);
 }
 
-function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1): string {
+function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1, geo: Geometri = GEO_BAWAAN): string {
   const p = (payload ?? {}) as { judul?: string; imageFileId?: string; caption?: string };
   const text = teksKeterangan('GRAFIK', payload);
   const atur = bacaAturGambar(payload);
   const jc = JC_RATA[atur.rata];
   const info = p.imageFileId ? imgMap.get(p.imageFileId) : undefined;
-  const body = info ? drawingPara(info, bacaUkuran(payload), { jc, bingkai: atur.bingkai }) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
+  const body = info ? drawingPara(info, bacaUkuran(payload), { jc, bingkai: atur.bingkai, ...batasGambar(geo) }) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
   return body + caption('Grafik', text, font, sz, false, judulNomor(nomor), jc) + para('', font, sz);
 }
 
@@ -596,12 +601,12 @@ function buildHeadingXml(node: SectionNode): string {
   return `<w:p><w:pPr><w:pStyle w:val="Heading${lvl}"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(teksJudulBagian(node))}</w:t></w:r></w:p>`;
 }
 
-function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<string, ImageInfo>, headerFill: string, indentTwips = 0, alloc?: NumAlloc, nomor: number | NomorJudul = 1, rujuk?: Map<number, string>): string {
+function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<string, ImageInfo>, headerFill: string, indentTwips = 0, alloc?: NumAlloc, nomor: number | NomorJudul = 1, rujuk?: Map<number, string>, geo: Geometri = GEO_BAWAAN): string {
   switch (b.tipe) {
     case 'NARASI': { const p = (b.payload as { html?: string; continueList?: boolean }) ?? {}; return narasiToXml(p.html ?? '', font, sz, indentTwips, alloc, p.continueList === true, rujuk); }
-    case 'TABEL':  return buildTabelXml(b.payload, font, sz, headerFill, nomor);
-    case 'GAMBAR': return buildGambarXml(b.payload, font, sz, imgMap, nomor);
-    case 'GRAFIK': return buildGrafikXml(b.payload, font, sz, imgMap, nomor);
+    case 'TABEL':  return buildTabelXml(b.payload, font, sz, headerFill, nomor, geo);
+    case 'GAMBAR': return buildGambarXml(b.payload, font, sz, imgMap, nomor, geo);
+    case 'GRAFIK': return buildGrafikXml(b.payload, font, sz, imgMap, nomor, geo);
     default:       return '';
   }
 }
@@ -642,11 +647,12 @@ export function entriDaftar(tree: SectionNode[], nomor: Map<number, NomorObjek>)
 
 // Halaman melintang memakai footer sendiri (rId5): tab kanan teks footer harus di tepi kanan bidang tulisnya.
 // Header tanpa tab, jadi satu header.xml (rId6) dipakai tegak maupun melintang.
-function sectProps(opts: { footer: boolean; header?: boolean; numFmt?: 'lowerRoman' | 'decimal'; start?: number; melintang?: boolean }): string {
+function sectProps(opts: { footer: boolean; header?: boolean; numFmt?: 'lowerRoman' | 'decimal'; start?: number; melintang?: boolean; geo?: Geometri }): string {
+  const geo = opts.geo ?? GEO_BAWAAN;
   const href = opts.header ? `<w:headerReference r:id="rId6" w:type="default"/>` : '';
   const fref = opts.footer ? `<w:footerReference r:id="${opts.melintang ? 'rId5' : 'rId4'}" w:type="default"/>` : '';
   const pgnum = opts.numFmt ? `<w:pgNumType w:fmt="${opts.numFmt}"${opts.start ? ` w:start="${opts.start}"` : ''}/>` : '';
-  return `${href}${fref}${opts.melintang ? PGSZ_MELINTANG : PGSZ}${PGMAR}${pgnum}`;
+  return `${href}${fref}${opts.melintang ? geo.pgSzMelintang : geo.pgSz}${geo.pgMar}${pgnum}`;
 }
 /** Halaman daftar & isi punya header? (sampul tidak pernah) */
 export const adaKepala = (cfg: StyleConfig) => (cfg.headerText ?? '').trim() !== '';
@@ -760,6 +766,7 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
   const font = cfg.fontFamily;
   const sz = Math.round(cfg.fontSizePt * 2);
   const indentTwips = twipsDariCm(cfg.firstLineIndentCm ?? 0); // 1cm ≈ 567 twips, 1,27 cm = 720
+  const geo = geometri(cfg);
 
   const cover =
     para('LAPORAN KINERJA INSTANSI PEMERINTAH', font, 36, { bold: true, align: 'center' }) +
@@ -790,7 +797,7 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
     potongan.push({ judul: true, melintang: false, xml: buildHeadingXml(node) });
     for (const b of node.blocks) {
       const n = nomor.get(b.id);
-      const xml = buildBlockXml(b, font, sz, imgMap, cfg.tableHeaderFill, indentTwips, alloc, n ? { nomor: n.nomor, awalan: n.awalan, blokId: b.id } : 1, rujuk);
+      const xml = buildBlockXml(b, font, sz, imgMap, cfg.tableHeaderFill, indentTwips, alloc, n ? { nomor: n.nomor, awalan: n.awalan, blokId: b.id } : 1, rujuk, geo);
       potongan.push({ judul: false, melintang: b.tipe === 'TABEL' && xml !== '' && bacaAtur(b.payload).melintang, xml });
     }
   }
@@ -802,8 +809,8 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
   const kepala = adaKepala(cfg);
   const kaki = adaKaki(cfg);
   const propsIsi = (melintang: boolean, pertama: boolean) => cfg.pageNumber
-    ? sectProps({ footer: true, header: kepala, numFmt: 'decimal', start: pertama ? 1 : undefined, melintang })
-    : sectProps({ footer: kaki, header: kepala, melintang });
+    ? sectProps({ footer: true, header: kepala, numFmt: 'decimal', start: pertama ? 1 : undefined, melintang, geo })
+    : sectProps({ footer: kaki, header: kepala, melintang, geo });
   const rangkai = (seg: Potongan[]) => seg.map((s, i) => i < seg.length - 1
     ? s.xml + sectBreakRapat(propsIsi(s.melintang, i === 0))
     : `${s.xml}<w:sectPr>${propsIsi(s.melintang, i === 0)}</w:sectPr>`).join('');
@@ -811,13 +818,13 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
   // Penomoran: cover (tanpa nomor) · daftar (romawi i,ii) · isi (arab 1,2) — bila pageNumber+romanFront.
   let body: string;
   if (cfg.pageNumber && cfg.romanFront) {
-    body = `${cover}${sectBreak(sectProps({ footer: false }))}` +
-      `${daftar}${sectBreak(sectProps({ footer: true, header: kepala, numFmt: 'lowerRoman', start: 1 }))}` + rangkai(isi);
+    body = `${cover}${sectBreak(sectProps({ footer: false, geo }))}` +
+      `${daftar}${sectBreak(sectProps({ footer: true, header: kepala, numFmt: 'lowerRoman', start: 1, geo }))}` + rangkai(isi);
   } else {
     // Daftar berbagi section dengan awal isi. Kalau isi dibuka tabel melintang, daftar tetap tegak:
     // section-nya diakhiri sendiri (pemisah section sudah membuka halaman baru, jadi tanpa pageBreak).
     // Sampul tanpa header/footer: section sendiri bila halaman sesudahnya memakai salah satunya.
-    const awal = kepala || kaki ? `${cover}${sectBreak(sectProps({ footer: false }))}` : `${cover}${pageBreak()}`;
+    const awal = kepala || kaki ? `${cover}${sectBreak(sectProps({ footer: false, geo }))}` : `${cover}${pageBreak()}`;
     const seg = isi[0].melintang
       ? [{ melintang: false, xml: daftar }, ...isi]
       : [{ melintang: false, xml: `${daftar}${pageBreak()}${isi[0].xml}` }, ...isi.slice(1)];
@@ -930,8 +937,9 @@ export async function rakitDocx(
   zip.file('word/styles.xml', buildStyles(cfg));
   zip.file('word/numbering.xml', buildNumbering(numAlloc.instances));
   zip.file('word/settings.xml', SETTINGS_XML);
-  zip.file('word/footer.xml', buildFooterXml(cfg));
-  zip.file('word/footer2.xml', buildFooterXml(cfg, LEBAR_TULIS_MELINTANG_DXA));
+  const geo = geometri(cfg);
+  zip.file('word/footer.xml', buildFooterXml(cfg, geo.lebarTulis));
+  zip.file('word/footer2.xml', buildFooterXml(cfg, geo.lebarTulisMelintang));
   zip.file('word/document.xml', docXml);
   for (const mf of images.media) zip.file(mf.name, mf.buf);
 

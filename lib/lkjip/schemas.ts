@@ -8,11 +8,11 @@ import { FONT_CHOICES, HURUF_DOKUMEN_BAWAAN, RATA_HEADER, POSISI_NOMOR, hurufDar
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 import { BATAS_BARIS_TANGAN } from './tautan';
-import { atributInden, atributSpasi, bacaInden, bacaSpasi } from './halaman';
+import { BATAS_MARGIN_CM, MARGIN_BAWAAN_CM, PILIHAN_KERTAS, atributInden, atributSpasi, bacaInden, bacaSpasi } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, gayaDariTagDaftar, susunanDariTag, tagDaftar } from './gaya-daftar';
 import { BATAS_PT, POLA_STABILO, stabiloSah } from './format-teks';
 import { BATAS_ALASAN_HAPUS_FINAL } from './hapus-dokumen';
-import { LEBAR_MAKS_EMU, TINGGI_MAKS_EMU, potonganSah } from './ukuran-gambar';
+import { LEBAR_MAKS_MUTLAK_EMU, TINGGI_MAKS_MUTLAK_EMU, potonganSah } from './ukuran-gambar';
 import { BATAS_SUB_GAMBAR, BATAS_TAMBAHAN_GAMBAR, RATA_GAMBAR } from './atur-gambar';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
@@ -61,6 +61,9 @@ export const StyleConfigSchema = z.object({
   romanFront:   z.boolean().default(true),    // cover bebas-nomor, daftar romawi (i,ii), isi arab (1,2)
   tableHeaderFill: z.string().regex(/^[0-9a-fA-F]{6}$/).default('EDEDED'),   // warna latar header tabel (hex tanpa #)
   nomorPerBab:  z.boolean().default(false),   // "Tabel 3.1" (nomor mulai lagi tiap BAB) — konsep tabel-excel §12.5
+  // Kertas & margin per dokumen (konsep kertas-margin-arsip-pdf A). Bawaan = A4 + margin lama, keluaran Word lama persis.
+  kertas:       z.enum(PILIHAN_KERTAS).default('A4'),
+  marginCm:     z.object({ atas: z.coerce.number().min(BATAS_MARGIN_CM.min, `Margin paling kecil ${BATAS_MARGIN_CM.min} cm`).max(BATAS_MARGIN_CM.max, `Margin paling besar ${BATAS_MARGIN_CM.max} cm`).transform(v => Math.round(v * 100) / 100), kanan: z.coerce.number().min(BATAS_MARGIN_CM.min, `Margin paling kecil ${BATAS_MARGIN_CM.min} cm`).max(BATAS_MARGIN_CM.max, `Margin paling besar ${BATAS_MARGIN_CM.max} cm`).transform(v => Math.round(v * 100) / 100), bawah: z.coerce.number().min(BATAS_MARGIN_CM.min, `Margin paling kecil ${BATAS_MARGIN_CM.min} cm`).max(BATAS_MARGIN_CM.max, `Margin paling besar ${BATAS_MARGIN_CM.max} cm`).transform(v => Math.round(v * 100) / 100), kiri: z.coerce.number().min(BATAS_MARGIN_CM.min, `Margin paling kecil ${BATAS_MARGIN_CM.min} cm`).max(BATAS_MARGIN_CM.max, `Margin paling besar ${BATAS_MARGIN_CM.max} cm`).transform(v => Math.round(v * 100) / 100) }).default(MARGIN_BAWAAN_CM),
   // Kata Pengantar (front-matter, setelah cover sebelum Daftar Isi) + blok tanda tangan
   kataPengantarHtml: z.string().max(20000).default(''),
   ttdTempatTanggal:  z.string().max(120).default(''),
@@ -70,7 +73,7 @@ export const StyleConfigSchema = z.object({
   ttdNip:            z.string().max(60).default(''),
 }).transform(c => ({ ...c, kataPengantarHtml: sanitizeNarasiHtml(c.kataPengantarHtml) }));
 export type StyleConfig = z.infer<typeof StyleConfigSchema>;
-export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12, lineSpacing: 1.5, align: 'both', spaceAfterPt: 6, firstLineIndentCm: 1.27, pageNumber: true, footerText: '', headerText: '', headerRata: 'tengah', headerGaris: false, footerGaris: false, nomorPosisi: 'otomatis', romanFront: true, tableHeaderFill: 'EDEDED', nomorPerBab: false, kataPengantarHtml: '', ttdTempatTanggal: '', ttdJabatan: '', ttdNama: '', ttdPangkat: '', ttdNip: '' };
+export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12, lineSpacing: 1.5, align: 'both', spaceAfterPt: 6, firstLineIndentCm: 1.27, pageNumber: true, footerText: '', headerText: '', headerRata: 'tengah', headerGaris: false, footerGaris: false, nomorPosisi: 'otomatis', romanFront: true, tableHeaderFill: 'EDEDED', nomorPerBab: false, kertas: 'A4', marginCm: MARGIN_BAWAAN_CM, kataPengantarHtml: '', ttdTempatTanggal: '', ttdJabatan: '', ttdNama: '', ttdPangkat: '', ttdNip: '' };
 
 // Sanitizer narasi (server-safe, no DOM) — whitelist tag, buang semua atribut.
 // Defense-in-depth: Tiptap re-parse saat load + docgen parse ke OOXML (bukan innerHTML).
@@ -330,8 +333,9 @@ export const TabelPayloadSchema = z.object({
 
 // Ukuran per blok (konsep ukuran-gambar §2). Tanpa kunci = otomatis, jadi foto Riwayat lama tetap sah.
 const KUNCI_UKURAN_GAMBAR = {
-  lebarEmu:  z.number().int().min(1).max(LEBAR_MAKS_EMU).nullable().default(null),
-  tinggiEmu: z.number().int().min(1).max(TINGGI_MAKS_EMU).nullable().default(null),
+  // Batas MUTLAK (kertas terbesar, margin terkecil): ganti kertas tidak boleh membuat simpanan lama ditolak.
+  lebarEmu:  z.number().int().min(1).max(LEBAR_MAKS_MUTLAK_EMU).nullable().default(null),
+  tinggiEmu: z.number().int().min(1).max(TINGGI_MAKS_MUTLAK_EMU).nullable().default(null),
   potong:    z.object({ kiri: z.number(), atas: z.number(), kanan: z.number(), bawah: z.number() }).refine(potonganSah).nullable().default(null),
 };
 

@@ -11,7 +11,7 @@ import { bacaDocxLkjip } from '../lib/lkjip/impor-word'
 import { GambarPayloadSchema, GrafikPayloadSchema, parseBlockPayload } from '../lib/lkjip/schemas'
 import { buildGambarXml } from '../lib/lkjip/docgen'
 import {
-  EMU_PER_CM, LEBAR_MAKS_CM, LEBAR_MAKS_EMU, LEBAR_MIN_CM, TANPA_UKURAN, TINGGI_MAKS_EMU,
+  EMU_PER_CM, LEBAR_MAKS_CM, LEBAR_MAKS_EMU, LEBAR_MAKS_MUTLAK_EMU, LEBAR_MIN_CM, TANPA_UKURAN, TINGGI_MAKS_EMU, TINGGI_MAKS_MUTLAK_EMU,
   bacaUkuran, cmDariEmu, emuDariCm, gayaPratinjau, jepitUkuran, kembalikanProporsi, lepasDariBerkas,
   potonganSah, proporsiMenyimpang, ubahLebar, ukuranTampilEmu, xmlPotongan, type UkuranGambar,
 } from '../lib/lkjip/ukuran-gambar'
@@ -94,7 +94,7 @@ for (const [tipe, nama] of [['GAMBAR', 'B1'], ['GRAFIK', 'B2']] as const) {
 const lama = GambarPayloadSchema.parse({ judul: 'x', fileId: 'y', caption: '' })
 ok('B3 foto lama tanpa kunci: otomatis', lama.lebarEmu === null && lama.tinggiEmu === null && lama.potong === null)
 ok('B4 grafik lama tanpa kunci: otomatis', GrafikPayloadSchema.parse({}).lebarEmu === null)
-ok('B5 melewati batas ditolak', !GambarPayloadSchema.safeParse({ lebarEmu: LEBAR_MAKS_EMU + 1 }).success && !GambarPayloadSchema.safeParse({ lebarEmu: 5, tinggiEmu: TINGGI_MAKS_EMU + 1 }).success)
+ok('B5 melewati batas MUTLAK ditolak; lebih lebar dari A4 boleh (F4/margin kecil — konsep kertas-margin A.3)', !GambarPayloadSchema.safeParse({ lebarEmu: LEBAR_MAKS_MUTLAK_EMU + 1 }).success && !GambarPayloadSchema.safeParse({ lebarEmu: 5, tinggiEmu: TINGGI_MAKS_MUTLAK_EMU + 1 }).success && GambarPayloadSchema.safeParse({ lebarEmu: LEBAR_MAKS_EMU + 1 }).success)
 ok('B6 tepat di batas diterima', GambarPayloadSchema.safeParse({ lebarEmu: LEBAR_MAKS_EMU, tinggiEmu: TINGGI_MAKS_EMU }).success)
 ok('B7 potongan rusak ditolak', !GambarPayloadSchema.safeParse({ potong: { kiri: 60000, atas: 0, kanan: 60000, bawah: 0 } }).success)
 ok('B8 nol & pecahan ditolak', !GambarPayloadSchema.safeParse({ lebarEmu: 0 }).success && !GambarPayloadSchema.safeParse({ lebarEmu: 1.5 }).success)
@@ -228,11 +228,11 @@ ok('E10 tulisan lama "Gambar siap" hilang', !gbr.includes('Gambar siap'))
 ok('E11 gaya isian judul tidak menimpa kolom Lebar', ed.includes('.lk-gambar-ed > input {') && !/\.lk-gambar-ed input\b/.test(ed))
 ok('E12 Grafik bersumber data mendapat isian Lebar', /source !== 'gambar' && !readOnly && <IsianLebar /.test(grf))
 const kp = kode('app/(dashboard)/lkjip/[id]/GambarBerukuran.tsx')
-ok('E13 hapus angka tidak langsung melepas proporsi', /if \(v !== ''\) onUbah\(ubahLebar\(ukuran, emuDariCm\(Number\(v\)\), lebarMaks\)\);/.test(kp))
-ok('E14 kosong berlaku saat keluar', /if \(isian === ''\) \{ if \(ukuran\.lebarEmu\) onUbah\(ubahLebar\(ukuran, null, lebarMaks\)\); return; \}/.test(kp))
+ok('E13 hapus angka tidak langsung melepas proporsi', /if \(v !== ''\) onUbah\(ubahLebar\(ukuran, emuDariCm\(Number\(v\)\), lebarMaks, tinggiMaks\)\);/.test(kp))
+ok('E14 kosong berlaku saat keluar', /if \(isian === ''\) \{ if \(ukuran\.lebarEmu\) onUbah\(ubahLebar\(ukuran, null, lebarMaks, tinggiMaks\)\); return; \}/.test(kp))
 ok('E15 keluar menulis ulang angka hasil jepit', kp.includes('setIsian(isianDari(ukuran));'))
 ok('E16 Enter menyelesaikan isian', /e\.key === 'Enter'\) \{ e\.preventDefault\(\); e\.currentTarget\.blur\(\); \}/.test(kp))
-ok('E17 ukuran di layar dari fungsi yang sama dengan Word', kp.includes('ukuranTampilEmu(ukuran, alami, lebarMaks)') && kp.includes('gayaPratinjau(ukuran, alami, lebarMaks)'))
+ok('E17 ukuran di layar dari fungsi yang sama dengan Word', kp.includes('ukuranTampilEmu(ukuran, alami, lebarMaks, tinggiMaks)') && kp.includes('gayaPratinjau(ukuran, alami, lebarMaks, tinggiMaks)'))
 ok('E18 spanduk & tombolnya', kp.includes('proporsiMenyimpang(ukuran, alami)') && kp.includes('onUbah(kembalikanProporsi(ukuran))') && /!readOnly && <PrimaButton/.test(kp))
 ok('E19 gambar gagal dimuat disebut', kp.includes('onError={() => setGagal(true)}') && kp.includes('Gambar tidak bisa dimuat'))
 ok('E20 hanya baca: tanpa isian', /\{!readOnly && \(\s*<label>Lebar \(cm\)/.test(kp))

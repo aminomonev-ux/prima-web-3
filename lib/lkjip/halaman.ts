@@ -21,6 +21,55 @@ export const PGSZ_MELINTANG = `<w:pgSz w:w="${KERTAS.tinggi}" w:h="${KERTAS.leba
 export const PGMAR = `<w:pgMar w:top="${MARGIN.atas}" w:right="${MARGIN.kanan}" w:bottom="${MARGIN.bawah}" w:left="${MARGIN.kiri}" w:header="${MARGIN.header}" w:footer="${MARGIN.footer}" w:gutter="0"/>`;
 
 export const TWIPS_PER_CM = 567;
+
+// ─── Kertas & margin per dokumen (konsep `docs/konsep/lkjip/CONCEPT-lkjip-kertas-margin-arsip-pdf.md` A) ──
+// Konstanta di atas = BAWAAN (A4 + margin lama), sama persis dengan `geometri(DEFAULT_STYLE)`. Pemakai yang tahu
+// dokumennya WAJIB memakai `geometri(cfg)`, kalau tidak editor dan hasil cetak berbeda tanpa ada yang sadar.
+export const PILIHAN_KERTAS = ['A4', 'F4'] as const;
+export type JenisKertas = typeof PILIHAN_KERTAS[number];
+/** F4 = 21,5 × 33 cm (K1). */
+export const UKURAN_KERTAS: Record<JenisKertas, { lebar: number; tinggi: number; cm: string }> = {
+  A4: { lebar: KERTAS.lebar, tinggi: KERTAS.tinggi, cm: '21 × 29,7 cm' },
+  F4: { lebar: Math.round(21.5 * TWIPS_PER_CM), tinggi: Math.round(33 * TWIPS_PER_CM), cm: '21,5 × 33 cm' },
+};
+export interface MarginCm { atas: number; kanan: number; bawah: number; kiri: number }
+export const MARGIN_BAWAAN_CM: MarginCm = { atas: 2.5, kanan: 2.5, bawah: 2.5, kiri: 3 };
+/** Batas tiap sisi (K3). Lebar bidang tulis tegak ≥ 11 cm dengan sendirinya (A4: 21 − 5 − 5). */
+export const BATAS_MARGIN_CM = { min: 1, max: 5 } as const;
+
+export interface Geometri {
+  kertas: { lebar: number; tinggi: number };
+  margin: { atas: number; kanan: number; bawah: number; kiri: number };
+  lebarTulis: number; lebarTulisMelintang: number;
+  tinggiTulis: number; tinggiTulisMelintang: number;
+  pgSz: string; pgSzMelintang: string; pgMar: string;
+}
+
+/** Margin cm → dxa lewat `indentTwips`: 2,5 cm = 1.418, 3 cm = 1.701 — persis `MARGIN` lama. */
+const marginDxa = (cm: unknown, bawaan: number): number => {
+  const n = Number(cm);
+  return Number.isFinite(n) && n >= BATAS_MARGIN_CM.min && n <= BATAS_MARGIN_CM.max ? indentTwips(n) : indentTwips(bawaan);
+};
+
+/** Geometri halaman dokumen dari `style_config`. Tanpa kunci = A4 + margin lama (dokumen lama keluar byte-sama). */
+export function geometri(cfg?: { kertas?: unknown; marginCm?: Partial<Record<keyof MarginCm, unknown>> | null } | null): Geometri {
+  const k = UKURAN_KERTAS[(PILIHAN_KERTAS as readonly unknown[]).includes(cfg?.kertas) ? cfg!.kertas as JenisKertas : 'A4'];
+  const m = cfg?.marginCm ?? {};
+  const margin = {
+    atas: marginDxa(m.atas, MARGIN_BAWAAN_CM.atas), kanan: marginDxa(m.kanan, MARGIN_BAWAAN_CM.kanan),
+    bawah: marginDxa(m.bawah, MARGIN_BAWAAN_CM.bawah), kiri: marginDxa(m.kiri, MARGIN_BAWAAN_CM.kiri),
+  };
+  return {
+    kertas: { lebar: k.lebar, tinggi: k.tinggi }, margin,
+    lebarTulis: k.lebar - margin.kiri - margin.kanan,
+    lebarTulisMelintang: k.tinggi - margin.kiri - margin.kanan,
+    tinggiTulis: k.tinggi - margin.atas - margin.bawah,
+    tinggiTulisMelintang: k.lebar - margin.atas - margin.bawah,
+    pgSz: `<w:pgSz w:w="${k.lebar}" w:h="${k.tinggi}"/>`,
+    pgSzMelintang: `<w:pgSz w:w="${k.tinggi}" w:h="${k.lebar}" w:orient="landscape"/>`,
+    pgMar: `<w:pgMar w:top="${margin.atas}" w:right="${margin.kanan}" w:bottom="${margin.bawah}" w:left="${margin.kiri}" w:header="${MARGIN.header}" w:footer="${MARGIN.footer}" w:gutter="0"/>`,
+  };
+}
 /** Lebar bidang tulis di Word: 8.788 dxa = 15,499 cm (BUKAN 15,5 bulat). */
 export const LEBAR_DXA = LEBAR_TULIS_DXA;
 export const CM_TULIS = LEBAR_DXA / TWIPS_PER_CM;
@@ -100,10 +149,10 @@ export function atributInden(i: IndenTersimpan): string {
  * Jaga bentuk yang mustahil: teks minimal 1 cm, baris pertama tidak keluar margin kiri (`kiri + pertama ≥ 0`)
  * dan tidak melewati batas kanan. Butir daftar hanya boleh gantung: nomornya memang di kiri teks.
  */
-export function jepitInden(i: Inden, jenis: JenisInden): Inden {
-  const kanan = jepit(Math.round(i.kanan), 0, LEBAR_DXA - TEKS_MIN_DXA);
-  const kiri = jepit(Math.round(i.kiri), 0, LEBAR_DXA - kanan - TEKS_MIN_DXA);
-  const atas = jenis === 'butir' ? 0 : LEBAR_DXA - kanan - TEKS_MIN_DXA - kiri;
+export function jepitInden(i: Inden, jenis: JenisInden, lebar = LEBAR_DXA): Inden {
+  const kanan = jepit(Math.round(i.kanan), 0, lebar - TEKS_MIN_DXA);
+  const kiri = jepit(Math.round(i.kiri), 0, lebar - kanan - TEKS_MIN_DXA);
+  const atas = jenis === 'butir' ? 0 : lebar - kanan - TEKS_MIN_DXA - kiri;
   return { kiri, kanan, pertama: jepit(Math.round(i.pertama), -kiri, atas) };
 }
 
@@ -158,36 +207,37 @@ export function snapDxa(x: number): number {
  *   · `kiri`    : baris pertama dan berikutnya pindah bersama
  *   · `kanan`   : batas kanan (x dihitung dari kiri, disimpan sebagai jarak dari kanan)
  */
-export function geserPenanda(i: Inden, penanda: Penanda, x: number, jenis: JenisInden): Inden {
+/** lebar = lebar bidang tulis dokumen (kertas & margin per dokumen); bawaan A4. */
+export function geserPenanda(i: Inden, penanda: Penanda, x: number, jenis: JenisInden, lebar = LEBAR_DXA): Inden {
   const s = snapDxa(x);
   const awalPertama = i.kiri + i.pertama;
-  const batasKanan = LEBAR_DXA - i.kanan - TEKS_MIN_DXA;
+  const batasKanan = lebar - i.kanan - TEKS_MIN_DXA;
   switch (penanda) {
     case 'pertama': {
       const posisi = jepit(s, 0, jenis === 'butir' ? i.kiri : batasKanan);
-      return jepitInden({ ...i, pertama: posisi - i.kiri }, jenis);
+      return jepitInden({ ...i, pertama: posisi - i.kiri }, jenis, lebar);
     }
     case 'gantung': {
       // Butir: teks tidak boleh melewati nomornya ke kiri.
       const kiri = jepit(s, jenis === 'butir' ? awalPertama : 0, batasKanan);
-      return jepitInden({ ...i, kiri, pertama: awalPertama - kiri }, jenis);
+      return jepitInden({ ...i, kiri, pertama: awalPertama - kiri }, jenis, lebar);
     }
     case 'kiri': {
       const kiri = jepit(s, Math.max(0, -i.pertama), batasKanan - Math.max(0, i.pertama));
-      return jepitInden({ ...i, kiri }, jenis);
+      return jepitInden({ ...i, kiri }, jenis, lebar);
     }
     case 'kanan': {
       // Yang dibulatkan jarak dari KANAN: itu angka yang dibaca orang ("kanan 1,27 cm"), bukan jarak dari kiri.
-      const posisi = jepit(LEBAR_DXA - snapDxa(LEBAR_DXA - x), Math.max(i.kiri, awalPertama) + TEKS_MIN_DXA, LEBAR_DXA);
-      return jepitInden({ ...i, kanan: LEBAR_DXA - posisi }, jenis);
+      const posisi = jepit(lebar - snapDxa(lebar - x), Math.max(i.kiri, awalPertama) + TEKS_MIN_DXA, lebar);
+      return jepitInden({ ...i, kanan: lebar - posisi }, jenis, lebar);
     }
   }
 }
 
 /** Posisi penanda di penggaris, dxa dari tepi kiri bidang tulis. */
-export function posisiPenanda(i: Inden, penanda: Penanda): number {
+export function posisiPenanda(i: Inden, penanda: Penanda, lebar = LEBAR_DXA): number {
   if (penanda === 'pertama') return i.kiri + i.pertama;
-  if (penanda === 'kanan') return LEBAR_DXA - i.kanan;
+  if (penanda === 'kanan') return lebar - i.kanan;
   return i.kiri;
 }
 

@@ -435,7 +435,7 @@ ok('H8 Ctrl+C / tombol Salin mengisi papan klip dengan TSV DAN HTML',
   te.includes('onCopy={salinKePapan}') && badan(te, 'const salinKePapan = (e: React.ClipboardEvent) =>').includes("e.clipboardData.setData('text/html', html);")
   && badan(te, 'const salinKePapan = (e: React.ClipboardEvent) =>').includes("e.clipboardData.setData('text/plain', tsvPilihan);"))
 ok('H9 teks tegak = format sel (kunci badan tertaut berlaku); garis kertas ikut orientasi',
-  te.includes("disabled={kunciBlok}\n            onClick={() => { const tegak = !origin?.rot;") && te.includes('const kertasPx = kertas?.px ?? lebarKertasPx(atur.melintang);')
+  te.includes("disabled={kunciBlok}\n            onClick={() => { const tegak = !origin?.rot;") && te.includes('const kertasPx = kertas?.px ?? (tulisDok ? Math.floor((atur.melintang ? tulisDok.melintang : tulisDok.tegak) / DXA_PER_PX) : lebarKertasPx(atur.melintang));')
   && te.includes('paskanKeKertas(colWidths, kertasPx)'))
 // Tahap C §12.5: nomor bisa per BAB — label ("3.1") dari fungsi yang sama, setelan dokumen ikut.
 ok('H10 nomor blok & pemilih tabel grafik memakai nomorObjek (sama dengan Word)',

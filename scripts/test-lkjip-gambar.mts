@@ -165,9 +165,9 @@ ok('G1 editor Gambar menyimpan tambahan + perataan + sub', /tambahan: lain\.map\
 ok('G2 editor Grafik menyimpan perataan & bingkai', /\.\.\.ukuran, \.\.\.atur \}\);/.test(ed) && /<IsianAturGambar atur=\{atur\} onUbah=\{u => setAtur\(a => \(\{ \.\.\.a, \.\.\.u \}\)\)\} readOnly=\{readOnly\} \/>/.test(ed))
 ok('G2b dua perubahan cepat tidak saling menimpa: isian mengirim sebagian, induk menggabung ke nilai terbaru', /onClick=\{\(\) => onUbah\(\{ rata: r \}\)\}/.test(ed) && /onUbah\(\{ bingkai: e\.target\.checked \}\)/.test(ed) && (ed.match(/onUbah=\{u => setAtur\(a => \(\{ \.\.\.a, \.\.\.u \}\)\)\}/g) ?? []).length === 2)
 ok('G3 tombol tambah dibatasi BATAS_TAMBAHAN_GAMBAR & butuh gambar pertama', /gambar\.length <= BATAS_TAMBAHAN_GAMBAR && gambar\[0\]\.fileId/.test(ed) && BATAS_TAMBAHAN_GAMBAR === 2)
-ok('G4 pratinjau berdampingan dibatasi lebar kolom yang sama dengan Word', /const lebarMaks = lebarMaksEmu\(gambar\.length\);/.test(ed) && /lebarMaks=\{lebarMaks\}/.test(ed))
+ok('G4 pratinjau berdampingan dibatasi lebar kolom yang sama dengan Word', /const lebarMaks = lebarMaksEmu\(gambar\.length, geo\.lebarTulis\);/.test(ed) && /lebarMaks=\{lebarMaks\}/.test(ed))
 const gb = kode('app/(dashboard)/lkjip/[id]/GambarBerukuran.tsx')
-ok('G5 pratinjau ikut perataan & bingkai', gb.includes('justifyContent: RATA_FLEX[atur.rata]') && gb.includes("atur.bingkai ? ' lk-gbr-garis' : ''") && gb.includes('gayaPratinjau(ukuran, alami, lebarMaks)'))
+ok('G5 pratinjau ikut perataan & bingkai', gb.includes('justifyContent: RATA_FLEX[atur.rata]') && gb.includes("atur.bingkai ? ' lk-gbr-garis' : ''") && gb.includes('gayaPratinjau(ukuran, alami, lebarMaks, tinggiMaks)'))
 
 console.log(`\n${gagal.length ? 'GAGAL — ' : 'LULUS — '}${lulus} lulus, ${gagal.length} gagal`)
 if (gagal.length) process.exit(1)

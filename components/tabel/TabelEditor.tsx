@@ -25,7 +25,7 @@ import {
   normalizeRows, sanitizeRows, mergeCells, unmergeAt, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel,
   selGalat, daftarSelGalat, nilaiKetikan, pastikanKepalaSel, namaKolomDariKepala, sisipBaris, hapusBaris, sisipKolom, hapusKolom,
   kosongkanBlok, tanpaFormat, teksDiBaris, ubahJumlahKepala, paskanKeKertas, pxKeCm,
-  bacaAtur, gayaSel, selBergaya, nomorUlang, ratakanLebar, blokKeHtml, selSalinan, perluPetunjukLebar, asalSel, sisipBarisBaru, lebarKertasPx, posisiBarisBaru,
+  bacaAtur, gayaSel, selBergaya, nomorUlang, ratakanLebar, blokKeHtml, selSalinan, perluPetunjukLebar, asalSel, sisipBarisBaru, lebarKertasPx, DXA_PER_PX, posisiBarisBaru,
   aturPeranKolom, judulBertingkat, ambilBlok, extractRange, isiSeret, ringkasBlok, autoJumlah, tempelFormat, nilaiSaja, tempelNilai, htmlKeSel, urutkanBlok, cariSel, gantiDiSel, gantiSemua, formatUmum,
   BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, BATAS_BARIS_KEPALA, LEBAR_KOLOM_BAWAAN, GARIS_JUMLAH,
   type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel, type AturTabel, type GayaTabel, type PosisiTabel, type TabelBorder, type Kotak,
@@ -45,6 +45,8 @@ import { RowMenu, type RowMenuItem } from './RowMenu';
 /** Fitur khas blok TABEL LKJIP. Modalnya dioper pemakai (dimuat saat dibuka) — komponen bersama tidak menjangkau berkas layar LKJIP. */
 export type FiturLkjip = {
   tahunDokumen: number;
+  /** Lebar bidang tulis dokumen (dxa) — kertas & margin per dokumen (konsep kertas-margin A). Tanpa ini: A4 bawaan. */
+  lebarTulis?: { tegak: number; melintang: number };
   TautanModal: ComponentType<{ payload: PayloadTabel; tahunDokumen: number; onTerapkan: (p: PayloadTabel) => void; onTutup: () => void; salinan?: SalinanModul }>;
   /** Blok baru dari "Tempel dari Modul": modal tautan langsung terbuka berisi salinan ini. */
   salinanAwal?: SalinanModul;
@@ -866,7 +868,8 @@ export default function TabelEditor({
   const lebarTotal = colWidths.reduce((a, b) => a + b, 0);
   // Batas kertas: pemakai yang menyebut kertasnya sendiri (IKI: A4/F4 mendatar), selain itu kertas Word
   // LKJIP mengikuti orientasi tabel — 15,5 cm tegak, 24,2 cm melintang (§12.2).
-  const kertasPx = kertas?.px ?? lebarKertasPx(atur.melintang);
+  const tulisDok = lkjip?.lebarTulis;
+  const kertasPx = kertas?.px ?? (tulisDok ? Math.floor((atur.melintang ? tulisDok.melintang : tulisDok.tegak) / DXA_PER_PX) : lebarKertasPx(atur.melintang));
   const lebihKertas = lebarTotal > kertasPx;
   /** "Ratakan lebar kolom" (Distribute Columns): kolom yang dipilih sama lebar, jumlahnya tetap. */
   const ratakanKolom = () => {

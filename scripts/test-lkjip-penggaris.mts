@@ -180,10 +180,10 @@ ok('H1 atribut indent terpasang di paragraf, judul, DAN butir daftar', tt.includ
 ok('H2 penggaris mengubah PARAGRAF lewat transaksi editor, tidak lagi menulis setelan dokumen',
   tt.includes('tr.setNodeMarkup(s.pos, undefined') && !ed.includes('saveIndent') && !ed.includes('onGaya') && !tt.includes('onIndentCommit'))
 ok('H3 keempat penanda ada & slider berlabel', ["'pertama'", "'gantung'", "'kiri'", "'kanan'"].every(p => pg.includes(`penanda(${p}`)) && pg.includes('role="slider"') && pg.includes('aria-valuetext'))
-ok('H4 garis skala tidak dijepit 3 cm lagi (dulu 3,5–15 cm bertumpuk di satu titik)', !pg.includes('jepitIndentCm') && pg.includes('(cm / CM_TULIS) * 100'))
+ok('H4 garis skala tidak dijepit 3 cm lagi (dulu 3,5–15 cm bertumpuk di satu titik)', !pg.includes('jepitIndentCm') && pg.includes('(cm / cmTulis) * 100') && pg.includes('const cmTulis = lebarDxa / TWIPS_PER_CM;'))
 ok('H5 tampilan tersembunyi tetap membawa CSS-nya, pilihan bersama semua blok', /lk-pg-sembunyi[\s\S]{0,60}<style>\{PG_CSS\}<\/style>/.test(pg) && pg.includes('useSyncExternalStore'))
 ok('H6 selama menyeret teks tidak berubah: penerapan hanya saat dilepas (satu langkah Undo)', /const lepasSeret = \(\) => \{[\s\S]*?onUbah\(ubah\)/.test(pg) && !/const gerakSeret[^}]*onUbah/.test(pg))
-ok('H7 CSS: indent bersumber satu satuan kolom, butir bersarang mutlak', tt.includes('container-type: inline-size') && tt.includes('--lk-dxa: calc(100cqw / ${LEBAR_DXA})') && tt.includes('var(--i-pertama, var(--lk-indent-dxa, 0))'))
+ok('H7 CSS: indent bersumber satu satuan kolom, butir bersarang mutlak', tt.includes('container-type: inline-size') && tt.includes('--lk-dxa: calc(100cqw / var(--lk-tulis-dxa, ${LEBAR_DXA}))') && tt.includes("'--lk-tulis-dxa': String(lebarDxa)") && tt.includes('const lebarDxa = useMemo(() => geometri(gaya).lebarTulis, [gaya]);') && tt.includes('var(--i-pertama, var(--lk-indent-dxa, 0))'))
 ok('H8 jarak paragraf ikut setelan (dulu 8px dipatok walau setelan 0/12 pt)', tt.includes("'--lk-after'") && tt.includes('var(--s-sesudah, var(--lk-after, 8px))'))
 ok('H9 penanda tidak memakai ::before (milik tooltip global [data-tooltip])', pg.includes('lk-pg-bentuk') && !/\.lk-pg-p[^{]*::before/.test(pg))
 ok('H10 isian bawaan di modal memakai ragam desimal, bukan type=number (mengetik "1,35" menghapus isi)', ed.includes('<PrimaNumberField desimal={2} min={0} max={BATAS_INDENT_CM}') && !ed.includes('type="number" min={0} max={3}'))

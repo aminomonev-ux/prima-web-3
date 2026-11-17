@@ -34,7 +34,7 @@ import {
   type FormatKuas, type SasaranParagraf,
 } from '@/lib/lkjip/perintah-narasi';
 import {
-  LEBAR_DXA, PX_TULIS, LANGKAH_BESAR_DXA, BUTIR_KIRI_DXA, BUTIR_GANTUNG_DXA,
+  LEBAR_DXA, PX_TULIS, LANGKAH_BESAR_DXA, geometri, type MarginCm, BUTIR_KIRI_DXA, BUTIR_GANTUNG_DXA,
   bacaInden, bidangBerubah, dxaDariCss, indentTwips, indenBawaan, indenBerlaku, keTersimpan, pxHuruf, spasiBawaan, spasiKeTersimpan,
   type Inden, type Spasi,
 } from '@/lib/lkjip/halaman';
@@ -238,7 +238,7 @@ interface Props {
   /** Ada ketikan belum tersimpan: penggantian dari luar tidak boleh menimpanya. */
   onKotor?: (kotor: boolean) => void;
   /** Gaya halaman dari Pengaturan Dokumen: huruf, ukuran, spasi, perataan, indent baris pertama bawaan. */
-  gaya?: { fontFamily?: string; fontSizePt?: number; lineSpacing?: number; align?: string; spaceAfterPt?: number; firstLineIndentCm?: number };
+  gaya?: { fontFamily?: string; fontSizePt?: number; lineSpacing?: number; align?: string; spaceAfterPt?: number; firstLineIndentCm?: number; kertas?: string; marginCm?: Partial<MarginCm> };
   onSave: (html: string, angka: Record<string, ResepAngka>) => void;
 }
 
@@ -264,6 +264,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     const semua = Object.values(initialAngka ?? {});
     return semua.length ? { sumber: semua[semua.length - 1].sumber, setelan: semua[semua.length - 1].setelan } : null;
   });
+  const lebarDxa = useMemo(() => geometri(gaya).lebarTulis, [gaya]);
   // Editor dibuat sekali; huruf dokumen bisa berganti lewat Pengaturan sesudahnya.
   const hurufDokumen = gaya?.fontFamily ?? 'Arial';
   const hurufDokRef = useRef(hurufDokumen);
@@ -431,6 +432,9 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     '--lk-after': `${((gaya?.spaceAfterPt ?? 6) * 4) / 3}px`,
     '--lk-align': gaya?.align === 'left' ? 'left' : 'justify',
     '--lk-fontfam': gaya?.fontFamily ?? 'Arial',
+    // Bidang tulis dokumen (kertas & margin per dokumen): lebar kotak teks & satuan indent = Word.
+    '--lk-tulis-px': `${Math.floor(lebarDxa / 15)}px`,
+    '--lk-tulis-dxa': String(lebarDxa),
   } as CSSProperties;
 
   // Penggaris membaca paragraf pertama pilihan; mengubah = bidang itu saja di semua paragraf terpilih.
@@ -738,7 +742,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
         </div>
       )}
       {!readOnly && (
-        <PenggarisNarasi inden={indenKini} jenis={sasaran[0]?.jenis ?? 'paragraf'} campur={campur} punyaIsian={punyaIsian}
+        <PenggarisNarasi lebarDxa={lebarDxa} inden={indenKini} jenis={sasaran[0]?.jenis ?? 'paragraf'} campur={campur} punyaIsian={punyaIsian}
           tinggiTeks={() => ed.view.dom.getBoundingClientRect().height}
           onUbah={u => terapkanInden(() => u)} onBawaan={() => terapkanInden(() => null)} />
       )}
@@ -781,7 +785,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
 const TT_CSS = `
   /* Bilah alat, penggaris, dan kotak teks selebar bidang tulis — di layar lebar dulu bilahnya melar 1.268 px
      sementara kotak teks 615 px, dan tombol penggaris terlempar jauh dari kolomnya. */
-  .lk-tt { max-width: calc(${PX_TULIS}px + 30px); }
+  .lk-tt { max-width: calc(var(--lk-tulis-px, ${PX_TULIS}px) + 30px); }
   .lk-tt-loading { color: #85B7EB; font-size: 12.5px; padding: 10px; }
   .lk-tt-tip { display: inline-flex; }
   .lk-tt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px; background: #020F1C; border: 1px solid #0C447C; border-bottom: none; border-radius: 6px 6px 0 0; }
@@ -825,7 +829,7 @@ const TT_CSS = `
   [data-theme="light"] .lk-tt-color { border-color: rgba(0,0,0,.12); }
   /* container-type: 1cqw = 1% lebar kolom tulis, sama bagi paragraf & butir bersarang — jadi indent di layar
      sebanding persis dengan bidang tulis Word (8.788 dxa), berapa pun lebar kartunya. */
-  .lk-tt-content .ProseMirror { background: #020F1C; border: 1px solid #0C447C; border-radius: 0 0 6px 6px; color: #E6F1FB; padding: 12px 14px; min-height: 120px; font-family: var(--lk-fontfam, Arial); font-size: var(--lk-font, 13.5px); line-height: var(--lk-lh, 1.5); text-align: var(--lk-align, justify); width: calc(${PX_TULIS}px + 30px); max-width: 100%; box-sizing: border-box; outline: none; container-type: inline-size; --lk-dxa: calc(100cqw / ${LEBAR_DXA}); }
+  .lk-tt-content .ProseMirror { background: #020F1C; border: 1px solid #0C447C; border-radius: 0 0 6px 6px; color: #E6F1FB; padding: 12px 14px; min-height: 120px; font-family: var(--lk-fontfam, Arial); font-size: var(--lk-font, 13.5px); line-height: var(--lk-lh, 1.5); text-align: var(--lk-align, justify); width: calc(var(--lk-tulis-px, ${PX_TULIS}px) + 30px); max-width: 100%; box-sizing: border-box; outline: none; container-type: inline-size; --lk-dxa: calc(100cqw / var(--lk-tulis-dxa, ${LEBAR_DXA})); }
   .lk-tt-content .ProseMirror:focus { border-color: #185FA5; }
   /* Spasi: --s-* milik paragraf itu (ditulis SpasiParagraf), selain itu Pengaturan Dokumen — sama dengan docgen. */
   .lk-tt-content .ProseMirror p { margin: var(--s-sebelum, 0) 0 var(--s-sesudah, var(--lk-after, 8px)); line-height: var(--s-baris, var(--lk-lh, 1.5)); }

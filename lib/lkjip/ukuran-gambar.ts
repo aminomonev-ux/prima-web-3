@@ -1,6 +1,6 @@
 // Ukuran tampil gambar LKJIP. Konsep: docs/konsep/lkjip/CONCEPT-lkjip-ukuran-gambar.md.
 // Satu sumber untuk docgen, impor, dan editor, supaya angka di layar sama dengan angka di Word.
-import { KERTAS, LEBAR_DXA, MARGIN } from './halaman';
+import { BATAS_MARGIN_CM, KERTAS, LEBAR_DXA, MARGIN, UKURAN_KERTAS, indentTwips, type Geometri } from './halaman';
 
 export const EMU_PER_CM = 360000;
 export const EMU_PER_PX = 9525;
@@ -10,6 +10,20 @@ const RUANG_KETERANGAN_EMU = 1.5 * EMU_PER_CM;
 export const LEBAR_MAKS_EMU = LEBAR_DXA * EMU_PER_DXA;
 // Keterangan diikat ke gambarnya (W1), jadi gambar setinggi halaman membuatnya terpisah.
 export const TINGGI_MAKS_EMU = (KERTAS.tinggi - MARGIN.atas - MARGIN.bawah) * EMU_PER_DXA - RUANG_KETERANGAN_EMU;
+/**
+ * Batas MUTLAK untuk data tersimpan (Zod): bidang tulis terbesar yang mungkin (kertas terbesar, margin terkecil).
+ * Ganti kertas/margin tidak boleh membuat simpanan lama ditolak; yang menjepit ke dokumen adalah saat digambar.
+ */
+const MARGIN_MIN_DXA = indentTwips(BATAS_MARGIN_CM.min);
+const LEBAR_KERTAS_MAKS = Math.max(...Object.values(UKURAN_KERTAS).map(k => k.lebar));
+const TINGGI_KERTAS_MAKS = Math.max(...Object.values(UKURAN_KERTAS).map(k => k.tinggi));
+export const LEBAR_MAKS_MUTLAK_EMU = (LEBAR_KERTAS_MAKS - 2 * MARGIN_MIN_DXA) * EMU_PER_DXA;
+export const TINGGI_MAKS_MUTLAK_EMU = (TINGGI_KERTAS_MAKS - 2 * MARGIN_MIN_DXA) * EMU_PER_DXA - RUANG_KETERANGAN_EMU;
+
+/** Batas gambar satu dokumen (tegak): lebar & tinggi bidang tulisnya. */
+export function batasGambar(geo: Geometri): { lebarMaks: number; tinggiMaks: number } {
+  return { lebarMaks: geo.lebarTulis * EMU_PER_DXA, tinggiMaks: geo.tinggiTulis * EMU_PER_DXA - RUANG_KETERANGAN_EMU };
+}
 export const LEBAR_MIN_CM = 1;
 export const LEBAR_MAKS_CM = 15.5;
 const LEBAR_MIN_EMU = LEBAR_MIN_CM * EMU_PER_CM;
@@ -60,16 +74,16 @@ const terlihat = (p: Potongan | null) => ({
  * rata, dikurangi jarak isi sel kiri-kanan (108 dxa, sama dengan tabel). Satu gambar = seluruh bidang tulis.
  */
 export const JARAK_SEL_DXA = 108;
-export function lebarMaksEmu(n = 1): number {
-  return n <= 1 ? LEBAR_MAKS_EMU : (Math.floor(LEBAR_DXA / n) - 2 * JARAK_SEL_DXA) * EMU_PER_DXA;
+export function lebarMaksEmu(n = 1, lebarTulis = LEBAR_DXA): number {
+  return n <= 1 ? lebarTulis * EMU_PER_DXA : (Math.floor(lebarTulis / n) - 2 * JARAK_SEL_DXA) * EMU_PER_DXA;
 }
 
 /** Kedua sisi diperkecil sebanding bila melewati bidang tulis (atau lebar kolomnya bila berdampingan). */
-export function jepitUkuran(w: number, h: number, lebarMaks = LEBAR_MAKS_EMU): UkuranAlami & { diperkecil: boolean } {
-  const skala = Math.min(1, lebarMaks / w, TINGGI_MAKS_EMU / h);
+export function jepitUkuran(w: number, h: number, lebarMaks = LEBAR_MAKS_EMU, tinggiMaks = TINGGI_MAKS_EMU): UkuranAlami & { diperkecil: boolean } {
+  const skala = Math.min(1, lebarMaks / w, tinggiMaks / h);
   return {
     wEmu: Math.min(lebarMaks, Math.max(1, Math.round(w * skala))),
-    hEmu: Math.min(TINGGI_MAKS_EMU, Math.max(1, Math.round(h * skala))),
+    hEmu: Math.min(tinggiMaks, Math.max(1, Math.round(h * skala))),
     diperkecil: skala < 1,
   };
 }
@@ -79,11 +93,11 @@ const proporsiAlami = (u: UkuranGambar, alami: UkuranAlami): number => {
   return (alami.wEmu * f.w) / (alami.hEmu * f.h);
 };
 
-export function ukuranTampilEmu(u: UkuranGambar, alami: UkuranAlami, lebarMaks = LEBAR_MAKS_EMU): UkuranAlami {
+export function ukuranTampilEmu(u: UkuranGambar, alami: UkuranAlami, lebarMaks = LEBAR_MAKS_EMU, tinggiMaks = TINGGI_MAKS_EMU): UkuranAlami {
   const f = terlihat(u.potong);
   const { wEmu, hEmu } = u.lebarEmu
-    ? jepitUkuran(u.lebarEmu, u.tinggiEmu ?? u.lebarEmu / proporsiAlami(u, alami), lebarMaks)
-    : jepitUkuran(alami.wEmu * f.w, alami.hEmu * f.h, lebarMaks);
+    ? jepitUkuran(u.lebarEmu, u.tinggiEmu ?? u.lebarEmu / proporsiAlami(u, alami), lebarMaks, tinggiMaks)
+    : jepitUkuran(alami.wEmu * f.w, alami.hEmu * f.h, lebarMaks, tinggiMaks);
   return { wEmu, hEmu };
 }
 
@@ -94,8 +108,8 @@ export function proporsiMenyimpang(u: UkuranGambar, alami: UkuranAlami): boolean
 }
 
 /** Persentase pratinjau: kotak mewakili bidang tulis (atau kolomnya), gambar di dalam bingkai digeser sebesar potongannya. */
-export function gayaPratinjau(u: UkuranGambar, alami: UkuranAlami, lebarMaks = LEBAR_MAKS_EMU) {
-  const { wEmu, hEmu } = ukuranTampilEmu(u, alami, lebarMaks);
+export function gayaPratinjau(u: UkuranGambar, alami: UkuranAlami, lebarMaks = LEBAR_MAKS_EMU, tinggiMaks = TINGGI_MAKS_EMU) {
+  const { wEmu, hEmu } = ukuranTampilEmu(u, alami, lebarMaks, tinggiMaks);
   const f = terlihat(u.potong);
   return {
     lebarPct: (wEmu / lebarMaks) * 100,
@@ -105,11 +119,11 @@ export function gayaPratinjau(u: UkuranGambar, alami: UkuranAlami, lebarMaks = L
 }
 
 /** Yang menyimpang tetap menyimpang sebanding; hanya tombol Kembalikan proporsi yang meluruskannya. */
-export function ubahLebar(u: UkuranGambar, lebarEmu: number | null, lebarMaks = LEBAR_MAKS_EMU): UkuranGambar {
+export function ubahLebar(u: UkuranGambar, lebarEmu: number | null, lebarMaks = LEBAR_MAKS_EMU, tinggiMaks = TINGGI_MAKS_EMU): UkuranGambar {
   if (lebarEmu == null) return { ...u, lebarEmu: null, tinggiEmu: null };
   const lebar = Math.min(lebarMaks, Math.max(LEBAR_MIN_EMU, Math.round(lebarEmu)));
   if (!u.lebarEmu || !u.tinggiEmu) return { ...u, lebarEmu: lebar, tinggiEmu: null };
-  const j = jepitUkuran(lebar, (u.tinggiEmu * lebar) / u.lebarEmu, lebarMaks);
+  const j = jepitUkuran(lebar, (u.tinggiEmu * lebar) / u.lebarEmu, lebarMaks, tinggiMaks);
   return { ...u, lebarEmu: j.wEmu, tinggiEmu: j.hEmu };
 }
 
