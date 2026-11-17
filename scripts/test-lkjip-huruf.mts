@@ -93,12 +93,12 @@ ok('C9 judul bab memakai huruf dokumen', /PENDAHULUAN/.test(docXml) && new PizZi
 
 // ─── D. Editor (skema ProseMirror sungguhan) ───
 console.log('\nD. Editor')
-const attrs = (TextStyle.config.addAttributes as () => Record<string, { parseHTML: (el: unknown) => unknown; renderHTML: (a: Record<string, unknown>) => unknown }>).call({ name: 'textStyle', options: {}, parent: undefined })
+const attrs = (TextStyle.config.addAttributes as unknown as () => Record<string, { parseHTML: (el: unknown) => unknown; renderHTML: (a: Record<string, unknown>) => unknown }>).call({ name: 'textStyle', options: {}, parent: undefined })
 const el = (style: Record<string, string>) => ({ style: { color: '', fontSize: '', fontFamily: '', ...style } })
 ok('D1 baca: nama peramban ("Book Antiqua", serif) → nama di daftar', attrs.fontFamily.parseHTML(el({ fontFamily: '"Book Antiqua", serif' })) === 'Book Antiqua')
 ok('D2 baca: nama di luar daftar → kosong', attrs.fontFamily.parseHTML(el({ fontFamily: 'Inter, sans-serif' })) === null)
 ok('D3 tulis: font-family dari nilai', JSON.stringify(attrs.fontFamily.renderHTML({ fontFamily: 'Segoe UI' })) === '{"style":"font-family: Segoe UI"}' && JSON.stringify(attrs.fontFamily.renderHTML({ fontFamily: null })) === '{}')
-const aturan = (TextStyle.config.parseHTML as () => { getAttrs: (e: unknown) => unknown }[]).call({ name: 'textStyle', options: {}, parent: undefined })[0]
+const aturan = (TextStyle.config.parseHTML as unknown as () => { getAttrs: (e: unknown) => unknown }[]).call({ name: 'textStyle', options: {}, parent: undefined })[0]
 ok('D4 span ber-huruf saja dikenali sebagai gaya teks', aturan.getAttrs(el({ fontFamily: 'Georgia' })) !== false)
 ok('D5 span ber-huruf asing saja tidak dikenali', aturan.getAttrs(el({ fontFamily: 'Inter' })) === false && aturan.getAttrs(el({})) === false)
 
