@@ -14,6 +14,7 @@ import { indentTwips, spasiBawaan, spasiKeTersimpan, BATAS_INDENT_CM, TWIPS_PER_
 import { gayaDariWord, teksNomor, type KodeGaya } from './gaya-daftar';
 import { susunNarasi } from './susun-daftar';
 import { stabiloDariWord, type KodeStabilo } from './format-teks';
+import { HURUF_DOKUMEN_BAWAAN, hurufSah, type NamaHuruf } from './style-constants';
 import { EMU_PER_CM, EMU_PER_PX, TANPA_UKURAN, jepitUkuran, potonganSah, type Potongan, type UkuranGambar } from './ukuran-gambar';
 import {
   BATAS_BERKAS_IMPOR, PESAN_TERLALU_BESAR, JENIS_PENANDA,
@@ -56,6 +57,8 @@ export interface HasilImporWord {
   indenBawaanCm: number | null;
   /** Spasi paling lazim di berkas → Pengaturan Dokumen; yang lain membawa angkanya sendiri. Null = tak ada paragraf untuk dinilai. */
   spasiBawaan: { lineSpacing: number; spaceAfterPt: number } | null;
+  /** Huruf isi paling lazim bila ada di daftar → huruf dokumen; null = ikut bawaan (konsep pratinjau-dan-word §3.2). */
+  hurufBawaan: NamaHuruf | null;
   /** Teks polos header/footer bawaan section isi → headerText/footerText (konsep pratinjau-dan-word §2). '' = tidak ada. */
   kepalaKaki: { header: string; footer: string };
   bagian: BagianImpor[];
@@ -136,8 +139,34 @@ const angkaAtr = (el: El | undefined, nama: string): number | null => {
 };
 
 // ── Gaya & penomoran ────────────────────────────────────────────────────────
-interface GayaPar { nama: string; dasar: string | null; outline: number | null; num: { numId: string; ilvl: number } | null; ind: IndenTersimpan; spasi: SpasiWord }
-interface InfoGaya { peta: Map<string, GayaPar>; bawaan: string; dokumen: IndenTersimpan; spasiDokumen: SpasiWord }
+interface GayaPar { nama: string; dasar: string | null; outline: number | null; num: { numId: string; ilvl: number } | null; ind: IndenTersimpan; spasi: SpasiWord; huruf: string | null }
+interface InfoGaya {
+  peta: Map<string, GayaPar>; bawaan: string; dokumen: IndenTersimpan; spasiDokumen: SpasiWord;
+  /** Huruf docDefaults; `null` = Word memakai Times New Roman. */
+  hurufDokumen: string | null;
+  /** Gaya karakter (`w:rStyle`): huruf + basedOn. */
+  kar: Map<string, { dasar: string | null; huruf: string | null }>;
+}
+/** Huruf tema (`theme1.xml`): `asciiTheme="minorHAnsi"` menunjuk huruf isi, `major…` huruf judul. */
+interface HurufTema { minor: string | null; major: string | null }
+const HURUF_WORD_KOSONG = 'Times New Roman';
+
+/** `<w:rFonts>` sebuah rPr → nama huruf Latin. Nama tertulis menang atas rujukan tema, seperti Word. */
+function hurufRPr(rPr: El | undefined, tema: HurufTema): string | null {
+  const f = anak(rPr, 'w:rFonts');
+  if (!f) return null;
+  const nama = atr(f, 'w:ascii') ?? atr(f, 'w:hAnsi');
+  if (nama) return nama;
+  const t = atr(f, 'w:asciiTheme') ?? atr(f, 'w:hAnsiTheme');
+  if (!t) return null;
+  return /^major/i.test(t) ? tema.major : tema.minor;
+}
+function bacaTema(xml: string | null): HurufTema {
+  if (!xml) return { minor: null, major: null };
+  const akar = uraiXml(xml);
+  const latin = (n: string) => atr(anak(cariSemua(akar, n)[0], 'a:latin'), 'typeface') || null;
+  return { minor: latin('a:minorFont'), major: latin('a:majorFont') };
+}
 /** `<w:spacing>` + `<w:contextualSpacing>`. Hanya yang tertulis: tiap atribut diwarisi sendiri-sendiri. */
 interface SpasiWord { sebelum?: number; sesudah?: number; baris?: number; aturan?: string; kontekstual?: boolean }
 
@@ -179,16 +208,23 @@ function bacaSpasiWord(pPr: El | undefined): SpasiWord {
   return h;
 }
 
-function bacaGaya(xml: string | null): InfoGaya {
+function bacaGaya(xml: string | null, tema: HurufTema = { minor: null, major: null }): InfoGaya {
   const peta = new Map<string, GayaPar>();
+  const kar = new Map<string, { dasar: string | null; huruf: string | null }>();
   let bawaan = 'Normal';
-  if (!xml) return { peta, bawaan, dokumen: {}, spasiDokumen: {} };
+  if (!xml) return { peta, bawaan, dokumen: {}, spasiDokumen: {}, hurufDokumen: null, kar };
   const akarGaya = anak(uraiXml(xml), 'w:styles');
-  const pPrDokumen = anak(anak(anak(akarGaya, 'w:docDefaults'), 'w:pPrDefault'), 'w:pPr');
+  const bawaanDok = anak(akarGaya, 'w:docDefaults');
+  const pPrDokumen = anak(anak(bawaanDok, 'w:pPrDefault'), 'w:pPr');
+  const hurufDokumen = hurufRPr(anak(anak(bawaanDok, 'w:rPrDefault'), 'w:rPr'), tema);
   const dokumen = bacaInd(pPrDokumen);
   for (const s of anakSemua(akarGaya, 'w:style')) {
-    if (atr(s, 'w:type') !== 'paragraph') continue;
     const id = atr(s, 'w:styleId') ?? '';
+    if (atr(s, 'w:type') === 'character' && id) {
+      kar.set(id, { dasar: atr(anak(s, 'w:basedOn'), 'w:val'), huruf: hurufRPr(anak(s, 'w:rPr'), tema) });
+      continue;
+    }
+    if (atr(s, 'w:type') !== 'paragraph') continue;
     if (!id) continue;
     if (['1', 'true', 'on'].includes(atr(s, 'w:default') ?? '')) bawaan = id;
     const pPr = anak(s, 'w:pPr');
@@ -201,9 +237,10 @@ function bacaGaya(xml: string | null): InfoGaya {
       num: numId ? { numId, ilvl: angkaAtr(anak(numPr, 'w:ilvl'), 'w:val') ?? 0 } : null,
       ind: bacaInd(pPr),
       spasi: bacaSpasiWord(pPr),
+      huruf: hurufRPr(anak(s, 'w:rPr'), tema),
     });
   }
-  return { peta, bawaan, dokumen, spasiDokumen: bacaSpasiWord(pPrDokumen) };
+  return { peta, bawaan, dokumen, spasiDokumen: bacaSpasiWord(pPrDokumen), hurufDokumen, kar };
 }
 
 /** Tingkat judul gaya (1 = Judul 1) lewat nama "heading n" atau outlineLvl, menurun lewat basedOn. */
@@ -224,6 +261,16 @@ function indGaya(id: string | null, g: InfoGaya, jalan = 0): IndenTersimpan {
   const s = id ? g.peta.get(id) : undefined;
   if (!s || jalan > 10) return {};
   return { ...indGaya(s.dasar, g, jalan + 1), ...s.ind };
+}
+function hurufGaya(id: string | null, g: InfoGaya, jalan = 0): string | null {
+  const s = id ? g.peta.get(id) : undefined;
+  if (!s || jalan > 10) return null;
+  return s.huruf ?? hurufGaya(s.dasar, g, jalan + 1);
+}
+function hurufKar(id: string | null, g: InfoGaya, jalan = 0): string | null {
+  const s = id ? g.kar.get(id) : undefined;
+  if (!s || jalan > 10) return null;
+  return s.huruf ?? hurufKar(s.dasar, g, jalan + 1);
 }
 function spasiGaya(id: string | null, g: InfoGaya, jalan = 0): SpasiWord {
   const s = id ? g.peta.get(id) : undefined;
@@ -291,7 +338,7 @@ function majukanNomor(p: Penomoran, numId: string, ilvl: number): NumPar | null 
 }
 
 // ── Paragraf ────────────────────────────────────────────────────────────────
-interface Seg { t: string; b: boolean; i: boolean; u: boolean; s: boolean; br?: boolean; naik?: 'superscript' | 'subscript' | null; stabilo?: KodeStabilo | null }
+interface Seg { t: string; b: boolean; i: boolean; u: boolean; s: boolean; br?: boolean; naik?: 'superscript' | 'subscript' | null; stabilo?: KodeStabilo | null; huruf?: string | null }
 interface Par {
   jenis: 'p'; i: number;
   tingkat: number | null; keterangan: boolean; num: NumPar | null;
@@ -311,7 +358,7 @@ type HasilTabel =
 interface Tbl { jenis: 'tbl'; i: number; tabel: HasilTabel; gambarDiDalam: number; paragraf: Par[] }
 type Unsur = Par | Tbl;
 
-interface Konteks { gaya: InfoGaya; nomor: Penomoran }
+interface Konteks { gaya: InfoGaya; nomor: Penomoran; tema: HurufTema }
 
 const melintangSect = (sp: El | undefined): boolean => {
   const sz = anak(sp, 'w:pgSz');
@@ -397,10 +444,13 @@ function bacaParagraf(p: El, ctx: Konteks, i: number, toc: boolean): Par {
     sect: sp ? { melintang: melintangSect(sp) } : null,
     pisahHalaman: nyala(anak(pPr, 'w:pageBreakBefore')), toc,
   };
+  // Pewarisan huruf Word: run → gaya karakter → gaya paragraf → docDefaults → Times New Roman.
+  const hurufPar = hurufGaya(gaya, ctx.gaya) ?? ctx.gaya.hurufDokumen ?? HURUF_WORD_KOSONG;
   const tambah = (t: string, rPr: El | undefined, br = false) => {
     const u = anak(rPr, 'w:u');
     const naik = atr(anak(rPr, 'w:vertAlign'), 'w:val');
     par.seg.push({
+      huruf: hurufRPr(rPr, ctx.tema) ?? hurufKar(atr(anak(rPr, 'w:rStyle'), 'w:val'), ctx.gaya) ?? hurufPar,
       t, br, b: nyala(anak(rPr, 'w:b')), i: nyala(anak(rPr, 'w:i')),
       u: !!u && (atr(u, 'w:val') ?? 'single') !== 'none',
       s: nyala(anak(rPr, 'w:strike')) || nyala(anak(rPr, 'w:dstrike')),
@@ -626,8 +676,12 @@ function kumpulkanUnsur(body: El, ctx: Konteks): { unsur: Unsur[]; akhirMelintan
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const TAG_TAB = '<span data-tab="1">\t</span>';
-function htmlBaris(seg: Seg[]): string {
-  const bersih = seg.map(s => ({ ...s, t: s.t.replace(/\u00a0/g, ' ') }));
+/** Huruf di daftar yang BUKAN huruf dokumen \u2192 span; huruf di luar daftar ikut huruf dokumen (konsep \u00a73.2). */
+function htmlBaris(seg: Seg[], hurufDok: string): string {
+  const bersih = seg.map(s => {
+    const h = hurufSah(s.huruf);
+    return { ...s, t: s.t.replace(/\u00a0/g, ' '), huruf: h && h !== hurufDok ? h : null };
+  });
   const kosong = (t: string) => !t.includes('\t') && !t.trim();
   while (bersih.length && !bersih[0].br && kosong(bersih[0].t)) bersih.shift();
   while (bersih.length && (bersih[bersih.length - 1].br || !bersih[bersih.length - 1].t.trim())) bersih.pop();
@@ -639,7 +693,7 @@ function htmlBaris(seg: Seg[]): string {
     if (s.br) { out += '<br>'; i++; continue; }
     let t = s.t;
     let j = i + 1;
-    while (j < bersih.length && !bersih[j].br && bersih[j].b === s.b && bersih[j].i === s.i && bersih[j].u === s.u && bersih[j].s === s.s && (bersih[j].naik ?? null) === (s.naik ?? null) && (bersih[j].stabilo ?? null) === (s.stabilo ?? null)) { t += bersih[j].t; j++; }
+    while (j < bersih.length && !bersih[j].br && bersih[j].b === s.b && bersih[j].i === s.i && bersih[j].u === s.u && bersih[j].s === s.s && (bersih[j].naik ?? null) === (s.naik ?? null) && (bersih[j].stabilo ?? null) === (s.stabilo ?? null) && bersih[j].huruf === s.huruf) { t += bersih[j].t; j++; }
     let h = esc(t.replace(/ {2,}/g, ' ')).replace(/\t/g, TAG_TAB);
     if (t.trim()) {
       if (s.naik) h = s.naik === 'superscript' ? `<sup>${h}</sup>` : `<sub>${h}</sub>`;
@@ -648,6 +702,7 @@ function htmlBaris(seg: Seg[]): string {
       if (s.u) h = `<u>${h}</u>`;
       if (s.i) h = `<em>${h}</em>`;
       if (s.b) h = `<strong>${h}</strong>`;
+      if (s.huruf) h = `<span style="font-family:${s.huruf}">${h}</span>`;
     }
     out += h;
     i = j;
@@ -669,8 +724,8 @@ function spasiBerlakuWord(par: Par[], i: number, dokumen: Spasi): Spasi {
     baris: barisKelipatan(s) ? s.baris ?? SPASI_WORD_KOSONG.baris : dokumen.baris,
   };
 }
-const htmlNarasi = (par: Par[], bawaanDxa: number, dokumen: Spasi): string[] =>
-  susunNarasi(par.map((p, i) => ({ isi: htmlBaris(p.seg).slice(0, BATAS_HTML_BLOK - 200), jc: p.jc, ind: p.ind, num: p.num, spasi: spasiKeTersimpan(spasiBerlakuWord(par, i, dokumen), dokumen) })), bawaanDxa, BATAS_HTML_BLOK);
+const htmlNarasi = (par: Par[], bawaanDxa: number, dokumen: Spasi, hurufDok: string): string[] =>
+  susunNarasi(par.map((p, i) => ({ isi: htmlBaris(p.seg, hurufDok).slice(0, BATAS_HTML_BLOK - 200), jc: p.jc, ind: p.ind, num: p.num, spasi: spasiKeTersimpan(spasiBerlakuWord(par, i, dokumen), dokumen) })), bawaanDxa, BATAS_HTML_BLOK);
 
 // Pengaturan Dokumen hanya menerima empat spasi baris ini.
 const BARIS_PENGATURAN = new Map<number, number>([[240, 1], [276, 1.15], [360, 1.5], [480, 2]]);
@@ -848,7 +903,8 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   if (media.length > BATAS_MEDIA) throw new ImporWordError(`Berkas berisi ${media.length} gambar (maks ${BATAS_MEDIA}).`);
 
   const peringatan: string[] = [];
-  const ctx: Konteks = { gaya: bacaGaya(teksZip(zip, 'word/styles.xml')), nomor: bacaPenomoran(teksZip(zip, 'word/numbering.xml')) };
+  const tema = bacaTema(teksZip(zip, 'word/theme/theme1.xml'));
+  const ctx: Konteks = { gaya: bacaGaya(teksZip(zip, 'word/styles.xml'), tema), nomor: bacaPenomoran(teksZip(zip, 'word/numbering.xml')), tema };
   const rels = bacaRels(teksZip(zip, 'word/_rels/document.xml.rels'));
   const body = anak(anak(uraiXml(docXml), 'w:document'), 'w:body');
   if (!body) throw new ImporWordError('Isi dokumen Word tidak terbaca.');
@@ -917,6 +973,14 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   } : null;
   const spasiDok = spasiBawaan(spasiBawaanDok?.spaceAfterPt ?? DEFAULT_STYLE_IMPOR.spaceAfterPt, spasiBawaanDok?.lineSpacing ?? DEFAULT_STYLE_IMPOR.lineSpacing);
   if (barisPasti) peringatan.push(`${barisPasti} paragraf memakai tinggi baris pasti (bukan kelipatan) — spasi barisnya ikut Pengaturan Dokumen.`);
+  // Huruf isi yang paling lazim (ditimbang panjang teks) jadi huruf dokumen bila ada di daftar; run berhuruf
+  // lain di daftar membawa span-nya sendiri, sisanya ikut huruf dokumen (konsep pratinjau-dan-word §3.2).
+  const bobotHuruf = new Map<string, number>();
+  for (const u of isiBerkas) for (const s of u.seg) if (s.huruf && s.t.trim()) bobotHuruf.set(s.huruf, (bobotHuruf.get(s.huruf) ?? 0) + s.t.trim().length);
+  const hurufLazim = [...bobotHuruf.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  const hurufBawaan = hurufSah(hurufLazim);
+  if (hurufLazim && !hurufBawaan) peringatan.push(`Huruf isi berkas "${hurufLazim.slice(0, 60)}" tidak ada di daftar huruf PRIMA — dokumen memakai ${HURUF_DOKUMEN_BAWAAN}.`);
+  const hurufDok = hurufBawaan ?? HURUF_DOKUMEN_BAWAAN;
 
   for (let k = 0; k < awalIsi; k++) {
     const u = unsur[k];
@@ -955,7 +1019,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   if (kp.length) {
     const { ttd, mulai } = bacaTandaTangan(kp, peringatan);
     const isi = kp.slice(0, mulai).filter(p => p.teks);
-    let html = htmlNarasi(isi, bawaanDxa, spasiDok).join('');
+    let html = htmlNarasi(isi, bawaanDxa, spasiDok, hurufDok).join('');
     if (html.length > BATAS_KATA_PENGANTAR) {
       html = html.slice(0, BATAS_KATA_PENGANTAR);
       html = html.slice(0, html.lastIndexOf('</p>') + 4);
@@ -1200,7 +1264,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const tambahBlok = (b: BlokImpor) => { kini().blok.push(b); };
   const salurkan = () => {
     if (!buf.length) return;
-    const potongan = htmlNarasi(buf, bawaanDxa, spasiDok);
+    const potongan = htmlNarasi(buf, bawaanDxa, spasiDok, hurufDok);
     for (const html of potongan) tambahBlok({ tipe: 'NARASI', payload: { html } });
     if (potongan.length) {
       ring.narasi += potongan.length;
@@ -1355,7 +1419,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const tahunTebakan = tahunDari(baris.flatMap(b => (b.jenis === 'penanda' ? [b.teks] : b.jenis === 'objek' ? [b.judul] : [])));
 
   const kepalaKaki = teksKepalaKaki(docXml, rels, nama => teksZip(zip, nama));
-  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, spasiBawaan: spasiBawaanDok, kepalaKaki, bagian, gambar, baris, ringkasan: ring, peringatan };
+  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, spasiBawaan: spasiBawaanDok, hurufBawaan, kepalaKaki, bagian, gambar, baris, ringkasan: ring, peringatan };
 }
 
 const BATAS_TEKS_KEPALA_KAKI = 120;   // = StyleConfigSchema.headerText / footerText

@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
+import { Extension, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
@@ -23,10 +23,11 @@ import type { HasilTarik } from '@/lib/lkjip/tautan';
 import { mulaiDaftarBlok, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
 import { adalahBullet, cssGayaDaftar, gayaBawaan, type KodeBullet, type KodeGaya, type KodeNomor, type KodeSusunan, SUSUNAN } from '@/lib/lkjip/gaya-daftar';
 import { STABILO, UKURAN_PT, ptDariCss, type KodeStabilo, type ModeHuruf } from '@/lib/lkjip/format-teks';
-import { GayaDaftar, PemisahHalaman, SpasiParagraf, Stabilo, Subskrip, Superskrip, TabNarasi } from '@/lib/lkjip/ekstensi-narasi';
+import { GayaDaftar, PemisahHalaman, SpasiParagraf, Stabilo, Subskrip, Superskrip, TabNarasi, TextStyle } from '@/lib/lkjip/ekstensi-narasi';
 import { polaCariTeks, type OpsiCari } from '@/lib/lkjip/cari-ganti';
 import { dengarSorotCari, sorotCariKini } from '@/lib/lkjip/sorot-cari';
 import { tempelDariWord } from '@/lib/lkjip/tempel-word';
+import { FONT_CHOICES, saringHurufTempel } from '@/lib/lkjip/style-constants';
 import {
   akarBlokDari, adaPilihanTeks, ambilFormat, aturGayaTingkat, aturLanjut, aturNomorAwal, aturSusunan, bungkusDaftar, dalamLanjutan, gayaNode, hapusFormat, indeksAkar, kodeSusunanDari,
   mulaiUlangDariSatu, naikTingkat, nomorTerkunciDesimal, posisiDaftar, sasaranParagraf, simpananInden, simpananSpasi, sisipPemisahHalaman, susunanPohon, terapkanFormat, turunTingkat, ubahHuruf,
@@ -57,31 +58,6 @@ const TextAlign = Extension.create({
         },
       },
     }];
-  },
-});
-
-// Mark inline untuk warna & ukuran teks (span style) — tanpa dependency baru.
-const TextStyle = Mark.create({
-  name: 'textStyle',
-  addAttributes() {
-    return {
-      color: {
-        default: null,
-        parseHTML: (el: HTMLElement) => el.style.color || null,
-        renderHTML: (attrs: Record<string, unknown>) => (attrs.color ? { style: `color: ${attrs.color}` } : {}),
-      },
-      fontSize: {
-        default: null,
-        parseHTML: (el: HTMLElement) => el.style.fontSize || null,
-        renderHTML: (attrs: Record<string, unknown>) => (attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {}),
-      },
-    };
-  },
-  parseHTML() {
-    return [{ tag: 'span', getAttrs: (el) => { const e = el as HTMLElement; return (e.style?.color || e.style?.fontSize) ? {} : false; } }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes), 0];
   },
 });
 
@@ -288,6 +264,10 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     const semua = Object.values(initialAngka ?? {});
     return semua.length ? { sumber: semua[semua.length - 1].sumber, setelan: semua[semua.length - 1].setelan } : null;
   });
+  // Editor dibuat sekali; huruf dokumen bisa berganti lewat Pengaturan sesudahnya.
+  const hurufDokumen = gaya?.fontFamily ?? 'Arial';
+  const hurufDokRef = useRef(hurufDokumen);
+  useEffect(() => { hurufDokRef.current = hurufDokumen; }, [hurufDokumen]);
   const editor = useEditor({
     // Tiptap v3 (K2, 2026-09-30): StarterKit kini membawa Underline sendiri, plus Link dan
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
@@ -300,7 +280,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     // v3 berhenti me-render ulang tiap transaksi; tombol bilah alat membaca `isActive` saat
     // render, jadi tanpa ini "Tebal"/"Rata" tidak ikut menyala saat kursor pindah.
     shouldRerenderOnTransaction: true,
-    editorProps: { transformPastedHTML: html => tempelDariWord(html) },
+    editorProps: { transformPastedHTML: html => saringHurufTempel(tempelDariWord(html), hurufDokRef.current) },
     // Penyegaran nomor rujukan bukan suntingan orangnya — tidak memunculkan tombol Simpan.
     onUpdate: ({ transaction }) => { if (!transaction.getMeta(META_SEGAR)) setDirty(true); },
   });
@@ -561,12 +541,19 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     (k ? c.setMark('stabilo', { warna: k }) : c.unsetMark('stabilo')).run();
     tutupSemua();
   }
+  // Melepas satu atribut gaya teks; tanda dibuang seluruhnya hanya bila tak ada atribut lain yang tersisa.
+  function lepasGayaTeks(kunci: 'fontSize' | 'fontFamily') {
+    const sisa = Object.entries(ed.getAttributes('textStyle')).some(([k, v]) => k !== kunci && v != null);
+    const c = ed.chain().focus();
+    (sisa ? c.setMark('textStyle', { [kunci]: null }) : c.unsetMark('textStyle')).run();
+  }
   function aturUkuran(pt: string) {
-    if (pt === 'reset') {
-      const warna = ed.getAttributes('textStyle').color;
-      const c = ed.chain().focus();
-      (warna ? c.setMark('textStyle', { color: warna, fontSize: null }) : c.unsetMark('textStyle')).run();
-    } else if (pt) ed.chain().focus().setMark('textStyle', { fontSize: `${pt}pt` }).run();
+    if (pt === 'reset') lepasGayaTeks('fontSize');
+    else if (pt) ed.chain().focus().setMark('textStyle', { fontSize: `${pt}pt` }).run();
+  }
+  function aturHurufTeks(nama: string) {
+    if (!nama) lepasGayaTeks('fontFamily');
+    else ed.chain().focus().setMark('textStyle', { fontFamily: nama }).run();
   }
   const aturRata = (nilai: PerataanNarasi | null) => { ed.chain().focus().updateAttributes('paragraph', { textAlign: nilai }).updateAttributes('heading', { textAlign: nilai }).run(); };
   const bukaPop = (jenis: JenisPop) => (e: ReactMouseEvent<HTMLButtonElement>) => {
@@ -581,6 +568,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
   const kiriPop = pop ? Math.max(8, Math.min(pop.x, window.innerWidth - lebarPop - 8)) : 0;
 
   const ukuranTampil = String(ptDariCss(ed.getAttributes('textStyle').fontSize) ?? gaya?.fontSizePt ?? 12);
+  const hurufTampil = String(ed.getAttributes('textStyle').fontFamily ?? '');
   const stabiloKini = ed.isActive('stabilo') ? (ed.getAttributes('stabilo').warna as KodeStabilo) : null;
   const perataanKini = ((ed.getAttributes('paragraph').textAlign ?? ed.getAttributes('heading').textAlign) as PerataanNarasi | undefined) ?? null;
 
@@ -715,6 +703,11 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
             <input type="color" className="lk-tt-color" aria-label="Warna teks" defaultValue="#e6f1fb"
               onInput={(e) => editor.chain().focus().setMark('textStyle', { color: (e.target as HTMLInputElement).value }).run()} />
           </span>
+          <span className="lk-tt-tip" data-tooltip="Jenis huruf — pilih Huruf dokumen untuk kembali ke huruf Pengaturan" data-tooltip-pos="below"><select className="lk-tt-size lk-tt-font" aria-label="Jenis huruf" value={hurufTampil}
+            onChange={e => aturHurufTeks(e.target.value)}>
+            <option value="">Huruf dokumen ({hurufDokumen})</option>
+            {FONT_CHOICES.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+          </select></span>
           <span className="lk-tt-tip" data-tooltip="Ukuran huruf (pt)" data-tooltip-pos="below"><select className="lk-tt-size" aria-label="Ukuran huruf" value={ukuranTampil}
             onChange={e => aturUkuran(e.target.value)}>
             {!UKURAN_PT.map(String).includes(ukuranTampil) && <option value={ukuranTampil}>{ukuranTampil.replace('.', ',')}</option>}
@@ -826,6 +819,7 @@ const TT_CSS = `
   .lk-tt-color { width: 26px; height: 26px; padding: 1px; border: 1px solid #0C447C; border-radius: 5px; background: none; cursor: pointer; }
   .lk-tt-size { height: 26px; background: #020F1C; color: #B5D4F4; border: 1px solid #0C447C; border-radius: 5px; font-size: 11px; cursor: pointer; }
   .lk-tt-size option { background: #020F1C; color: #E6F1FB; }
+  .lk-tt-font { max-width: 132px; }
   [data-theme="light"] .lk-tt-size { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #374151; }
   [data-theme="light"] .lk-tt-size option { background: #FFFFFF; color: #374151; }
   [data-theme="light"] .lk-tt-color { border-color: rgba(0,0,0,.12); }

@@ -1,6 +1,6 @@
 # Konsep — Pratinjau Cetak, header/footer, huruf, dan gambar LKJIP
 
-Status: **Tahap 1 & 2 selesai (2026-11-16)**; Tahap 3–4 menunggu, Tahap 5 ditunda. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
+Status: **Tahap 1 & 2 selesai (2026-11-16), Tahap 3 selesai (2026-11-17)**; Tahap 4 menunggu, Tahap 5 ditunda. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
 
 Tujuannya satu: yang dilihat di PRIMA sedekat mungkin dengan yang keluar di Word, dan yang sering diatur di Word bisa diatur di PRIMA. Ada lima tahap. Tiap tahap bisa dipasang sendiri dan tidak memerlukan migrasi database: `style_config` dan isi blok sudah berupa JSON. Tahap 1 butuh LibreOffice terpasang di laptop server.
 
@@ -217,6 +217,16 @@ Daftar ini **satu** (`FONT_CHOICES`), dipakai pilihan dokumen DAN pilihan per ka
 ### 3.3 Uji
 
 Penyaring (nama di luar daftar ditolak, upaya menyisipkan CSS lain ditolak), `narasiToXml` (rFonts per run, bersarang dengan tebal/warna), Hapus format, tempel. Diuji mutasi.
+
+### 3.4 Catatan pelaksanaan (2026-11-17)
+
+- **Satu sumber aturan** di `lib/lkjip/style-constants.ts` (aman-klien): `FONT_CHOICES`, `hurufSah` (nama → ejaan daftar), `hurufDariGaya` (hanya keluarga PERTAMA `font-family` yang dinilai; `mso-*-font-family` bukan `font-family`; entitas `&quot;` diurai dulu karena `;`-nya bukan akhir deklarasi), `saringHurufTempel`. Dipakai penyaring, editor, tempel, `docgen.ts`, dan impor Word.
+- **Tanda `textStyle` pindah** dari `TiptapNarasi.tsx` ke `lib/lkjip/ekstensi-narasi.ts` supaya bisa diuji dengan skema ProseMirror sungguhan. Isinya sama, ditambah atribut `fontFamily`.
+- **Ukuran "Bawaan" dulu membuang seluruh tanda** bila tak ada warna. Sekarang hanya ukuran yang dilepas; huruf tetap. Pilihan "Huruf dokumen" di pemilih huruf melepas huruf dengan cara yang sama.
+- **Tempel:** saringan dipasang sesudah pembaca Word dan berlaku untuk semua tempelan, bukan hanya dari Word. Huruf yang sama dengan huruf dokumen dibuang, sebab Word menulis huruf di hampir tiap run. Papan klip Word asli (Aptos) tidak menyisakan satu pun `font-family`.
+- **Impor Word:** sebelumnya huruf run tidak dibaca sama sekali. Sekarang huruf diwarisi seperti Word: run → gaya karakter (`w:rStyle`, lewat basedOn) → gaya paragraf (lewat basedOn) → docDefaults → Times New Roman. Rujukan tema (`minorHAnsi`/`majorHAnsi`) dibaca dari `theme1.xml`. Huruf isi paling lazim (ditimbang panjang teks, tanpa judul, keterangan, daftar isi) menjadi huruf dokumen bila ada di daftar. Bila tidak ada, dokumen memakai Arial dan pratinjau impor menyebutnya.
+- **Kalibrasi:** LKJIP pemilik (amino) → Arial tanpa span; LKJIP 2019 dan 2017 RSJD → Cambria (dulu jadi Arial); 2017 membawa 1 span Times New Roman.
+- **Regresi:** `npx tsx scripts/test-lkjip-huruf.mts [berkas.docx …]` (57; bagian G memakai PDF LibreOffice untuk memastikan ke-12 huruf tertanam). Uji mutasi: lihat CLAUDE.md.
 
 ---
 

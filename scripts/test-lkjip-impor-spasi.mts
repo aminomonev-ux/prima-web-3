@@ -140,7 +140,7 @@ const rt = kode('app/api/lkjip/impor/route.ts')
 const im = kode('lib/lkjip/impor-word.ts')
 ok('F1 route memakai hasilnya sebelum indent & Kata Pengantar', rt.includes('...DEFAULT_STYLE, ...(hasil.spasiBawaan ?? {}), firstLineIndentCm:'))
 ok('F2 cermin nilai bawaan sama dengan DEFAULT_STYLE', new RegExp(`lineSpacing: ${DEFAULT_STYLE.lineSpacing}, spaceAfterPt: ${DEFAULT_STYLE.spaceAfterPt}`).test(im))
-ok('F3 Kata Pengantar & badan memakai dasar yang sama', im.includes('htmlNarasi(isi, bawaanDxa, spasiDok)') && im.includes('htmlNarasi(buf, bawaanDxa, spasiDok)'))
+ok('F3 Kata Pengantar & badan memakai dasar yang sama', im.includes('htmlNarasi(isi, bawaanDxa, spasiDok, hurufDok)') && im.includes('htmlNarasi(buf, bawaanDxa, spasiDok, hurufDok)'))
 const klip = readFileSync('scripts/fixtures/lkjip-papan-klip/word-daftar.html', 'utf8')
 ok('F4 tempelan tetap tanpa spasi: Word selalu membawa margin-bottom & line-height', !tempelDariWord(klip).includes('data-sp-'))
 

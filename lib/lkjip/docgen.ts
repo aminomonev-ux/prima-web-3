@@ -16,6 +16,7 @@ import {
 import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, TINGKAT_DAFTAR, adalahBullet, gantungDxa, gayaDariTagDaftar, susunanPenuh, tagGaya, tulisSusunan, xmlTingkatWord, type KodeGaya } from './gaya-daftar';
 import { POLA_STABILO, STABILO, stabiloSah, szDariGaya } from './format-teks';
+import { hurufDariGaya } from './style-constants';
 import { EMU_PER_PX, bacaUkuran, ukuranTampilEmu, xmlPotongan, type UkuranGambar } from './ukuran-gambar';
 import { getDriveClient } from '@/lib/services/drive';
 
@@ -165,14 +166,16 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
   let runColor: string | null = null;
   let runSize: number | null = null;
   let runStabilo: string | null = null;
+  let runFont: string | null = null;
   // Span bisa bersarang (warna yang membungkus angka tertaut): penutup memulihkan gaya induknya.
-  const spanInduk: { color: string | null; size: number | null; rujukan: boolean }[] = [];
+  const spanInduk: { color: string | null; size: number | null; font: string | null; rujukan: boolean }[] = [];
   // Rujukan silang yang sedang dibuka: teks di dalam span-nya dikumpulkan lalu diganti field REF saat span ditutup.
   let rujukan: { id: number; teks: string } | null = null;
   const marks = { b: false, i: false, u: false, s: false, sup: false, sub: false };
 
   const curRpr = () => {
-    const r = [`<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`];
+    const f = runFont ?? font;
+    const r = [`<w:rFonts w:ascii="${f}" w:hAnsi="${f}"/>`];
     if (marks.b || headingLevel) r.push('<w:b/>');
     if (marks.i) r.push('<w:i/>');
     if (marks.s) r.push('<w:strike/>');
@@ -309,15 +312,17 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
           if (closing) {
             const induk = spanInduk.pop();
             if (induk?.rujukan) { tutupRujukan(); rujukan = null; }
-            runColor = induk?.color ?? null; runSize = induk?.size ?? null;
+            runColor = induk?.color ?? null; runSize = induk?.size ?? null; runFont = induk?.font ?? null;
           } else {
             const rj = /(?<![-a-zA-Z])data-rujuk\s*=\s*["']?(\d{1,12})/.exec(tok);
-            spanInduk.push({ color: runColor, size: runSize, rujukan: !!rj && !rujukan });
+            spanInduk.push({ color: runColor, size: runSize, font: runFont, rujukan: !!rj && !rujukan });
             if (rj && !rujukan) rujukan = { id: Number(rj[1]), teks: '' };
             const cm = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{3,6}|rgb\([^)]*\))/i.exec(tok);
             if (cm) runColor = colorToHex6(cm[1]);
             const sm = szDariGaya(tok);
             if (sm) runSize = sm;
+            const hf = hurufDariGaya(tok);
+            if (hf) runFont = hf;
           }
           break;
         case 'ul': case 'ol':

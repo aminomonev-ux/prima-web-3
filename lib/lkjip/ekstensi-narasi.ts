@@ -7,6 +7,7 @@ import { Plugin } from '@tiptap/pm/state';
 import { adalahBullet, bacaSusunan, gayaDariTagDaftar, gayaSah, tulisSusunan, type KodeGaya } from './gaya-daftar';
 import { adalahDaftar, dalamLanjutan, enterLanjutan, gayaNode, naikTingkat, posisiDaftar, sisipPemisahHalaman, tekanTab, ubahHuruf } from './perintah-narasi';
 import { stabiloSah } from './format-teks';
+import { hurufDariGaya } from './style-constants';
 import { bacaSpasi, type Spasi } from './halaman';
 
 // `1) `, `(1) `, `a. `, `a) `, `(a) `, `i. `, `I. `, `A. ` di awal baris menjadi daftar, seperti AutoFormat Word.
@@ -154,6 +155,39 @@ export const SpasiParagraf = Extension.create({
         spBaris: atributSpasiTiptap('baris', 'spBaris', v => `${v / 240}`),
       },
     }];
+  },
+});
+
+const hurufDariElemen = (el: HTMLElement) => hurufDariGaya(`font-family:${el.style?.fontFamily ?? ''}`);
+
+// Mark inline untuk warna, ukuran, & huruf teks (span style) — tanpa dependency baru.
+export const TextStyle = Mark.create({
+  name: 'textStyle',
+  addAttributes() {
+    return {
+      color: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.style.color || null,
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.color ? { style: `color: ${attrs.color}` } : {}),
+      },
+      fontSize: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.style.fontSize || null,
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {}),
+      },
+      // Hanya nama di FONT_CHOICES (konsep pratinjau-dan-word §3.2); nama lain dibuang, teksnya ikut huruf dokumen.
+      fontFamily: {
+        default: null,
+        parseHTML: hurufDariElemen,
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.fontFamily ? { style: `font-family: ${attrs.fontFamily}` } : {}),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span', getAttrs: (el) => { const e = el as HTMLElement; return (e.style?.color || e.style?.fontSize || hurufDariElemen(e)) ? {} : false; } }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes), 0];
   },
 });
 

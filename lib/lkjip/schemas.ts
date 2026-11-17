@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { MAX_DEPTH } from './numbering';
-import { FONT_CHOICES, RATA_HEADER, POSISI_NOMOR } from './style-constants';
+import { FONT_CHOICES, HURUF_DOKUMEN_BAWAAN, RATA_HEADER, POSISI_NOMOR, hurufDariGaya } from './style-constants';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 import { BATAS_BARIS_TANGAN } from './tautan';
@@ -43,7 +43,7 @@ const TahunSchema = z.coerce.number().int().min(2015, 'Tahun 2015-2100').max(210
 // ── Style config (Item 3: formatting Word, default dokumen) ──────
 // FONT_CHOICES dipindah ke ./style-constants (client-safe, dipakai editor-client).
 export const StyleConfigSchema = z.object({
-  fontFamily:   z.enum(FONT_CHOICES).default('Arial'),
+  fontFamily:   z.enum(FONT_CHOICES).default(HURUF_DOKUMEN_BAWAAN),
   fontSizePt:   z.coerce.number().min(9).max(16).default(12),
   lineSpacing:  z.coerce.number().refine(v => [1, 1.15, 1.5, 2].includes(v), 'Spasi 1/1.15/1.5/2').default(1.5),
   align:        z.enum(['both', 'left']).default('both'),
@@ -93,7 +93,7 @@ export function sanitizeNarasiHtml(html: string): string {
       return `<${t}${gaya}${atributInden(bacaInden(String(attrs || '')))}${atributSpasi(bacaSpasi(String(attrs || '')))}>`;
     }
     if (t === 'li') return `<li${atributInden(bacaInden(String(attrs || '')))}${atributSpasi(bacaSpasi(String(attrs || '')))}>`;
-    // <span>: hanya color (hex/rgb) + font-size (pt 4-72, px 6-72 untuk isi lama). Output dibentuk dari nilai
+    // <span>: hanya color (hex/rgb) + font-size (pt 4-72, px 6-72 untuk isi lama) + font-family (daftar). Output dibentuk dari nilai
     // tervalidasi (hex/digit), bukan echo atribut user → tak ada vektor XSS.
     // <ol>/<ul>: format hanya dari daftar tertutup `gaya-daftar.ts`; tag dibentuk ulang dari tabelnya, bukan echo atribut.
     // `start`: daftar yang terpotong paragraf/tabel melanjutkan nomornya (impor Word) — angka saja.
@@ -120,6 +120,9 @@ export function sanitizeNarasiHtml(html: string): string {
       const fsz = /font-size\s*:\s*(\d{1,3})px/i.exec(String(attrs || ''));
       if (fpt) out.push(`font-size:${Math.min(BATAS_PT.max, Math.max(BATAS_PT.min, parseFloat(fpt[1])))}pt`);
       else if (fsz) out.push(`font-size:${Math.min(72, Math.max(6, parseInt(fsz[1], 10)))}px`);
+      // Huruf: nama dari FONT_CHOICES, bukan salinan masukan (konsep pratinjau-dan-word §3.2).
+      const huruf = hurufDariGaya(String(attrs || ''));
+      if (huruf) out.push(`font-family:${huruf}`);
       return out.length ? `<span style="${out.join(';')}">` : '<span>';
     }
     return `<${t}>`;
