@@ -1,6 +1,6 @@
 # Konsep — Pratinjau Cetak, header/footer, huruf, dan gambar LKJIP
 
-Status: **Tahap 1 & 2 selesai (2026-11-16), Tahap 3 & 4 selesai (2026-11-17)**; Tahap 5 ditunda. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
+Status: **Tahap 1 & 2 selesai (2026-11-16), Tahap 3 & 4 selesai (2026-11-17)**; Tahap 5 (catatan kaki) **dibatalkan** pemilik (2026-11-17). Kertas F4/margin (§7) dan arsip PDF (D10) diminta dikerjakan — dilanjutkan di `docs/konsep/lkjip/CONCEPT-lkjip-kertas-margin-arsip-pdf.md`. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
 
 Tujuannya satu: yang dilihat di PRIMA sedekat mungkin dengan yang keluar di Word, dan yang sering diatur di Word bisa diatur di PRIMA. Ada lima tahap. Tiap tahap bisa dipasang sendiri dan tidak memerlukan migrasi database: `style_config` dan isi blok sudah berupa JSON. Tahap 1 butuh LibreOffice terpasang di laptop server.
 

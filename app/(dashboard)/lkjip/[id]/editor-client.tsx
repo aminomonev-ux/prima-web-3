@@ -26,6 +26,7 @@ import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDetail } from '@/lib/lkjip/data';
 import { nomorObjek, sebutObjek, daftarObjekRujukan, type SectionNode, type BlockNode, type NomorObjek, type ObjekRujukan } from '@/lib/lkjip/numbering';
 import type { VersiMeta } from '@/lib/lkjip/versi';
+import { arsipLengkap, ringkasArsip, teksArsipVersi, type HasilArsip } from '@/lib/lkjip/arsip-teks';
 import { lanjutanDaftar, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
@@ -344,8 +345,8 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
       const res = await fetch(`/api/lkjip/${detail.id}/versi`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       const json = await res.json();
       if (!json.ok) { toast.error(json.msg ?? 'Gagal menyimpan versi'); return; }
-      const drive = json.driveConfigured ? (json.driveArchived ? ' + arsip Drive' : ' · Drive dilewati') : '';
-      toast.success(`Versi ${json.versi_no} tersimpan${drive}`);
+      const arsip = json.arsip as HasilArsip | undefined;
+      (arsipLengkap(arsip) ? toast.success : toast.warning)(`Versi ${json.versi_no} tersimpan${arsip ? ` · ${ringkasArsip(arsip)}` : ''}`);
     } catch { toast.error('Gagal terhubung ke server'); }
     finally { setBusy(false); }
   }
@@ -418,8 +419,18 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   }
 
   async function kirimFinal() {
-    const ok = await call(`/api/lkjip/${detail.id}/finalize`, 'POST', { id: detail.id, expected_version: detail.version });
-    if (ok) { await refresh(); toast.success('Dokumen difinalisasi'); }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lkjip/${detail.id}/finalize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: detail.id, expected_version: detail.version }) });
+      const json = await res.json();
+      if (!json.ok) { toast.error(json.msg ?? 'Operasi gagal'); return; }
+      await refresh();
+      // K7: Finalisasi ikut membuat versi "Final" + arsip Word & PDF; yang tidak jadi disebut, bukan didiamkan.
+      const arsip = json.arsip as HasilArsip | null;
+      if (json.versi_no == null) toast.warning('Dokumen difinalisasi · foto versi Final gagal dibuat — tekan Simpan Versi');
+      else (arsipLengkap(arsip) ? toast.success : toast.warning)(`Dokumen difinalisasi · versi ${json.versi_no} (Final)${arsip ? ` · ${ringkasArsip(arsip)}` : ''}`);
+    } catch { toast.error('Gagal terhubung ke server'); }
+    finally { setBusy(false); }
   }
   async function finalize() {
     // E7: sel rumus galat dicetak "—" di Word — disebut SEKARANG, bukan ditemukan di dokumen yang sudah dicetak.
@@ -863,11 +874,15 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                   <div key={v.id} className="lk-versi-row">
                     <div className="lk-versi-info">
                       <span className="lk-versi-no">Versi {v.versi_no}</span>
-                      <span className="lk-versi-meta">{fmtDate(v.created_at)} · {v.created_by_name ?? '—'}{v.label ? ` · ${v.label}` : ''}{v.drive_file_id ? ' · ☁ Drive' : ''}</span>
+                      <span className="lk-versi-meta">{fmtDate(v.created_at)} · {v.created_by_name ?? '—'}{v.label ? ` · ${v.label}` : ''}{teksArsipVersi(v)}</span>
                     </div>
                     <div className="lk-versi-acts">
+                      {/* Lewat route arsip LKJIP, bukan /api/upload/download: arsip tak tercatat di uploaded_files (konsep kertas-margin-arsip-pdf B.1). */}
                       {v.drive_file_id && (
-                        <button className="lk-vact" data-tooltip="Unduh arsip Drive" data-tooltip-pos="above" onClick={() => window.open(`/api/upload/download?id=${v.drive_file_id}`, '_blank')}><DownloadIcon size={14} /></button>
+                        <button className="lk-vact" data-tooltip="Unduh arsip Word" data-tooltip-pos="above" aria-label="Unduh arsip Word" onClick={() => window.open(`/api/lkjip/${detail.id}/versi/${v.id}/arsip?jenis=word`, '_blank')}><DownloadIcon size={14} /></button>
+                      )}
+                      {v.pdf_file_id && (
+                        <button className="lk-vact" data-tooltip="Buka arsip PDF" data-tooltip-pos="above" aria-label="Buka arsip PDF" onClick={() => window.open(`/api/lkjip/${detail.id}/versi/${v.id}/arsip?jenis=pdf`, '_blank')}><FileText size={14} /></button>
                       )}
                       {!readOnly && (
                         <button className="lk-vact warn" data-tooltip="Pulihkan ke editor" data-tooltip-pos="above" onClick={() => restoreVersi(v)}><RotateCcw size={14} /></button>
@@ -1068,7 +1083,7 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
   ) },
   { t: 'Simpan Versi & Riwayat', b: (
     <ol>
-      <li><b>Simpan Versi</b> (dock) = membuat checkpoint seluruh dokumen (disimpan maks 20 terakhir + arsip Drive bila tersedia).</li>
+      <li><b>Simpan Versi</b> (dock) = membuat checkpoint seluruh dokumen (disimpan maks 20 terakhir + arsip Word & PDF di Drive bila tersedia; Finalisasi otomatis membuat versi <b>Final</b>).</li>
       <li><b>Riwayat</b> (dock) → lihat daftar versi → <b>Pulihkan</b> untuk kembali ke versi lama.</li>
       <li>Beda dengan tombol <b>Simpan</b> di blok (hanya menyimpan 1 blok): Simpan Versi memotret seluruh dokumen.</li>
     </ol>

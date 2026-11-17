@@ -6,9 +6,12 @@ import {
   finalizeDokumen,
   LkjipVersionConflictError, LkjipNotFoundError, LkjipFinalError,
 } from '@/lib/lkjip/data';
+import { saveVersi } from '@/lib/lkjip/versi';
+import { arsipkanDanCatat, LABEL_VERSI_FINAL } from '@/lib/lkjip/arsip-versi';
 import { guard } from '../../_guard';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs'; // googleapis & LibreOffice butuh Node runtime
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const g = await guard();
@@ -31,5 +34,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Versi & identitas ikut ditulis: sesudah dokumen dihapus, baris ini satu-satunya yang
   // bisa menjawab "versi berapa yang dikunci", karena baris dokumennya sudah tiada.
   await writeAuditLog({ req, eventType: 'LKJIP_FINALIZE', userId: g.session.userId, username: g.session.username, detail: `LKJIP finalize id=${hasil.id} ${hasil.canonical_id} "${hasil.judul.slice(0, 80)}" · versi ${hasil.version}` });
-  return NextResponse.json({ ok: true });
+
+  // K7: dokumen FINAL tidak berubah lagi — fotonya + arsip Word & PDF paling berharga. Dokumen sudah terkunci,
+  // jadi kegagalan di sini tidak membatalkan Finalisasi; layar menyebutnya.
+  let versi: { id: number; versi_no: number } | null = null;
+  try {
+    versi = await saveVersi(id, LABEL_VERSI_FINAL, g.session.userId);
+    await writeAuditLog({ req, eventType: 'LKJIP_VERSI_SAVE', userId: g.session.userId, username: g.session.username, detail: `LKJIP simpan versi ${versi.versi_no} doc=${id} (Finalisasi)` });
+  } catch (e) { console.error('[LKJIP versi final]', e); }
+  const arsip = versi ? await arsipkanDanCatat(req, g.session, id, versi) : null;
+  return NextResponse.json({ ok: true, versi_no: versi?.versi_no ?? null, arsip });
 }

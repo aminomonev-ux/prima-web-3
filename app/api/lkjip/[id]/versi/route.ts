@@ -2,21 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { safeInt } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { VersiSaveSchema, lkjipRateLimit } from '@/lib/lkjip/schemas';
-import { saveVersi, listVersi, setVersiDrive } from '@/lib/lkjip/versi';
-import { generateLkjipDocx } from '@/lib/lkjip/docgen';
-import { tujuanTerkonfigurasi } from '@/lib/services/drive-tujuan';
-import { unggahKeTujuan } from '@/lib/services/drive-catatan';
+import { saveVersi, listVersi } from '@/lib/lkjip/versi';
+import { arsipkanDanCatat } from '@/lib/lkjip/arsip-versi';
 import { LkjipNotFoundError } from '@/lib/lkjip/data';
 import { guard } from '../../_guard';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs'; // googleapis butuh Node runtime
-
-const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-function stamp(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-}
+export const runtime = 'nodejs'; // googleapis & LibreOffice butuh Node runtime
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const g = await guard();
@@ -46,22 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   await writeAuditLog({ req, eventType: 'LKJIP_VERSI_SAVE', userId: g.session.userId, username: g.session.username, detail: `LKJIP simpan versi ${saved.versi_no} doc=${id}` });
 
-  // Arsip docx ke Drive — best-effort, tidak memblokir simpan versi.
-  const driveConfigured = await tujuanTerkonfigurasi('lkjip_arsip');
-  let driveOk = false;
-  if (driveConfigured) {
-    try {
-      const docx = await generateLkjipDocx(id);
-      const name = docx.filename.replace(/\.docx$/i, '') + `-v${saved.versi_no}-${stamp(new Date())}.docx`;
-      const up = await unggahKeTujuan('lkjip_arsip', { buffer: docx.buffer, name, mimeType: DOCX_MIME });
-      if (up.fileId) {
-        await setVersiDrive(saved.id, up.fileId, name);
-        driveOk = true;
-        await writeAuditLog({ req, eventType: 'LKJIP_DRIVE_ARCHIVE', userId: g.session.userId, username: g.session.username, detail: `LKJIP arsip Drive ${name} (${up.fileId})` });
-      }
-    } catch (e) {
-      console.error('[LKJIP Drive archive]', e); // best-effort
-    }
-  }
-  return NextResponse.json({ ok: true, id: saved.id, versi_no: saved.versi_no, driveArchived: driveOk, driveConfigured });
+  // Arsip Word + PDF ke Drive — best-effort, tidak memblokir simpan versi (konsep kertas-margin-arsip-pdf B).
+  const arsip = await arsipkanDanCatat(req, g.session, id, saved);
+  return NextResponse.json({ ok: true, id: saved.id, versi_no: saved.versi_no, arsip });
 }

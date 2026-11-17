@@ -1590,6 +1590,8 @@ CREATE TABLE IF NOT EXISTS lkjip_versi (
   snapshot      JSON            NOT NULL,
   drive_file_id VARCHAR(64)     NULL,
   drive_name    VARCHAR(255)    NULL,
+  pdf_file_id   VARCHAR(64)     NULL COMMENT 'Arsip PDF di Drive (migration-lkjip-versi-pdf.sql). NULL = tanpa arsip PDF.',
+  pdf_name      VARCHAR(255)    NULL,
   created_by    INT             NULL,
   created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

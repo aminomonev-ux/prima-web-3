@@ -18,6 +18,8 @@ interface Snapshot { judul: string; style_config: StyleConfig; sections: SnapSec
 export interface VersiMeta {
   id: number; versi_no: number; label: string | null;
   drive_file_id: string | null; drive_name: string | null;
+  /** Arsip PDF (konsep kertas-margin-arsip-pdf bagian B); null = versi tanpa PDF. */
+  pdf_file_id: string | null; pdf_name: string | null;
   created_at: string; created_by_name: string | null;
 }
 
@@ -80,9 +82,26 @@ export async function setVersiDrive(versiId: number, fileId: string, name: strin
   await sql`UPDATE lkjip_versi SET drive_file_id = ${fileId}, drive_name = ${name} WHERE id = ${versiId}`;
 }
 
+export async function setVersiPdf(versiId: number, fileId: string, name: string): Promise<void> {
+  await sql`UPDATE lkjip_versi SET pdf_file_id = ${fileId}, pdf_name = ${name} WHERE id = ${versiId}`;
+}
+
+export interface BerkasArsip { id: string; nama: string }
+/** Arsip satu versi — dicari lewat dokumen DAN versi, jadi versi milik dokumen lain tidak pernah cocok. */
+export async function arsipVersi(dokumenId: number, versiId: number): Promise<{ word: BerkasArsip | null; pdf: BerkasArsip | null } | null> {
+  const r = await queryOne<{ drive_file_id: string | null; drive_name: string | null; pdf_file_id: string | null; pdf_name: string | null }>(sql`
+    SELECT drive_file_id, drive_name, pdf_file_id, pdf_name FROM lkjip_versi WHERE id = ${versiId} AND dokumen_id = ${dokumenId} LIMIT 1
+  `);
+  if (!r) return null;
+  return {
+    word: r.drive_file_id ? { id: r.drive_file_id, nama: r.drive_name ?? 'arsip.docx' } : null,
+    pdf: r.pdf_file_id ? { id: r.pdf_file_id, nama: r.pdf_name ?? 'arsip.pdf' } : null,
+  };
+}
+
 export async function listVersi(dokumenId: number): Promise<VersiMeta[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT v.id, v.versi_no, v.label, v.drive_file_id, v.drive_name, v.created_at, u.username AS created_by_name
+    SELECT v.id, v.versi_no, v.label, v.drive_file_id, v.drive_name, v.pdf_file_id, v.pdf_name, v.created_at, u.username AS created_by_name
     FROM lkjip_versi v LEFT JOIN users u ON u.id = v.created_by
     WHERE v.dokumen_id = ${dokumenId}
     ORDER BY v.versi_no DESC LIMIT 100
@@ -90,6 +109,7 @@ export async function listVersi(dokumenId: number): Promise<VersiMeta[]> {
   return rows.map(r => ({
     id: Number(r.id), versi_no: Number(r.versi_no), label: (r.label as string | null) ?? null,
     drive_file_id: (r.drive_file_id as string | null) ?? null, drive_name: (r.drive_name as string | null) ?? null,
+    pdf_file_id: (r.pdf_file_id as string | null) ?? null, pdf_name: (r.pdf_name as string | null) ?? null,
     // Bukan String(Date) = "Wed Oct 14 2026 …": pemformat tanggal panel Riwayat tidak bisa membacanya.
     created_at: toDatetimeStr(r.created_at), created_by_name: (r.created_by_name as string | null) ?? null,
   }));
