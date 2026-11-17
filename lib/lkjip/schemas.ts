@@ -13,6 +13,7 @@ import { POLA_LANJUT, POLA_MULAI, gayaDariTagDaftar, susunanDariTag, tagDaftar }
 import { BATAS_PT, POLA_STABILO, stabiloSah } from './format-teks';
 import { BATAS_ALASAN_HAPUS_FINAL } from './hapus-dokumen';
 import { LEBAR_MAKS_EMU, TINGGI_MAKS_EMU, potonganSah } from './ukuran-gambar';
+import { BATAS_SUB_GAMBAR, BATAS_TAMBAHAN_GAMBAR, RATA_GAMBAR } from './atur-gambar';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
 // users.app_access include 'lkjip' (diatur Admin Panel → User Management). Pola BBA/Rencana Aksi.
@@ -334,11 +335,25 @@ const KUNCI_UKURAN_GAMBAR = {
   potong:    z.object({ kiri: z.number(), atas: z.number(), kanan: z.number(), bawah: z.number() }).refine(potonganSah).nullable().default(null),
 };
 
+// Perataan & bingkai (konsep pratinjau-dan-word §4.1–4.2). Tanpa kunci = tengah, tanpa bingkai (perilaku lama).
+const KUNCI_ATUR_GAMBAR = {
+  rata:    z.enum(RATA_GAMBAR).default('tengah'),
+  bingkai: z.boolean().default(false),
+};
+
 export const GambarPayloadSchema = z.object({
   judul:   z.string().max(255).default(''),
   fileId:  z.string().max(200).default(''),
   caption: z.string().max(500).default(''),
   ...KUNCI_UKURAN_GAMBAR,
+  ...KUNCI_ATUR_GAMBAR,
+  // Gambar berdampingan (§4.3): gambar pertama tetap di kunci lama; `sub` = "(a) …" di bawah tiap gambar.
+  sub:     z.string().max(BATAS_SUB_GAMBAR).default(''),
+  tambahan: z.array(z.object({
+    fileId: z.string().max(200).default(''),
+    sub:    z.string().max(BATAS_SUB_GAMBAR).default(''),
+    ...KUNCI_UKURAN_GAMBAR,
+  })).max(BATAS_TAMBAHAN_GAMBAR).default([]),
 });
 
 // Grafik (pie/bar/line). Render recharts di editor → PNG (html2canvas-pro) → imageFileId.
@@ -362,6 +377,7 @@ export const GrafikPayloadSchema = z.object({
   // yang gambarnya sudah tidak sesuai tabelnya (mis. sesudah tabel tertaut diperbarui).
   tabelSidik:  z.string().max(64).default(''),
   ...KUNCI_UKURAN_GAMBAR,
+  ...KUNCI_ATUR_GAMBAR,
 });
 
 export const BLOCK_TIPES = ['NARASI', 'TABEL', 'GAMBAR', 'GRAFIK'] as const;
@@ -389,6 +405,7 @@ export const GantiTeksSchema = z.object({
       z.object({ jenis: z.literal('pengantar') }),
       z.object({ jenis: z.literal('narasi'), blockId: z.number().int().positive() }),
       z.object({ jenis: z.literal('bidang'), blockId: z.number().int().positive(), bidang: z.enum(['judul', 'caption']) }),
+      z.object({ jenis: z.literal('sub'), blockId: z.number().int().positive(), i: z.number().int().min(0).max(BATAS_TAMBAHAN_GAMBAR) }),
       z.object({ jenis: z.literal('sel'), blockId: z.number().int().positive(), r: z.number().int().min(0), c: z.number().int().min(0) }),
     ]),
     ke: z.number().int().min(0),

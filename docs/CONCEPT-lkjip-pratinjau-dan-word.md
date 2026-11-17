@@ -1,6 +1,6 @@
 # Konsep — Pratinjau Cetak, header/footer, huruf, dan gambar LKJIP
 
-Status: **Tahap 1 & 2 selesai (2026-11-16), Tahap 3 selesai (2026-11-17)**; Tahap 4 menunggu, Tahap 5 ditunda. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
+Status: **Tahap 1 & 2 selesai (2026-11-16), Tahap 3 & 4 selesai (2026-11-17)**; Tahap 5 ditunda. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
 
 Tujuannya satu: yang dilihat di PRIMA sedekat mungkin dengan yang keluar di Word, dan yang sering diatur di Word bisa diatur di PRIMA. Ada lima tahap. Tiap tahap bisa dipasang sendiri dan tidak memerlukan migrasi database: `style_config` dan isi blok sudah berupa JSON. Tahap 1 butuh LibreOffice terpasang di laptop server.
 
@@ -266,6 +266,18 @@ Untuk foto kegiatan kiri–kanan. Sekarang satu blok hanya satu gambar.
 ### 4.4 Uji
 
 Payload lama sah tanpa perubahan, XML Word (perataan, `a:ln`, tabel tanpa garis + lebar), Daftar Gambar tetap satu entri. Dibuka di Microsoft Word.
+
+### 4.5 Catatan pelaksanaan (2026-11-17)
+
+- **Satu sumber aturan** `lib/lkjip/atur-gambar.ts` (aman-klien): `bacaAturGambar` (payload lama = tengah, tanpa bingkai), `daftarGambar` (gambar pertama di kunci lama + `tambahan` ≤ 2), `berkasBlok` (semua id berkas blok — dipakai pengambil gambar Drive di `docgen.ts`). Lebar kolom berdampingan = `lebarMaksEmu(n)` di `ukuran-gambar.ts`: bidang tulis dibagi rata dikurangi jarak sel 2 × 108 dxa. `jepitUkuran`/`ukuranTampilEmu`/`gayaPratinjau`/`ubahLebar` menerima batas lebar itu, dan tanpa batas tetap seperti dulu.
+- **Kunci baru** WAJIB di skema: `rata`/`bingkai` (Gambar & Grafik), `sub` + `tambahan` (Gambar). Payload lama keluar persis sama di Word: gambar & keterangan tengah, tanpa `a:ln`, tanpa tabel.
+- **Bingkai di LibreOffice — terjawab:** `a:ln` digambar (PDF: 4 sisi per gambar), jadi tidak perlu cara kedua. Microsoft Word membacanya sebagai garis gambar 0,75 pt.
+- **`sub` gambar pertama** di kunci `sub` blok (konsep hanya menyebut `sub` per gambar tambahan). Satu gambar ber-`sub` tetap tanpa tabel; teksnya di bawah gambar.
+- **Cari-Ganti:** tempat baru `{ jenis: 'sub', blockId, i }` (`i` 0 = gambar pertama), juga di `GantiTeksSchema`; hasil di atas 200 huruf ditolak.
+- **Editor:** isian Letak + Bingkai dipakai blok Gambar dan Grafik. Perubahan dikirim sebagian dan digabung ke nilai terbaru: dua klik cepat (rata lalu bingkai) sempat saling menimpa saat diuji di peramban. "Tambah gambar di sampingnya" baru muncul setelah gambar pertama ada. Kolom ditumpuk di layar ≤ 760 px.
+- **Dibuka di Microsoft Word:** tiga gambar sebaris = satu tabel 3 kolom tanpa garis (PDF Word hanya memuat garis bingkai), tiap gambar 4,78 cm = lebar kolom, rata kanan terbaca di gambar dan keterangan, Daftar Gambar 3 entri untuk 3 blok.
+- **Peramban (dokumen 2040, blok uji dihapus sesudahnya, memakai 2 gambar lama di Drive):** 3 gambar sungguhan sebaris dengan bingkai, "Di Word: 4,79 × 2,39 cm" per kolom, gambar 6 cm rata kanan menempel di tepi kanan bidang tulis, dan di layar 375 px ketiganya ditumpuk tanpa geser mendatar.
+- **Regresi:** `npx tsx scripts/test-lkjip-gambar.mts` (44; bagian F PDF LibreOffice: letak 3 gambar sebaris, jumlah garis bingkai), 36 uji mutasi tertangkap. `test-lkjip-ukuran-gambar.mts` disesuaikan ke bentuk simpan baru.
 
 ---
 

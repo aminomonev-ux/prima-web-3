@@ -4,6 +4,7 @@
 // Mencari isi TERSIMPAN: editor blok memegang ketikannya di state lokal, jadi yang belum disimpan tak terlihat.
 import { displayValue, namaKolomDariKepala, nilaiKetikan, normalizeRows, type TabelCell, bacaAtur } from './tabel';
 import { flattenTree, type BlockNode, type SectionNode } from './numbering';
+import { BATAS_SUB_GAMBAR, daftarGambar } from './atur-gambar';
 
 export interface OpsiCari { kata: string; hurufBesar?: boolean; seluruhKata?: boolean }
 export type TempatTemuan =
@@ -11,6 +12,8 @@ export type TempatTemuan =
   | { jenis: 'pengantar' }
   | { jenis: 'narasi'; blockId: number }
   | { jenis: 'bidang'; blockId: number; bidang: 'judul' | 'caption' }
+  /** Teks di bawah gambar ke-i blok GAMBAR (0 = gambar pertama). */
+  | { jenis: 'sub'; blockId: number; i: number }
   | { jenis: 'sel'; blockId: number; r: number; c: number };
 export interface Temuan {
   tempat: TempatTemuan;
@@ -182,6 +185,7 @@ export function cariDiDokumen(d: DataDokumen, o: OpsiCari): Temuan[] {
       for (const bidang of ['judul', 'caption'] as const) {
         if (typeof p[bidang] === 'string') dariTeks(p[bidang], { jenis: 'bidang', blockId: b.id, bidang }, letak, node.id, b.id, null);
       }
+      if (b.tipe === 'GAMBAR') daftarGambar(p).forEach((g, i) => dariTeks(g.sub, { jenis: 'sub', blockId: b.id, i }, letak, node.id, b.id, null));
       if (b.tipe !== 'TABEL') continue;
       const t = bacaTabel(p);
       t.rows.forEach((row, r) => row.forEach((cell: TabelCell, c) => {
@@ -250,6 +254,19 @@ export function gantiDiDokumen(d: DataDokumen, o: OpsiCari, dengan: string, sasa
         if (!kena(tempat) || typeof p[bidang] !== 'string') continue;
         const g = gantiTeks(p[bidang], keUntuk(tempat));
         if (g.n) { baru = { ...(baru ?? p), [bidang]: g.teks }; hasil.jumlah += g.n; }
+      }
+      if (b.tipe === 'GAMBAR') {
+        daftarGambar(p).forEach((gb, i) => {
+          const tempat: TempatTemuan = { jenis: 'sub', blockId: b.id, i };
+          if (!kena(tempat)) return;
+          const g = gantiTeks(gb.sub, keUntuk(tempat));
+          if (!g.n) return;
+          if (g.teks.length > BATAS_SUB_GAMBAR) throw new GantiTerlaluPanjangError(`keterangan gambar ${letakBlok(node, b)}`);
+          const asal = baru ?? p;
+          baru = i === 0 ? { ...asal, sub: g.teks }
+            : { ...asal, tambahan: (asal.tambahan as Payload[]).map((t, k) => (k === i - 1 ? { ...t, sub: g.teks } : t)) };
+          hasil.jumlah += g.n;
+        });
       }
       if (b.tipe === 'TABEL') {
         const t = bacaTabel(p);

@@ -9,7 +9,7 @@ import {
   IndentIncrease, IndentDecrease, Pencil, Save, Table2, Image as ImageIcon, Type, Settings,
   BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
   GripVertical, Upload, BarChart3, HelpCircle, MoreVertical, Lock, RefreshCw, ClipboardPaste,
-  Search, Eye, FileText,
+  Search, Eye, FileText, AlignLeft, AlignCenter, AlignRight,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
@@ -43,7 +43,8 @@ import { bacaSalinan, type SalinanModul } from '@/lib/lkjip/salinan-modul';
 import { fetchJson } from '@/lib/shared/api';
 import { cariDiDokumen, type OpsiCari, type Temuan } from '@/lib/lkjip/cari-ganti';
 import { aturSorotCari } from '@/lib/lkjip/sorot-cari';
-import { bacaUkuran, lepasDariBerkas } from '@/lib/lkjip/ukuran-gambar';
+import { TANPA_UKURAN, bacaUkuran, lebarMaksEmu, lepasDariBerkas, type UkuranGambar } from '@/lib/lkjip/ukuran-gambar';
+import { BATAS_SUB_GAMBAR, BATAS_TAMBAHAN_GAMBAR, RATA_GAMBAR, bacaAturGambar, daftarGambar, type AturGambar, type RataGambar } from '@/lib/lkjip/atur-gambar';
 import GambarBerukuran, { IsianLebar } from './GambarBerukuran';
 import TabelEditor from '@/components/tabel/TabelEditor';
 import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';
@@ -1121,47 +1122,114 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
   );
 }
 
+/** Unggah satu gambar ke Drive (modul LKJIP) → id berkas, atau null bila gagal (pesan sudah ditampilkan). */
+async function unggahGambar(file: File): Promise<string | null> {
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('modul', 'lkjip');
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    const json = await res.json();
+    if (json.ok && json.fileId) return String(json.fileId);
+    toast.error(json.msg ?? 'Gagal mengunggah gambar');
+  } catch { toast.error('Gagal terhubung ke server'); }
+  return null;
+}
+
+/** Perataan & bingkai — dipakai blok Gambar dan Grafik (konsep pratinjau-dan-word §4.1–4.2). */
+// Perubahan dikirim sebagai sebagian: dua klik cepat tidak saling menimpa lewat salinan tur milik render yang sama.
+function IsianAturGambar({ atur, onUbah, readOnly, sebaris }: { atur: AturGambar; onUbah: (ubah: Partial<AturGambar>) => void; readOnly: boolean; sebaris?: boolean }) {
+  const ikon: Record<RataGambar, typeof AlignLeft> = { kiri: AlignLeft, tengah: AlignCenter, kanan: AlignRight };
+  return (
+    <div className="lk-gbr-atur">
+      <span className="lk-gbr-atur-label">Letak</span>
+      {RATA_GAMBAR.map(r => {
+        const Ikon = ikon[r];
+        return (
+          <button key={r} type="button" className={`lk-gbr-rata${atur.rata === r ? ' on' : ''}`} aria-pressed={atur.rata === r} disabled={readOnly}
+            aria-label={`Rata ${r}`} data-tooltip={sebaris ? `Deretan gambar & keterangan rata ${r}` : `Gambar & keterangan rata ${r}`} data-tooltip-pos="below"
+            onClick={() => onUbah({ rata: r })}><Ikon size={14} /></button>
+        );
+      })}
+      <label className="lk-gbr-cek">
+        <input type="checkbox" checked={atur.bingkai} disabled={readOnly} onChange={e => onUbah({ bingkai: e.target.checked })} />
+        Bingkai garis tipis
+      </label>
+    </div>
+  );
+}
+
+type GambarIsian = { fileId: string; ukuran: UkuranGambar; sub: string };
 function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onKotor: (kotor: boolean) => void }) {
-  const p0 = block.payload as { judul?: string; fileId?: string; caption?: string };
+  const p0 = block.payload as { judul?: string; caption?: string };
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
-  const [fileId, setFileId] = useState(p0.fileId ?? '');
-  const [ukuran, setUkuran] = useState(() => bacaUkuran(block.payload));
-  const [uploading, setUploading] = useState(false);
-  const sidikIsi = JSON.stringify({ judul, caption, fileId, ukuran });
+  // Gambar pertama = kunci lama blok; sisanya `tambahan` (§4.3).
+  const [gambar, setGambar] = useState<GambarIsian[]>(() => daftarGambar(block.payload));
+  const [atur, setAtur] = useState(() => bacaAturGambar(block.payload));
+  const [mengunggah, setMengunggah] = useState<number | null>(null);
+  const sidikIsi = JSON.stringify({ judul, caption, gambar, atur });
   const sidikSimpan = useRef(sidikIsi);
   useEffect(() => { onKotor(sidikIsi !== sidikSimpan.current); }, [sidikIsi, onKotor]);
-  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const ubah = (i: number, isi: Partial<GambarIsian>) => setGambar(g => g.map((x, k) => (k === i ? { ...x, ...isi } : x)));
+  const pilihBerkas = (i: number) => async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('modul', 'lkjip');
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const json = await res.json();
-      if (json.ok && json.fileId) { setFileId(json.fileId); setUkuran(lepasDariBerkas); toast.success('Gambar terunggah'); }
-      else toast.error(json.msg ?? 'Gagal mengunggah gambar');
-    } catch { toast.error('Gagal terhubung ke server'); }
-    finally { setUploading(false); }
+    setMengunggah(i);
+    const id = await unggahGambar(file);
+    setMengunggah(null);
+    if (!id) return;
+    if (i >= gambar.length) setGambar(g => [...g, { fileId: id, ukuran: TANPA_UKURAN, sub: '' }]);
+    else setGambar(g => g.map((x, k) => (k === i ? { ...x, fileId: id, ukuran: lepasDariBerkas(x.ukuran) } : x)));
+    toast.success('Gambar terunggah');
   };
+  const simpan = () => {
+    sidikSimpan.current = sidikIsi;
+    onKotor(false);
+    const [pertama, ...lain] = gambar;
+    onSave({
+      judul, caption, ...atur, fileId: pertama.fileId, sub: pertama.sub, ...pertama.ukuran,
+      tambahan: lain.map(t => ({ fileId: t.fileId, sub: t.sub, ...t.ukuran })),
+    });
+  };
+  const sebaris = gambar.length > 1;
+  const lebarMaks = lebarMaksEmu(gambar.length);
+  const tombolBerkas = (i: number, teks: string) => (
+    <label className="lk-upbtn">
+      <Upload size={14} /> {mengunggah === i ? 'Mengunggah…' : teks}
+      <input type="file" accept="image/png,image/jpeg,image/gif" hidden disabled={mengunggah !== null} onChange={pilihBerkas(i)} />
+    </label>
+  );
   return (
     <div className="lk-gambar-ed">
       <input value={judul} readOnly={readOnly} placeholder="Judul gambar (tanpa nomor — nomor otomatis)" onChange={e => setJudul(e.target.value)} />
       <input value={caption} readOnly={readOnly} placeholder="Keterangan / caption" onChange={e => setCaption(e.target.value)} />
-      {!readOnly && (
+      <IsianAturGambar atur={atur} onUbah={u => setAtur(a => ({ ...a, ...u }))} readOnly={readOnly} sebaris={sebaris} />
+      <div className={sebaris ? 'lk-gbr-sebaris' : undefined} style={sebaris ? { gridTemplateColumns: `repeat(${gambar.length}, minmax(0, 1fr))` } : undefined}>
+        {gambar.map((g, i) => (
+          <div key={i} className="lk-gbr-kolom">
+            {!readOnly && (
+              <div className="lk-gambar-up">
+                {tombolBerkas(i, g.fileId ? 'Ganti gambar' : 'Pilih gambar')}
+                {i > 0 && <button type="button" className="lk-gbr-lepas" onClick={() => setGambar(x => x.filter((_, k) => k !== i))}>Lepas</button>}
+                {!g.fileId && <span className="lk-uphint">Belum ada gambar — placeholder di Word</span>}
+              </div>
+            )}
+            {g.fileId && <GambarBerukuran key={`${g.fileId}-${gambar.length}`} fileId={g.fileId} ukuran={g.ukuran} onUbah={u => ubah(i, { ukuran: u })} readOnly={readOnly} alt={judul || 'Gambar'} atur={sebaris ? { ...atur, rata: 'tengah' } : atur} lebarMaks={lebarMaks} />}
+            {(sebaris || g.sub) && (
+              <input className="lk-gbr-sub" value={g.sub} readOnly={readOnly} maxLength={BATAS_SUB_GAMBAR} placeholder={`Teks di bawah gambar, mis. (${String.fromCharCode(97 + i)}) Rapat koordinasi`} onChange={e => ubah(i, { sub: e.target.value })} />
+            )}
+          </div>
+        ))}
+      </div>
+      {!readOnly && gambar.length <= BATAS_TAMBAHAN_GAMBAR && gambar[0].fileId && (
         <div className="lk-gambar-up">
-          <label className="lk-upbtn">
-            <Upload size={14} /> {uploading ? 'Mengunggah…' : (fileId ? 'Ganti gambar' : 'Pilih gambar')}
-            <input type="file" accept="image/png,image/jpeg,image/gif" hidden disabled={uploading} onChange={onPick} />
-          </label>
-          {!fileId && <span className="lk-uphint">Belum ada gambar — placeholder di Word</span>}
+          {tombolBerkas(gambar.length, 'Tambah gambar di sampingnya')}
+          <span className="lk-uphint">Sampai 3 gambar sebaris, satu nomor “Gambar n”.</span>
         </div>
       )}
-      {fileId && <GambarBerukuran key={fileId} fileId={fileId} ukuran={ukuran} onUbah={setUkuran} readOnly={readOnly} alt={judul || 'Gambar'} />}
-      {!readOnly && <div className="lk-save-row"><PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => { sidikSimpan.current = sidikIsi; onKotor(false); onSave({ judul, caption, fileId, ...ukuran }); }}>Simpan</PrimaButton></div>}
+      {!readOnly && <div className="lk-save-row"><PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={simpan}>Simpan</PrimaButton></div>}
     </div>
   );
 }
@@ -1226,7 +1294,8 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
   const [ukuranIsian, setUkuran] = useState(() => bacaUkuran(block.payload));
   // Grafik bersumber data digambar PRIMA: proporsinya sendiri, tinggi & potongan dari Word tidak berlaku.
   const ukuran = source === 'gambar' ? ukuranIsian : lepasDariBerkas(ukuranIsian);
-  const sidikIsi = JSON.stringify({ judul, caption, chartType, source, data, tabelBlockId, labelCol, valueCol, ukuran });
+  const [atur, setAtur] = useState(() => bacaAturGambar(block.payload));
+  const sidikIsi = JSON.stringify({ judul, caption, chartType, source, data, tabelBlockId, labelCol, valueCol, ukuran, atur });
   const sidikSimpan = useRef(sidikIsi);
   useEffect(() => { onKotor(sidikIsi !== sidikSimpan.current); }, [sidikIsi, onKotor]);
   const chartRef = useRef<HTMLDivElement | null>(null);
@@ -1293,7 +1362,7 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
       sidikSimpan.current = sidikIsi;
       onKotor(false);
       onSave({ judul, chartType, source, data, tabelBlockId, labelCol, valueCol, imageFileId, caption,
-        tabelSidik: source === 'tabel' ? sidikGrafik(chartData) : '', ...ukuran });
+        tabelSidik: source === 'tabel' ? sidikGrafik(chartData) : '', ...ukuran, ...atur });
     } finally { setSaving(false); }
   };
   // Gambar di Word dibuat saat Simpan — kalau data tabelnya berubah sesudahnya (mis. tabel tertaut
@@ -1367,16 +1436,18 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
         </div>
       )}
 
+      <IsianAturGambar atur={atur} onUbah={u => setAtur(a => ({ ...a, ...u }))} readOnly={readOnly} />
       {source === 'gambar' && gambarKini
-        ? <GambarBerukuran key={gambarKini} fileId={gambarKini} ukuran={ukuran} onUbah={setUkuran} readOnly={readOnly} alt={judul || 'Grafik'} />
+        ? <GambarBerukuran key={gambarKini} fileId={gambarKini} ukuran={ukuran} onUbah={setUkuran} readOnly={readOnly} alt={judul || 'Grafik'} atur={atur} />
         : (
           <>
-            <div className="lk-grafik-preview" ref={chartRef}>
+            <div className="lk-grafik-preview" ref={chartRef} style={{ justifyContent: atur.rata === 'kiri' ? 'flex-start' : atur.rata === 'kanan' ? 'flex-end' : 'center' }}>
               {source === 'gambar'
                 ? <div className="lk-grafik-empty">Belum ada gambar — pilih gambar, atau ganti Sumber ke data manual / blok tabel.</div>
                 : chartData.length === 0
                   ? <div className="lk-grafik-empty">Belum ada data untuk grafik.</div>
-                  : <div className="lk-grafik-canvas"><GrafikRenderClient type={chartType} data={chartData} /></div>}
+                  // Garis bingkai di pembungkus, bukan di kanvas: kanvas itu yang difoto jadi gambar Word, bingkainya ditulis Word sendiri.
+                  : <div className={atur.bingkai ? 'lk-gbr-garis' : undefined}><div className="lk-grafik-canvas"><GrafikRenderClient type={chartType} data={chartData} /></div></div>}
             </div>
             {source !== 'gambar' && !readOnly && <IsianLebar ukuran={ukuran} onUbah={setUkuran} alami={null} readOnly={readOnly} petunjuk="Tinggi mengikuti grafik. Kosong = otomatis." />}
           </>
@@ -1572,6 +1643,24 @@ ${TABEL_CSS}
   .lk-gbr-isian label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
   .lk-gbr-lebar { width: 96px; }
   .lk-gbr-angka { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  .lk-gbr-atur { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: #85B7EB; }
+  .lk-gbr-atur-label { margin-right: 2px; }
+  .lk-gbr-rata { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; color: #85B7EB; cursor: pointer; }
+  .lk-gbr-rata.on { border-color: #EF9F27; color: #EF9F27; }
+  .lk-gbr-rata:disabled { cursor: default; opacity: .6; }
+  .lk-gbr-cek { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; cursor: pointer; }
+  .lk-gbr-garis { box-shadow: 0 0 0 1px #000000; }
+  .lk-gbr-sebaris { display: grid; gap: 10px; }
+  .lk-gbr-sebaris .lk-gbr-lembar { width: 100%; }
+  .lk-gbr-kolom { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .lk-gbr-sub { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; color: #E6F1FB; padding: 6px 8px; font-size: 12px; font-style: italic; }
+  .lk-gbr-sub:focus { outline: none; border-color: #185FA5; }
+  .lk-gbr-lepas { background: transparent; border: 1px solid #0C447C; border-radius: 6px; color: #85B7EB; font-size: 12px; padding: 4px 10px; cursor: pointer; }
+  .lk-gbr-lepas:hover { border-color: #E24B4A; color: #E24B4A; }
+  [data-theme="light"] .lk-gbr-atur { color: #374151; }
+  [data-theme="light"] .lk-gbr-rata, [data-theme="light"] .lk-gbr-lepas { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
+  [data-theme="light"] .lk-gbr-rata.on { border-color: #BA7517; color: #BA7517; }
+  [data-theme="light"] .lk-gbr-sub { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
   .lk-gbr-gepeng { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   [data-theme="light"] .lk-gbr-lembar { border-color: rgba(0,0,0,.15); }
   [data-theme="light"] .lk-gbr-isian { color: #374151; }
@@ -1688,6 +1777,7 @@ ${TABEL_CSS}
      akhir supaya menang atas aturan berkekhususan sama di atas. */
   @media (max-width: 760px) {
     .lk-ed-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    .lk-gbr-sebaris { grid-template-columns: minmax(0, 1fr) !important; }
     .lk-tree { border-right: none; border-bottom: 1px solid #0C447C; max-height: 34vh; }
     [data-theme="light"] .lk-tree { border-bottom-color: rgba(0,0,0,.1); }
     .lk-tree-list { padding-bottom: 8px; }

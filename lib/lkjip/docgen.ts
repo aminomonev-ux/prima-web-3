@@ -13,11 +13,12 @@ import {
   LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
 } from './tabel';
 // Geometri halaman SATU sumber dengan penggaris editor (`docs/konsep/lkjip/CONCEPT-lkjip-penggaris-narasi.md` §3).
-import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
+import { LEBAR_DXA, PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, TINGKAT_DAFTAR, adalahBullet, gantungDxa, gayaDariTagDaftar, susunanPenuh, tagGaya, tulisSusunan, xmlTingkatWord, type KodeGaya } from './gaya-daftar';
 import { POLA_STABILO, STABILO, stabiloSah, szDariGaya } from './format-teks';
 import { hurufDariGaya } from './style-constants';
-import { EMU_PER_PX, bacaUkuran, ukuranTampilEmu, xmlPotongan, type UkuranGambar } from './ukuran-gambar';
+import { EMU_PER_PX, JARAK_SEL_DXA, bacaUkuran, lebarMaksEmu, ukuranTampilEmu, xmlPotongan, type UkuranGambar } from './ukuran-gambar';
+import { JC_RATA, TEBAL_BINGKAI_EMU, bacaAturGambar, berkasBlok, daftarGambar, type AturGambar, type GambarSebaris } from './atur-gambar';
 import { getDriveClient } from '@/lib/services/drive';
 
 function escapeXml(s: unknown): string {
@@ -359,7 +360,7 @@ export const namaPenanda = (blokId: number) => `_RefLkjip${blokId}`;
 const ID_PENANDA = (blokId: number) => 900000 + blokId;
 const judulNomor = (n: number | NomorJudul): NomorJudul => (typeof n === 'number' ? { nomor: n } : n);
 
-function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number, keepNext = false, n: NomorJudul = { nomor: 1 }, jc: 'center' | 'left' = 'center'): string {
+function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number, keepNext = false, n: NomorJudul = { nomor: 1 }, jc: 'center' | 'left' | 'right' = 'center'): string {
   const capSz = Math.max(18, sz - 2);
   const awalan = n.awalan ?? '';
   const lead = `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve">${label} ${escapeXml(awalan)}</w:t></w:r>`;
@@ -508,20 +509,23 @@ function imgDimsEmu(buf: Buffer, ext: string): { wEmu: number; hEmu: number } {
   if (!w || !h) { w = 480; h = 360; }
   return { wEmu: w * EMU_PER_PX, hEmu: h * EMU_PER_PX };
 }
-function drawingPara(info: ImageInfo, ukuran: UkuranGambar): string {
+interface OpsiGambar { jc?: 'left' | 'center' | 'right'; bingkai?: boolean; lebarMaks?: number }
+function drawingPara(info: ImageInfo, ukuran: UkuranGambar, o: OpsiGambar = {}): string {
   const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
   const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
   // Per blok, bukan per berkas: satu berkas bisa dipakai dua blok dengan ukuran berbeda.
-  const { wEmu, hEmu } = ukuranTampilEmu(ukuran, info);
+  const { wEmu, hEmu } = ukuranTampilEmu(ukuran, info, o.lebarMaks);
+  // Bingkai = garis bentuk gambar (§4.2): ikut gambarnya bila dipindah di Word. Urutan skema spPr: xfrm → geom → ln.
+  const garis = o.bingkai ? `<a:ln w="${TEBAL_BINGKAI_EMU}"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>` : '';
   // keepNext: gambar tidak boleh terpisah dari judulnya yang ada di bawahnya (W1).
-  return `<w:p><w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr><w:r><w:drawing>` +
+  return `<w:p><w:pPr><w:keepNext/><w:jc w:val="${o.jc ?? 'center'}"/><w:spacing w:after="0"/></w:pPr><w:r><w:drawing>` +
     `<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="${WP}">` +
     `<wp:extent cx="${wEmu}" cy="${hEmu}"/><wp:docPr id="${info.id}" name="Gambar${info.id}"/>` +
     `<a:graphic xmlns:a="${A}"><a:graphicData uri="${PIC}">` +
     `<pic:pic xmlns:pic="${PIC}"><pic:nvPicPr><pic:cNvPr id="${info.id}" name="Gambar${info.id}"/><pic:cNvPicPr/></pic:nvPicPr>` +
     `<pic:blipFill><a:blip r:embed="${info.relId}"/>${xmlPotongan(ukuran.potong)}<a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
-    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${wEmu}" cy="${hEmu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${wEmu}" cy="${hEmu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${garis}</pic:spPr>` +
     `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
 
@@ -531,20 +535,55 @@ function teksKeterangan(tipe: string, payload: unknown): string {
   return tipe === 'TABEL' ? p.judul ?? '' : [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
 }
 
+/** "(a) Rapat koordinasi" di bawah satu gambar; keepNext supaya tidak terpisah dari keterangan blok. */
+function subGambar(teks: string, font: string, sz: number, jc: string): string {
+  if (!teks.trim()) return '';
+  return `<w:p><w:pPr><w:keepNext/><w:spacing w:before="40" w:after="0"/><w:jc w:val="${jc}"/></w:pPr><w:r>${rPr(font, Math.max(18, sz - 2), { italic: true })}<w:t xml:space="preserve">${escapeXml(teks.trim())}</w:t></w:r></w:p>`;
+}
+
+/**
+ * Gambar berdampingan (§4.3): tabel tanpa garis, satu kolom per gambar, lebar bidang tulis dibagi rata. Ukuran tiap
+ * gambar dibatasi lebar kolomnya lewat `lebarMaksEmu` — aturan yang sama dengan editor.
+ */
+function tabelGambarSebaris(gambar: GambarSebaris[], atur: AturGambar, font: string, sz: number, imgMap: Map<string, ImageInfo>): string {
+  const n = gambar.length;
+  const kolom = Math.floor(LEBAR_DXA / n);
+  const lebarMaks = lebarMaksEmu(n);
+  const tanpaGaris = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(s => `<w:${s} w:val="nil"/>`).join('');
+  const sel = gambar.map(g => {
+    const info = g.fileId ? imgMap.get(g.fileId) : undefined;
+    const isi = info ? drawingPara(info, g.ukuran, { bingkai: atur.bingkai, lebarMaks }) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
+    return `<w:tc><w:tcPr><w:tcW w:w="${kolom}" w:type="dxa"/><w:vAlign w:val="bottom"/></w:tcPr>${isi}${subGambar(g.sub, font, sz, 'center')}</w:tc>`;
+  }).join('');
+  return `<w:tbl><w:tblPr><w:tblW w:w="${kolom * n}" w:type="dxa"/><w:jc w:val="${JC_RATA[atur.rata]}"/><w:tblBorders>${tanpaGaris}</w:tblBorders>` +
+    `<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="${JARAK_SEL_DXA}" w:type="dxa"/><w:right w:w="${JARAK_SEL_DXA}" w:type="dxa"/></w:tblCellMar></w:tblPr>` +
+    `<w:tblGrid>${`<w:gridCol w:w="${kolom}"/>`.repeat(n)}</w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${sel}</w:tr></w:tbl>`;
+}
+
 export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1): string {
-  const p = (payload ?? {}) as { judul?: string; fileId?: string; caption?: string };
   const text = teksKeterangan('GAMBAR', payload);
-  const info = p.fileId ? imgMap.get(p.fileId) : undefined;
-  const body = info ? drawingPara(info, bacaUkuran(payload)) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
-  return body + caption('Gambar', text, font, sz, false, judulNomor(nomor)) + para('', font, sz);
+  const atur = bacaAturGambar(payload);
+  const jc = JC_RATA[atur.rata];
+  const gambar = daftarGambar(payload);
+  let body: string;
+  if (gambar.length > 1) body = tabelGambarSebaris(gambar, atur, font, sz, imgMap);
+  else {
+    const info = gambar[0].fileId ? imgMap.get(gambar[0].fileId) : undefined;
+    body = (info ? drawingPara(info, gambar[0].ukuran, { jc, bingkai: atur.bingkai }) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' }))
+      + subGambar(gambar[0].sub, font, sz, jc);
+  }
+  // Keterangan ikut perataan gambarnya (§4.1).
+  return body + caption('Gambar', text, font, sz, false, judulNomor(nomor), jc) + para('', font, sz);
 }
 
 function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1): string {
   const p = (payload ?? {}) as { judul?: string; imageFileId?: string; caption?: string };
   const text = teksKeterangan('GRAFIK', payload);
+  const atur = bacaAturGambar(payload);
+  const jc = JC_RATA[atur.rata];
   const info = p.imageFileId ? imgMap.get(p.imageFileId) : undefined;
-  const body = info ? drawingPara(info, bacaUkuran(payload)) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
-  return body + caption('Grafik', text, font, sz, false, judulNomor(nomor)) + para('', font, sz);
+  const body = info ? drawingPara(info, bacaUkuran(payload), { jc, bingkai: atur.bingkai }) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
+  return body + caption('Grafik', text, font, sz, false, judulNomor(nomor), jc) + para('', font, sz);
 }
 
 /** Teks judul bagian di isi DAN di isi awal Daftar Isi. */
@@ -825,10 +864,7 @@ async function collectImages(tree: SectionNode[]): Promise<{ map: Map<string, Im
   const ids: string[] = [];
   for (const node of flattenTree(tree)) {
     for (const b of node.blocks) {
-      const fid = b.tipe === 'GAMBAR' ? (b.payload as { fileId?: string })?.fileId
-        : b.tipe === 'GRAFIK' ? (b.payload as { imageFileId?: string })?.imageFileId
-        : undefined;
-      if (typeof fid === 'string' && /^[A-Za-z0-9_-]{10,200}$/.test(fid)) ids.push(fid);
+      for (const fid of berkasBlok(b.tipe, b.payload)) if (/^[A-Za-z0-9_-]{10,200}$/.test(fid)) ids.push(fid);
     }
   }
   const map = new Map<string, ImageInfo>();
