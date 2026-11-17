@@ -1,6 +1,6 @@
 import { bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 import { anakMilikIndikator } from '@/lib/renaksi/rantai';
-import { paguBaris, type RincianPagu } from '@/lib/renaksi/pagu';
+import { paguBaris, paguEntitas, type RincianPagu } from '@/lib/renaksi/pagu';
 
 export type RaLevel = 'tujuan' | 'sasaran' | 'program' | 'kegiatan' | 'sub-kegiatan';
 export type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
@@ -350,5 +350,13 @@ export function capaianTriwulan(row: RaRow, triwulan: 1 | 2 | 3 | 4): number | n
  */
 export function anggaranRollup(_level: RaLevel, row: RaRow, rows: RaRow[]): number | null {
   return paguBaris(row, rows)?.total ?? null;
+}
+
+/**
+ * Pagu anak langsung entitas baris ini yang belum tertaut ke indikator mana pun (entitas berindikator
+ * banyak tidak membaginya sendiri). Kartu Anggaran menyebutnya supaya "Rp —" tidak terbaca "tak beranggaran".
+ */
+export function paguBelumTertaut(row: RaRow, rows: RaRow[]): number {
+  return row.level === 'sub-kegiatan' ? 0 : (paguEntitas(row, rows)?.belumTertaut.total ?? 0);
 }
 

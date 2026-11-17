@@ -35,6 +35,8 @@ interface Props {
   onOpenDetailModal: () => void;
   onSaveBulanRealisasi: (months: (number | null)[]) => Promise<void>;
   anggaran: number | null;
+  /** Pagu anak entitas ini yang belum tertaut ke indikator mana pun (0 = tidak ada). */
+  anggaranBelumTertaut?: number;
 }
 
 // Ambang dari AMBANG_CAPAIAN (_lib/types.ts) — sumber tunggal bersama Cetak,
@@ -71,7 +73,7 @@ export default function MainDashboard({
   level, rows, selectedYear,
   selectedSasaran, selectedProgram, selectedKegiatan, selectedSubKegiatan, selectedIndicator,
   setSelectedSasaran, setSelectedProgram, setSelectedKegiatan, setSelectedSubKegiatan, setSelectedIndicator,
-  onOpenQuarterModal, onUbahDiDataEntry, onOpenDetailModal, onSaveBulanRealisasi, anggaran,
+  onOpenQuarterModal, onUbahDiDataEntry, onOpenDetailModal, onSaveBulanRealisasi, anggaran, anggaranBelumTertaut = 0,
 }: Props) {
 
   const menuName = LEVEL_LABELS[level];
@@ -346,6 +348,14 @@ export default function MainDashboard({
                       style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
                   {anggaran != null ? `Rp ${anggaran.toLocaleString('id-ID')}` : 'Rp —'}
                 </span>
+                {anggaranBelumTertaut > 0 && (
+                  <Tip label={`${menuName} ini punya lebih dari satu indikator, jadi pagu di bawahnya hanya masuk ke indikator yang dipilih sebagai induk. Tautkan lewat Data Entry: buka baris di bawahnya, isi kolom "Indikator ${menuName}".`}>
+                    <span className="ra-anggaran-catatan block text-[10px] font-semibold text-[#FAC775] mt-0.5 max-w-[240px] ml-auto"
+                          style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
+                      + Rp {anggaranBelumTertaut.toLocaleString('id-ID')} belum tertaut
+                    </span>
+                  </Tip>
+                )}
               </div>
               <PrimaButton
                 variant="primary"

@@ -14,7 +14,8 @@ import MatrixBulananModal from './_components/MatrixBulananModal';
 import PilihTampilanSub from './_components/PilihTampilanSub';
 import type { RaRow, RaLevel } from './_lib/types';
 import { PenandaProvider } from './_lib/penanda';
-import { LEVEL_LABELS, anggaranRollup } from './_lib/types';
+import { LEVEL_LABELS, anggaranRollup, paguBelumTertaut } from './_lib/types';
+import { ALL_LEVELS } from './_lib/cetak-filter';
 import { apiList, apiUpdateBulanRealisasi, VersionConflictError } from './_lib/api';
 import { exportIndikatorPdf, exportIndikatorXlsx } from './_lib/exports';
 import SpandukBeku from '@/components/ui/SpandukBeku';
@@ -115,20 +116,16 @@ export default function RaClient({
     rows.find(r => r.level === level && r.indikator === selectedIndicator) ?? null,
   [rows, level, selectedIndicator]);
 
-  // Anggaran roll-up: tersimpan di sub-kegiatan; level di atas = SUM keturunan.
-  // Fetch program + sub-kegiatan saat mode dashboard (program dipakai jembatan
-  // sasaran→program→sub-kegiatan untuk roll-up level sasaran).
+  // Pagu tersimpan di sub kegiatan dan naik SATU tingkat demi satu (sub → kegiatan → program → …), jadi kelima
+  // level wajib dimuat. Dulu hanya program + sub: kegiatan tak pernah dapat pagu, program pun ikut kosong.
   const [rollupRows, setRollupRows] = useState<RaRow[]>([]);
   useEffect(() => {
     if (mode !== 'dashboard') return;
     let cancelled = false;
     void (async () => {
       try {
-        const [progs, subs] = await Promise.all([
-          apiList(tahun, 'program'),
-          apiList(tahun, 'sub-kegiatan'),
-        ]);
-        if (!cancelled) setRollupRows([...progs, ...subs]);
+        const per = await Promise.all(ALL_LEVELS.map(lv => apiList(tahun, lv)));
+        if (!cancelled) setRollupRows(per.flat());
       } catch { /* anggaran rollup opsional — abaikan error */ }
     })();
     return () => { cancelled = true; };
@@ -137,6 +134,10 @@ export default function RaClient({
   const activeAnggaran = useMemo(
     () => (activeRow ? anggaranRollup(level, activeRow, rollupRows) : null),
     [activeRow, level, rollupRows],
+  );
+  const anggaranBelumTertaut = useMemo(
+    () => (activeRow ? paguBelumTertaut(activeRow, rollupRows) : 0),
+    [activeRow, rollupRows],
   );
 
   // Safety reset saat data kosong utk level aktif — selectors selalu kembali ke
@@ -468,6 +469,7 @@ export default function RaClient({
         }
         html[data-theme="light"] .ra-scope .ra-anggaran-label { color: #7C3AED !important; }
         html[data-theme="light"] .ra-scope .ra-anggaran-val { color: #6D28D9 !important; }
+        html[data-theme="light"] .ra-scope .ra-anggaran-catatan { color: #7C3AED !important; }
 
         /* User chip avatar gradient (header) → ungu/pink */
         html[data-theme="light"] .ra-scope header [style*="EF9F27"][style*="BA7517"],
@@ -646,6 +648,7 @@ export default function RaClient({
             onOpenDetailModal={() => setIsDetailOpen(true)}
             onSaveBulanRealisasi={handleSaveBulanRealisasi}
             anggaran={activeAnggaran}
+            anggaranBelumTertaut={anggaranBelumTertaut}
             /* Matriks tidak lagi dibuka dari sini — ia tampilan sederajat di
                halaman pemilih, bukan jendela yang menumpang layar ini. */
           />

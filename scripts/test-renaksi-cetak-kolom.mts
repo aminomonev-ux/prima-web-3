@@ -10,7 +10,7 @@
 
 import { readFileSync } from 'node:fs'
 import type { RaRow } from '../app/(dashboard)/rencana-aksi/_lib/types'
-import { capaianTahunan, capaianRpjmd, capaianTriwulan, hitungCapaianPct, realisasiAkhirTahun } from '../app/(dashboard)/rencana-aksi/_lib/types'
+import { capaianTahunan, capaianRpjmd, capaianTriwulan, hitungCapaianPct, realisasiAkhirTahun, anggaranRollup, paguBelumTertaut } from '../app/(dashboard)/rencana-aksi/_lib/types'
 import { cetakHeader, lebarKolomPdf, tulisSelCetak, tulisCapaian, DEFAULT_CETAK_FILTER, type CetakFilter } from '../app/(dashboard)/rencana-aksi/_lib/cetak-filter'
 import { buatWorkbookGabungan, buildCombinedPdf, buatWorkbookIndikator, buatPdfIndikator, buatPdfList } from '../app/(dashboard)/rencana-aksi/_lib/exports'
 import { sanitizeCell } from '../lib/shared/excel-export'
@@ -263,6 +263,28 @@ console.log('\nI. Unduhan per indikator & Data Entry (laporan pemakai 2026-11-17
   ok('I6 PDF Data Entry: realisasi kosong "—/5", bukan "0/5"', daftar[10] === '—/5' && daftar[11] === '20/0', JSON.stringify(daftar.slice(10)))
   ok('I7 sanitizeCell: tanda kosong "-" tidak diberi petik', sanitizeCell('-') === '-' && sanitizeCell(' -- ') === ' -- ')
   ok('I8 ...rumus tetap dijinakkan', sanitizeCell('-1+2') === "'-1+2" && sanitizeCell('=SUM(A1)') === "'=SUM(A1)")
+}
+
+console.log('\nJ. Kartu Anggaran menu Realisasi (laporan pemakai 2026-11-17: pagu sub tak naik ke kegiatan/program)')
+{
+  const rantai = [program, kegiatan, sub]
+  ok('J1 kegiatan dapat pagu sub di bawahnya', anggaranRollup('kegiatan', kegiatan, rantai) === 1_500_000, String(anggaranRollup('kegiatan', kegiatan, rantai)))
+  ok('J2 program ikut naik', anggaranRollup('program', program, rantai) === 1_500_000, String(anggaranRollup('program', program, rantai)))
+  ok('J3 muatan lama (program + sub saja) memutus rantai — inilah cacatnya',
+    anggaranRollup('program', program, [program, sub]) === null && anggaranRollup('kegiatan', kegiatan, [program, sub]) === null)
+  const ra = kode('app/(dashboard)/rencana-aksi/ra-client.tsx')
+  ok('J4 layar memuat KELIMA level untuk rollup', /ALL_LEVELS\.map\(lv => apiList\(tahun, lv\)\)/.test(ra) && !/apiList\(tahun, 'program'\)/.test(ra))
+  // Kegiatan berindikator dua, sub belum memilih induk: pagu tidak dibagi (konsep renaksi-pagu-rko §6c) — tapi disebut.
+  const kegiatan2: RaRow = { ...kegiatan, id: 40, indikator: 'Dokumen Kedua' }
+  const dua = [program, kegiatan, kegiatan2, sub]
+  ok('J5 berindikator dua & belum tertaut: tak ada indikator yang dapat', anggaranRollup('kegiatan', kegiatan, dua) === null && anggaranRollup('kegiatan', kegiatan2, dua) === null)
+  ok('J6 ...jumlahnya disebut di kartu', paguBelumTertaut(kegiatan, dua) === 1_500_000 && paguBelumTertaut(kegiatan2, dua) === 1_500_000)
+  ok('J7 sesudah ditautkan: masuk ke indikator itu, catatan hilang',
+    anggaranRollup('kegiatan', kegiatan2, [program, kegiatan, kegiatan2, { ...sub, induk_indikator_id: 40 }]) === 1_500_000
+      && paguBelumTertaut(kegiatan2, [program, kegiatan, kegiatan2, { ...sub, induk_indikator_id: 40 }]) === 0)
+  ok('J8 sub kegiatan tak pernah bercatatan', paguBelumTertaut(sub, dua) === 0)
+  ok('J9 kartu menerima catatannya', /anggaranBelumTertaut=\{anggaranBelumTertaut\}/.test(ra)
+    && /anggaranBelumTertaut > 0 &&/.test(kode('app/(dashboard)/rencana-aksi/_components/MainDashboard.tsx')))
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
