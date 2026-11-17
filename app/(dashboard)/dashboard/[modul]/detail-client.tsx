@@ -423,9 +423,10 @@ export default function DashboardDetailClient({ username, role, themePreference,
             return (
               <>
                 <div className="kpi-grid fade-up">
-                  <div className="kc"><div className="kc-val">{d.kpi.pct_capaian_total}%</div><div className="kc-lbl">Capaian Total</div></div>
+                  <div className="kc"><div className="kc-val">{d.kpi.pct_capaian_total == null ? '—' : `${d.kpi.pct_capaian_total}%`}</div><div className="kc-lbl">Capaian Total</div></div>
                   <div className="kc"><div className="kc-val" style={{ color: '#2BD46A' }}>{fmtNum(d.kpi.on_track)}</div><div className="kc-lbl">Tercapai</div></div>
                   <div className="kc"><div className="kc-val" style={{ color: '#E24B4A' }}>{fmtNum(d.kpi.lagging)}</div><div className="kc-lbl">Belum Tercapai</div></div>
+                  <div className="kc"><div className="kc-val">{fmtNum(d.kpi.belum_diisi)}</div><div className="kc-lbl">Belum Diisi</div></div>
                 </div>
                 <div className="panel-row fade-up">
                   <div className="panel">
@@ -450,7 +451,7 @@ export default function DashboardDetailClient({ username, role, themePreference,
                           <XAxis dataKey="name" tick={axisTick} interval={0} height={22} />
                           <Tooltip cursor={{ fill: 'rgba(29,158,117,.1)' }} formatter={(v) => `${Number(v)}%`} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                           <Bar dataKey="value" radius={[5, 5, 0, 0]}>
-                            {d.table.map((t, i) => <Cell key={i} fill={t.pct >= AMBANG_CAPAIAN.tercapai ? '#1D9E75' : t.pct >= AMBANG_CAPAIAN.waspada ? '#EF9F27' : '#E24B4A'} />)}
+                            {d.table.map((t, i) => { const p = t.pct ?? 0; return <Cell key={i} fill={p >= AMBANG_CAPAIAN.tercapai ? '#1D9E75' : p >= AMBANG_CAPAIAN.waspada ? '#EF9F27' : '#E24B4A'} />; })}
                           </Bar>
                         </BarChart>
                       </ResponsiveContainer>
@@ -459,10 +460,10 @@ export default function DashboardDetailClient({ username, role, themePreference,
                 </div>
                 <div className="panel fade-up">
                   <div className="panel-h">Rekap Capaian per Level</div>
-                  <table className="dd-tbl"><thead><tr><th>Level</th><th className="num">Indikator</th><th className="num">Dinilai</th><th className="num">Capaian</th></tr></thead>
+                  <table className="dd-tbl"><thead><tr><th>Level</th><th className="num">Indikator</th><th className="num">Dinilai</th><th className="num">Belum Diisi</th><th className="num">Capaian</th></tr></thead>
                       <tbody>
                         {d.table.map((r, i) => (
-                          <tr key={i}><td>{RA_LEVEL_LABEL[r.level] ?? r.level}</td><td className="num">{fmtNum(r.total)}</td><td className="num">{fmtNum(r.dinilai)}</td><td className="num">{r.pct}%</td></tr>
+                          <tr key={i}><td>{RA_LEVEL_LABEL[r.level] ?? r.level}</td><td className="num">{fmtNum(r.total)}</td><td className="num">{fmtNum(r.dinilai)}</td><td className="num">{fmtNum(r.belum_diisi)}</td><td className="num">{r.pct == null ? '—' : `${r.pct}%`}</td></tr>
                         ))}
                       </tbody>
                   </table>

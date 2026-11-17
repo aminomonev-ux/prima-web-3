@@ -77,9 +77,12 @@ export interface RenaksiSummary {
 
 export interface RealisasiLevelStat { level: RaLevel; pct: number }
 export interface RealisasiKinerjaSummary {
-  pct_capaian_total: number;
+  /** null = belum ada indikator yang bisa dinilai (bukan 0%). */
+  pct_capaian_total: number | null;
   on_track: number;
   lagging: number;
+  /** Bertarget tapi realisasinya belum diisi — tidak dinilai, tapi disebut. */
+  belum_diisi: number;
   per_level: RealisasiLevelStat[];
 }
 
@@ -114,20 +117,22 @@ function capaianIndikator(r: RaRow): number | null {
  * menjumlahkannya menghasilkan persen yang tidak mengukur apa pun. Ambang
  * "tercapai" ikut modul Renaksi (100), bukan 90 yang cuma hidup di sini.
  */
-function ringkasCapaian(rows: readonly RaRow[]): { dinilai: number; pct: number; tercapai: number; belum: number } {
-  let jumlah = 0, dinilai = 0, tercapai = 0;
+export function ringkasCapaian(rows: readonly RaRow[]): { dinilai: number; pct: number | null; tercapai: number; belum: number; belumDiisi: number } {
+  let jumlah = 0, dinilai = 0, tercapai = 0, belumDiisi = 0;
   for (const r of rows) {
     const c = capaianIndikator(r);
-    if (c == null) continue;
+    // Sejak 2026-11-17 realisasi kosong = capaian null (dulu 0% → ikut "belum tercapai"); tetap disebut jumlahnya.
+    if (c == null) { if (r.target_tahunan > 0) belumDiisi++; continue; }
     jumlah += c;
     dinilai++;
     if (c >= AMBANG_CAPAIAN.tercapai) tercapai++;
   }
   return {
     dinilai,
-    pct: dinilai > 0 ? Math.round((jumlah / dinilai) * 100) / 100 : 0,
+    pct: dinilai > 0 ? Math.round((jumlah / dinilai) * 100) / 100 : null,
     tercapai,
     belum: dinilai - tercapai,
+    belumDiisi,
   };
 }
 
@@ -265,7 +270,7 @@ async function getRenaksiAndRealisasi(tahun: number): Promise<{ renaksi: Renaksi
       count: rows.length,
       target_terisi: rows.filter(r => r.target_tahunan > 0).length,
     });
-    realisasiPerLevel.push({ level, pct: ringkasCapaian(rows).pct });
+    realisasiPerLevel.push({ level, pct: ringkasCapaian(rows).pct ?? 0 });
   });
 
   const semua = ringkasCapaian(perLevelRows.flat());
@@ -275,6 +280,7 @@ async function getRenaksiAndRealisasi(tahun: number): Promise<{ renaksi: Renaksi
       pct_capaian_total: semua.pct,
       on_track: semua.tercapai,
       lagging: semua.belum,
+      belum_diisi: semua.belumDiisi,
       per_level: realisasiPerLevel,
     },
   };
@@ -327,9 +333,9 @@ export interface RenaksiDetail {
   table: { level: RaLevel; count: number; target_terisi: number }[];
 }
 export interface RealisasiKinerjaDetail {
-  kpi: { pct_capaian_total: number; on_track: number; lagging: number };
+  kpi: { pct_capaian_total: number | null; on_track: number; lagging: number; belum_diisi: number };
   pie: PieDatum[];
-  table: { level: RaLevel; total: number; dinilai: number; pct: number }[];
+  table: { level: RaLevel; total: number; dinilai: number; belum_diisi: number; pct: number | null }[];
 }
 
 export type ModuleDetailData =
@@ -451,10 +457,10 @@ async function getRealisasiKinerjaDetail(tahun: number): Promise<RealisasiKinerj
   const table = RA_LEVELS.map((level, i) => {
     const rows = perLevelRows[i];
     const s = ringkasCapaian(rows);
-    return { level, total: rows.length, dinilai: s.dinilai, pct: s.pct };
+    return { level, total: rows.length, dinilai: s.dinilai, belum_diisi: s.belumDiisi, pct: s.pct };
   });
   return {
-    kpi: { pct_capaian_total: semua.pct, on_track: semua.tercapai, lagging: semua.belum },
+    kpi: { pct_capaian_total: semua.pct, on_track: semua.tercapai, lagging: semua.belum, belum_diisi: semua.belumDiisi },
     pie: [{ name: 'Tercapai', value: semua.tercapai }, { name: 'Belum Tercapai', value: semua.belum }].filter(d => d.value > 0),
     table,
   };

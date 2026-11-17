@@ -349,7 +349,7 @@ export default function MainDashboard({
                   {anggaran != null ? `Rp ${anggaran.toLocaleString('id-ID')}` : 'Rp —'}
                 </span>
                 {anggaranBelumTertaut > 0 && (
-                  <Tip label={`${menuName} ini punya lebih dari satu indikator, jadi pagu di bawahnya hanya masuk ke indikator yang dipilih sebagai induk. Tautkan lewat Data Entry: buka baris di bawahnya, isi kolom "Indikator ${menuName}".`}>
+                  <Tip label={`Pagu ini ada di bawah ${menuName.replace(/^Indikator /, '')} ini, tapi belum masuk ke indikatornya: ada baris di bawahnya yang belum memilih indikator induk, padahal induknya punya lebih dari satu indikator. Tautkan lewat Data Entry (kolom "Indikator …" pada baris itu). Letaknya disebut di catatan menu Cetak.`}>
                     <span className="ra-anggaran-catatan block text-[10px] font-semibold text-[#FAC775] mt-0.5 max-w-[240px] ml-auto"
                           style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
                       + Rp {anggaranBelumTertaut.toLocaleString('id-ID')} belum tertaut

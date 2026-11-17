@@ -353,10 +353,17 @@ export function anggaranRollup(_level: RaLevel, row: RaRow, rows: RaRow[]): numb
 }
 
 /**
- * Pagu anak langsung entitas baris ini yang belum tertaut ke indikator mana pun (entitas berindikator
- * banyak tidak membaginya sendiri). Kartu Anggaran menyebutnya supaya "Rp —" tidak terbaca "tak beranggaran".
+ * Pagu di bawah entitas baris ini yang tidak sampai ke indikator mana pun milik entitas itu — tautan induk
+ * yang putus di tingkat MANA PUN di bawahnya (entitas berindikator banyak tidak membagi sendiri, §6c).
+ * Kartu Anggaran menyebutnya supaya "Rp —"/"Rp 0" tidak terbaca "tak beranggaran".
  */
 export function paguBelumTertaut(row: RaRow, rows: RaRow[]): number {
-  return row.level === 'sub-kegiatan' ? 0 : (paguEntitas(row, rows)?.belumTertaut.total ?? 0);
+  if (row.level === 'sub-kegiatan') return 0;
+  const entitas = paguEntitas(row, rows);
+  if (!entitas) return 0;
+  const sampai = rows
+    .filter(r => r.level === row.level && paguEntitas(r, rows) === entitas)
+    .reduce((a, r) => a + (paguBaris(r, rows)?.total ?? 0), 0);
+  return Math.max(0, entitas.total.total - sampai);
 }
 

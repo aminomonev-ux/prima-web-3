@@ -283,8 +283,29 @@ console.log('\nJ. Kartu Anggaran menu Realisasi (laporan pemakai 2026-11-17: pag
     anggaranRollup('kegiatan', kegiatan2, [program, kegiatan, kegiatan2, { ...sub, induk_indikator_id: 40 }]) === 1_500_000
       && paguBelumTertaut(kegiatan2, [program, kegiatan, kegiatan2, { ...sub, induk_indikator_id: 40 }]) === 0)
   ok('J8 sub kegiatan tak pernah bercatatan', paguBelumTertaut(sub, dua) === 0)
+  // Tautan putus SATU tingkat di bawah (di kegiatan): program tampil Rp 0 — dulu tanpa catatan apa pun.
+  ok('J10 putus di tingkat bawah ikut disebut di atasnya', (anggaranRollup('program', program, dua) ?? 0) === 0
+    && paguBelumTertaut(program, dua) === 1_500_000, String(paguBelumTertaut(program, dua)))
+  ok('J11 rantai utuh: tak ada catatan di tingkat mana pun', [program, kegiatan].every(r => paguBelumTertaut(r, rantai) === 0))
+  const tertautSatu = [program, kegiatan, kegiatan2, { ...sub, induk_indikator_id: 40 }, { ...sub, id: 41, sub_kegiatan: 'Sub Dua', anggaran_nominal: 500_000 }]
+  ok('J12 sebagian tertaut: hanya sisanya yang disebut', paguBelumTertaut(kegiatan, tertautSatu) === 500_000
+    && anggaranRollup('kegiatan', kegiatan2, tertautSatu) === 1_500_000, String(paguBelumTertaut(kegiatan, tertautSatu)))
   ok('J9 kartu menerima catatannya', /anggaranBelumTertaut=\{anggaranBelumTertaut\}/.test(ra)
     && /anggaranBelumTertaut > 0 &&/.test(kode('app/(dashboard)/rencana-aksi/_components/MainDashboard.tsx')))
+}
+
+console.log('\nK. Widget Realisasi Kinerja /dashboard (realisasi kosong tidak lagi 0%)')
+{
+  const { ringkasCapaian } = await import('../lib/data/dashboard')
+  const kosong = ringkasCapaian([akumKosong, { ...akumKosong, id: 50 }])
+  ok('K1 belum ada yang diisi: capaian null ("—"), bukan 0%', kosong.pct === null && kosong.dinilai === 0, JSON.stringify(kosong))
+  ok('K2 ...dan disebut sebagai "belum diisi", bukan "belum tercapai"', kosong.belumDiisi === 2 && kosong.belum === 0)
+  const campur = ringkasCapaian([sasaran, akumKosong, tujuan])
+  ok('K3 campuran: yang diisi dinilai, kosong disebut, target 0 tidak dihitung di mana pun',
+    campur.dinilai === 1 && campur.pct === 85 && campur.belum === 1 && campur.belumDiisi === 1, JSON.stringify(campur))
+  const dash = kode('app/(dashboard)/dashboard/dashboard-client.tsx')
+  ok('K4 widget menulis "—" saat null dan menampilkan Belum Diisi',
+    /rk\.pct_capaian_total == null \? '—'/.test(dash) && /rk\.belum_diisi/.test(dash))
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)

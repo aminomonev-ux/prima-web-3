@@ -365,9 +365,10 @@ export default function DashboardClient({ username, role, themePreference, initi
                 <div><div className="widget-title">Realisasi Kinerja</div><div className="widget-tag">Capaian target vs realisasi</div></div>
               </div>
               <div className="kpi-row">
-                <div className="kpi"><div className="kpi-val">{rk.pct_capaian_total}%</div><div className="kpi-lbl">Capaian Total</div></div>
+                <div className="kpi"><div className="kpi-val">{rk.pct_capaian_total == null ? '—' : `${rk.pct_capaian_total}%`}</div><div className="kpi-lbl">Capaian Total</div></div>
                 <div className="kpi"><div className="kpi-val" style={{ color: '#2BD46A' }}>{fmtNum(rk.on_track)}</div><div className="kpi-lbl">Tercapai</div></div>
                 <div className="kpi"><div className="kpi-val" style={{ color: '#E24B4A' }}>{fmtNum(rk.lagging)}</div><div className="kpi-lbl">Belum Tercapai</div></div>
+                <div className="kpi"><div className="kpi-val">{fmtNum(rk.belum_diisi)}</div><div className="kpi-lbl">Belum Diisi</div></div>
               </div>
               <div className="widget-chart" style={{ height: 150 }}>
                 <ResponsiveContainer width="100%" height="100%">
