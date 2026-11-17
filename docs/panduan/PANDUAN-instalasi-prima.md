@@ -50,19 +50,80 @@ baru gagal di tengah dengan cara yang membingungkan.
 
 ## §1 Perangkat lunak yang dipasang
 
-| Perangkat | Versi | Catatan |
-|---|---|---|
-| **Node.js** | **22.x LTS** (minimal 22.23.4) | Pasang lewat installer resmi nodejs.org untuk **semua pengguna** (bukan nvm per akun) — tugas terjadwal yang berjalan sebagai `SYSTEM` tidak melihat Node milik satu akun |
-| **npm** | **10.8.2** persis | Sama dengan CI. npm lain bisa menulis `package-lock.json` yang membuat `npm ci` gagal `EUSAGE` |
-| **Git for Windows** | terbaru | untuk mengambil & memperbarui kode |
-| **Laragon** (berisi MySQL) | MySQL **8.0.13+**, ideal **8.4** | skema memakai `DEFAULT (expr)` yang baru ada sejak 8.0.13. MySQL Server biasa juga boleh |
-| **PM2** | terbaru | `npm install -g pm2` — **tanpa** `pm2-windows-startup` (§8) |
-| HeidiSQL | bawaan Laragon | untuk menjalankan berkas SQL |
-| **LibreOffice** | terbaru (dipakai: 26.8.3) | mengubah Word → PDF di server untuk tombol PDF Perjanjian Kinerja. Tanpa ini aplikasi tetap jalan, tapi PDF PK ditolak dan pratinjau Riwayat PK jadi "perkiraan tampilan". Cara memasang di §1.1 |
-| Nginx for Windows | opsional | hanya kalau memakai HTTPS (§11) |
-| Redis | — | **dilewati**, alasannya di §11.3 |
+| Perangkat | Versi | Untuk apa | Cara pasang |
+|---|---|---|---|
+| **Node.js** | **22.x LTS** (minimal 22.23.4) | menjalankan aplikasi | §1.2 |
+| **npm** | **10.8.2** persis | memasang paket; ikut Node | §1.2 |
+| **Git for Windows** | terbaru | mengambil & memperbarui kode | §1.3 |
+| **Laragon** (berisi MySQL + HeidiSQL) | MySQL **8.0.13+**, ideal **8.4** | database | §1.4 |
+| **PM2** | terbaru | menjaga aplikasi tetap hidup | §1.5 |
+| **LibreOffice** | terbaru (dipakai: 26.8.3) | Word → PDF untuk Perjanjian Kinerja & LKJIP | §1.6 |
+| Nginx for Windows | opsional | hanya kalau memakai HTTPS | §11.2 |
+| Redis | — | **dilewati** | alasannya §11.3 |
 
-Periksa sesudah memasang Node:
+Pasang **berurutan sesuai tabel**: npm ikut Node, PM2 dipasang lewat npm, dan beberapa
+pemeriksaan butuh yang sebelumnya sudah ada.
+
+### 1.1 Sebelum memasang — tiga hal yang sering keliru
+
+**1. Pasang dari akun Windows yang nanti menjalankan PRIMA.** Yaitu akun yang login tiap
+pagi di laptop server. PM2 dan daftar prosesnya disimpan per akun (`C:\Users\<akun>\…`);
+kalau dipasang dari akun lain, pemicu hidup otomatis (§8.2) tidak menemukannya.
+
+**2. Kenali dua macam PowerShell.**
+
+| Yang dibutuhkan | Cara membuka |
+|---|---|
+| PowerShell **biasa** | tombol Start → ketik `powershell` → klik **Windows PowerShell** |
+| PowerShell **Administrator** | tombol Start → ketik `powershell` → klik kanan → **Run as administrator** → jawab **Yes** |
+
+Langkah yang butuh Administrator ditandai **(Admin)** di bawah. Selain itu pakai PowerShell
+biasa. Ini penting untuk PM2: Administrator di Windows tetap akun yang sama, tetapi pada
+sebagian kantor "Run as administrator" meminta sandi **akun admin IT** dan berjalan sebagai
+akun itu. PM2 yang terpasang di sana tidak bisa dipakai akun server.
+
+**3. Tutup dan buka lagi PowerShell sesudah tiap pemasangan.** Jendela yang sudah terbuka
+tidak mengenal program yang baru dipasang. Pesan `'node' is not recognized` sesudah
+memasang Node hampir selalu berarti jendelanya belum dibuka ulang, bukan pemasangan gagal.
+
+Kalau PowerShell menolak menjalankan `npm` atau `pm2` dengan pesan *"running scripts is
+disabled on this system"*, izinkan skrip untuk akun ini saja (sekali):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Jawab `Y`. Setelan ini hanya berlaku untuk akun Anda dan tetap menolak skrip tak
+bertanda tangan yang diunduh dari internet.
+
+`winget` (dipakai di §1.3 dan §1.6) sudah ada di Windows 10/11 versi baru. Periksa dengan
+`winget --version`. Kalau tidak ada, pakai cara "lewat installer" yang ditulis di tiap
+bagian.
+
+### 1.2 Node.js & npm
+
+**Kenapa versi 22, bukan yang terbaru:** aplikasi dan CI dibangun dengan Node 22. Versi LTS
+terbaru di nodejs.org bisa sudah 24, jadi tombol hijau besar di halaman depan nodejs.org
+**belum tentu** versi yang benar. Pasang dari folder khusus versi 22:
+
+1. Buka **https://nodejs.org/dist/latest-v22.x/** di peramban.
+2. Unduh berkas **`node-v22.<angka>-x64.msi`** (yang berakhiran `-x64.msi`, bukan `.zip`
+   dan bukan `-arm64`).
+3. Jalankan berkasnya. Di tiap layar:
+   - **Welcome** → Next.
+   - **License** → centang *I accept* → Next.
+   - **Destination Folder** → biarkan `C:\Program Files\nodejs\` → Next.
+   - **Custom Setup** → biarkan semua bawaan (Node.js runtime, npm package manager,
+     **Add to PATH**) → Next.
+   - **Tools for Native Modules** → **jangan dicentang**. PRIMA tidak membutuhkannya, dan
+     centang itu memasang Python + Visual Studio Build Tools yang besar → Next.
+   - **Install** → jawab **Yes** di jendela izin Windows → **Finish**.
+
+Installer `.msi` memasang Node untuk **semua akun** di `C:\Program Files\nodejs`. Itu yang
+dibutuhkan: backup harian (§14) berjalan sebagai akun `SYSTEM`. Karena itu **jangan pakai
+nvm** atau Node "portable" di folder akun; `SYSTEM` tidak bisa melihatnya.
+
+Tutup PowerShell, buka lagi (biasa), lalu periksa:
 
 ```powershell
 node -v
@@ -70,50 +131,202 @@ npm -v
 (Get-Command node).Source
 ```
 
-Catat hasil baris ketiga (biasanya `C:\Program Files\nodejs\node.exe`) — dipakai di §14.
-Kalau npm bukan 10.8.2:
+- `node -v` harus `v22.…` dan tidak lebih rendah dari `v22.23.4`.
+- Catat hasil baris ketiga (biasanya `C:\Program Files\nodejs\node.exe`). Path ini dipakai
+  di §14.
+
+Kalau `npm -v` bukan `10.8.2`, samakan **(Admin)**, karena npm global ada di
+`C:\Program Files`:
 
 ```powershell
 npm install -g npm@10.8.2
 ```
 
-Installer Node membawa npm-nya sendiri, jadi periksa lagi `npm -v` setiap kali Node
-dinaikkan versinya.
+Tutup–buka PowerShell lalu `npm -v` sekali lagi. Installer Node membawa npm-nya sendiri,
+jadi **ulangi pemeriksaan ini setiap kali Node dinaikkan versinya**. npm versi lain bisa
+menulis ulang `package-lock.json`, dan sesudahnya `npm ci` gagal `EUSAGE` (di server
+maupun di CI).
 
-### 1.1 LibreOffice (PDF Perjanjian Kinerja)
+**Menaikkan Node nanti:** unduh `.msi` 22 yang lebih baru dari alamat yang sama, lalu
+jalankan. Installer menimpa versi lama, tidak perlu dihapus dulu. Sesudahnya `pm2 restart
+prima`.
 
-Tombol **Unduh PDF** dan pratinjau di Riwayat PK membuat PDF dari berkas Word yang sama
-lewat LibreOffice, jadi letak baris di PDF persis sama dengan Word. Pasang dari PowerShell
-**Administrator**:
+### 1.3 Git for Windows
+
+Dipakai untuk `git clone` (§5) dan `git pull` setiap naik versi (§18). Repo PRIMA publik,
+jadi **tidak perlu akun GitHub** di server.
+
+**Lewat winget (Admin):**
+
+```powershell
+winget install --id Git.Git --source winget
+```
+
+**Atau lewat installer:** buka **https://git-scm.com/download/win** → unduh *64-bit Git for
+Windows Setup* → jalankan. Semua layar **biarkan pilihan bawaan** dan tekan Next sampai
+Install. Dua layar yang perlu dipastikan:
+
+- *Adjusting your PATH environment* → **Git from the command line and also from 3rd-party
+  software** (bawaan). Pilihan lain membuat `git` tidak dikenal di PowerShell.
+- *Configuring the line ending conversions* → **Checkout Windows-style, commit Unix-style**
+  (bawaan).
+
+Tutup–buka PowerShell, lalu:
+
+```powershell
+git --version
+```
+
+Harus memunculkan `git version 2.…`.
+
+### 1.4 Laragon (MySQL) & HeidiSQL
+
+Laragon membungkus MySQL dalam satu aplikasi yang bisa hidup otomatis bersama Windows, dan
+membawa **HeidiSQL** (aplikasi untuk menjalankan berkas SQL). MySQL Server resmi dari
+Oracle juga boleh; langkah §3–§4 tetap sama.
+
+**Memasang:**
+
+1. Buka **https://laragon.org/download/** → unduh **Laragon – Full** (64-bit).
+2. Jalankan installer → jawab **Yes** di jendela izin.
+3. Folder pemasangan **biarkan `C:\laragon`**. Panduan ini (§13.1) mencari `mysqldump` di
+   sana.
+4. Pilihan tambahan di installer boleh dibiarkan bawaan → **Install** → **Finish**.
+
+**Menyalakan MySQL:**
+
+1. Buka Laragon (ikon gajah) → tekan **Start All**.
+2. Kalau muncul jendela **Windows Defender Firewall** untuk `mysqld.exe`, tekan **Cancel**
+   (jangan *Allow access*). MySQL hanya dipakai aplikasi di laptop yang sama, jadi tidak
+   perlu dibuka ke jaringan. Kalau muncul juga untuk Apache/`httpd.exe`, sama: Cancel.
+   PRIMA tidak memakai Apache.
+3. Baris **MySQL** di jendela Laragon harus hijau dengan tulisan *started*, port `3306`.
+
+**Memeriksa versi MySQL** (harus 8.0.13 atau lebih baru):
+
+Laragon → tombol **Database** → HeidiSQL terbuka → sesi bawaan Laragon → **Open**. Lalu
+tekan tab **Query**, ketik, dan tekan **F9**:
+
+```sql
+SELECT VERSION();
+```
+
+Versi **5.7.x** atau **8.0.12 ke bawah** (Laragon versi lama) harus dinaikkan. Kerjakan ini
+**hanya di server baru yang belum berisi data**. Database yang sudah berisi data dibackup
+dulu (§15).
+
+1. Buka **https://dev.mysql.com/downloads/mysql/** → pilih versi **8.4 LTS** → sistem operasi
+   *Microsoft Windows* → unduh **Windows (x86, 64-bit), ZIP Archive** (bukan MSI). Di halaman
+   berikutnya klik *No thanks, just start my download*.
+2. Ekstrak isinya ke `C:\laragon\bin\mysql\`. Hasilnya satu folder seperti
+   `C:\laragon\bin\mysql\mysql-8.4.x-winx64\`.
+3. Laragon → **Stop All** → klik kanan jendela Laragon → **MySQL** → **Version** → pilih
+   versi 8.4 → **Start All**.
+4. Ulangi `SELECT VERSION();`.
+
+**Membuat perintah `mysql` dikenal di PowerShell** (dipakai §4 sebagai alternatif HeidiSQL):
+klik kanan jendela Laragon → **Tools** → **Path** → **Add Laragon to Path** → tutup–buka
+PowerShell → `mysql --version`. Langkah ini boleh dilewati kalau semua SQL dijalankan lewat
+HeidiSQL.
+
+**Hidup otomatis:** klik kanan jendela Laragon → **Preferences** → centang **Run Laragon when
+Windows starts** dan **Start All automatically**. Alasannya ada di §3: backup gagal kalau
+MySQL mati di jam backup.
+
+**Sandi `root` (disarankan):** MySQL Laragon lahir dengan `root` **tanpa sandi**. Aplikasi
+tidak memakai `root` (§4 membuat user sendiri), tetapi `root` tanpa sandi berarti siapa pun
+yang duduk di laptop server bisa membuka seluruh database. Di HeidiSQL:
+
+```sql
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'ISI_SANDI_ROOT_DI_SINI';
+```
+
+Simpan sandinya di pengelola sandi (§2). Sesudahnya tombol **Database** di Laragon akan
+menanyakan sandi: di HeidiSQL pilih sesi Laragon → isi kolom **Password** → **Save**.
+
+### 1.5 PM2
+
+PM2 menjaga aplikasi tetap hidup dan menyalakannya kembali kalau mati. Pasang di
+**PowerShell biasa, dari akun yang menjalankan PRIMA** (lihat §1.1). Jangan Admin:
+
+```powershell
+npm install -g pm2
+```
+
+Tutup–buka PowerShell, lalu periksa:
+
+```powershell
+pm2 -v
+Test-Path "$env:APPDATA\npm\pm2.cmd"
+```
+
+Baris kedua harus `True`. Skrip hidup otomatis (§8.2) memanggil PM2 tepat di lokasi itu.
+Kalau `False`, PM2 terpasang dari akun lain atau dari Administrator akun lain: ulangi dari
+akun yang benar.
+
+**Jangan pasang `pm2-windows-startup` atau `pm2-windows-service`.** `pm2 startup` hanya ada
+di Linux, dan kedua paket itu sudah lama tidak dipelihara. PRIMA dihidupkan otomatis oleh
+Task Scheduler (§8.2).
+
+**Menaikkan PM2 nanti:** `npm install -g pm2@latest` lalu `pm2 update` (memindahkan
+proses yang sedang jalan ke PM2 baru tanpa kehilangan daftarnya).
+
+### 1.6 LibreOffice (PDF Perjanjian Kinerja & LKJIP)
+
+Tombol **Unduh PDF** dan pratinjau di Riwayat PK, serta **Pratinjau Cetak / Unduh PDF**
+LKJIP, membuat PDF dari berkas Word yang sama lewat LibreOffice. Karena itu letak baris di
+PDF sama dengan di Word. Tanpa LibreOffice aplikasi tetap jalan: Unduh Word tetap bisa,
+hanya tombol PDF yang mati atau ditolak, dan pratinjau Riwayat PK menjadi "perkiraan
+tampilan".
+
+**Lewat winget (Admin):**
 
 ```powershell
 winget install --id TheDocumentFoundation.LibreOffice --source winget
 ```
 
-Lalu pastikan terpasang di lokasi yang dicari aplikasi:
+**Atau lewat installer:** buka **https://www.libreoffice.org/download/download-libreoffice/**
+→ unduh versi untuk *Windows x86_64* (berkas `.msi`) → jalankan → pilih **Typical** →
+folder biarkan `C:\Program Files\LibreOffice\` → Install. Jangan memilih *Custom* lalu
+membuang komponen: PDF LKJIP memakai Python bawaan LibreOffice (`program\python.exe`).
+
+Pastikan terpasang di lokasi yang dicari aplikasi:
 
 ```powershell
 Test-Path 'C:\Program Files\LibreOffice\program\soffice.com'
+Test-Path 'C:\Program Files\LibreOffice\program\python.exe'
 (Get-Item 'C:\Program Files\LibreOffice\program\soffice.exe').VersionInfo.ProductVersion
 ```
 
-Baris pertama harus `True`. Kalau LibreOffice terpasang di tempat lain (mis. hanya untuk
-satu akun di `AppData`), isi `LIBREOFFICE_PATH` di `.env.local` (§6) dengan path lengkap
-`soffice.com`. Pakai **`soffice.com`, bukan `soffice.exe`**: `soffice.com` versi konsol
-yang menunggu sampai PDF selesai, dan itu yang dipakai aplikasi di lokasi bawaan.
+Dua baris pertama harus `True`. Yang pertama untuk PDF PK, yang kedua untuk PDF LKJIP.
 
-Hal yang perlu diketahui:
+**Kalau terpasang di tempat lain** (mis. hanya untuk satu akun di `AppData`), isi di
+`.env.local` (§6). Dua modul membaca dua variabel berbeda:
+
+| Variabel | Untuk | Isi |
+|---|---|---|
+| `LIBREOFFICE_PATH` | PDF Perjanjian Kinerja | path lengkap **`soffice.com`**, bukan `soffice.exe`. `soffice.com` adalah versi konsol yang menunggu sampai PDF selesai |
+| `LIBREOFFICE_PROGRAM` | PDF LKJIP | path **folder** `program` (yang berisi `soffice.exe` dan `python.exe`) |
+
+Yang terpasang di `C:\Program Files\LibreOffice` tidak perlu mengisi keduanya.
+
+**Huruf dokumen.** PDF memakai huruf yang terpasang di Windows server. Huruf yang tidak ada
+diganti LibreOffice dengan huruf lain, dan baris atau halaman bisa bergeser. Pasang di server
+semua huruf yang dipakai templat PK dan Pengaturan Dokumen LKJIP: klik kanan berkas `.ttf` →
+**Install for all users**. Pilih yang *for all users*, karena huruf yang dipasang untuk satu
+akun tidak selalu terlihat oleh aplikasi. LKJIP menyebut huruf yang hilang saat PDF dibuat.
+
+Hal lain yang perlu diketahui:
 
 - **Tidak perlu build atau restart.** Aplikasi mencari LibreOffice setiap kali PDF diminta,
   jadi begitu terpasang tombol PDF langsung bekerja.
-- PDF dibuat **satu per satu** (antrean). Unduh massal PDF banyak dokumen memang lebih lama
-  daripada unduh Word, dan dibatasi jumlahnya sekali unduh.
-- Aplikasi memakai profil LibreOffice sendiri di folder sementara, jadi LibreOffice yang
-  sedang dibuka orang di laptop server tidak mengganggu dan tidak terganggu.
-- Huruf di PDF memakai huruf yang terpasang di Windows. Kalau suatu saat templat Word PK
-  memakai huruf yang tidak ada di server, LibreOffice menggantinya dan baris bisa bergeser.
-- Pembaruan LibreOffice boleh kapan saja (`winget upgrade --id TheDocumentFoundation.LibreOffice`);
-  sesudahnya ulangi pemeriksaan `Test-Path` di atas.
+- PDF dibuat **bergiliran**. Unduh massal PDF banyak dokumen memang lebih lama daripada unduh
+  Word, dan jumlahnya dibatasi per unduhan.
+- Aplikasi memakai profil LibreOffice sendiri di folder sementara. LibreOffice yang sedang
+  dibuka orang di laptop server tidak mengganggu dan tidak terganggu.
+- Pembaruan LibreOffice boleh kapan saja
+  (`winget upgrade --id TheDocumentFoundation.LibreOffice`). Sesudahnya ulangi pemeriksaan
+  `Test-Path` di atas.
 
 ## §2 Akun & rahasia yang disiapkan
 
@@ -216,7 +429,7 @@ npm ci
 ```
 
 `npm ci` (bukan `npm install`) memasang **persis** versi di `package-lock.json`. Kalau ia
-gagal `EUSAGE`, npm-nya bukan 10.8.2 (§1).
+gagal `EUSAGE`, npm-nya bukan 10.8.2 (§1.2).
 
 Jangan menaruh berkas buatan sendiri (konfigurasi PM2, skrip, catatan) **di dalam** folder
 repo — berkas tak terlacak bisa membuat `git pull` berikutnya menolak jalan. Taruh di
@@ -254,7 +467,8 @@ pernah masuk git** dan tidak boleh dikirim lewat WhatsApp/email.
 | `MYSQLDUMP_PATH` | sangat disarankan | path lengkap `mysqldump.exe` (§13.1) |
 | `BACKUP_RETENTION` | tidak | jumlah **berkas** backup yang disimpan di Drive, bawaan `30` |
 | `BACKUP_LAMPIRAN_DIR` | disarankan | folder salinan lampiran di laptop, mis. `D:/backup-prima/lampiran`. Kosong = `<folder aplikasi>\backups-lampiran` |
-| `LIBREOFFICE_PATH` | tidak | kosongkan kalau LibreOffice terpasang di `C:\Program Files\LibreOffice` (§1.1). Diisi path lengkap `soffice.com` hanya kalau terpasang di tempat lain |
+| `LIBREOFFICE_PATH` | tidak | kosongkan kalau LibreOffice terpasang di `C:\Program Files\LibreOffice` (§1.6). Diisi path lengkap `soffice.com` hanya kalau terpasang di tempat lain. Untuk PDF Perjanjian Kinerja |
+| `LIBREOFFICE_PROGRAM` | tidak | sama, untuk PDF LKJIP: path **folder** `program` LibreOffice (berisi `soffice.exe` & `python.exe`), hanya kalau tidak di `C:\Program Files\LibreOffice` |
 | `REDIS_URL` | **jangan diisi** | §11.3 |
 
 Garis miring biasa (`D:/…`) dan terbalik (`D:\…`) sama-sama boleh untuk path Windows.
@@ -941,7 +1155,7 @@ Get-ScheduledTask | Where-Object { ($_.Actions.Execute + ' ' + $_.Actions.Argume
 
 ```powershell
 $app  = 'D:\APLIKASI\prima-web-3'
-$node = 'C:\Program Files\nodejs\node.exe'   # hasil §1
+$node = 'C:\Program Files\nodejs\node.exe'   # hasil §1.2
 
 $aksi = New-ScheduledTaskAction -Execute $node -Argument 'scripts\backup-db.js' -WorkingDirectory $app
 $jam  = New-ScheduledTaskTrigger -Daily -At 12:00
@@ -1101,7 +1315,7 @@ Kerjakan berurutan; berhenti di langkah pertama yang gagal.
       Nyalakan lagi
 - [ ] Unduh satu berkas Excel/Word dari modul mana pun
 - [ ] Riwayat PK → satu dokumen FINAL → **Unduh PDF** → PDF terbuka, tanpa tulisan
-      "perkiraan tampilan" di pratinjau (kalau ditolak "LibreOffice belum terpasang": §1.1)
+      "perkiraan tampilan" di pratinjau (kalau ditolak "LibreOffice belum terpasang": §1.6)
 - [ ] Drive & Backup → **UJI SEKARANG** → semua OK
 - [ ] Lima tugas cron dijalankan dengan tangan → `cron.log` berisi `OK` (§9.3)
 - [ ] Backup lewat penjadwal → log `UPLOAD-OK` (§14.3)
@@ -1140,7 +1354,7 @@ node scripts/check-schema.mjs                         # 4. tabel/kolom/indeks ya
 Perubahan yang **hanya** menyentuh `scripts\backup-db.js` atau berkas skrip lain tidak perlu
 build/restart — skrip dibaca ulang setiap kali jalan.
 
-Server yang dipasang sebelum 2026-11-16 belum punya **LibreOffice**. Pasang sekali (§1.1)
+Server yang dipasang sebelum 2026-11-16 belum punya **LibreOffice**. Pasang sekali (§1.6)
 supaya PDF Perjanjian Kinerja bisa dibuat; tidak perlu build ulang untuk itu.
 
 ### 18.2 Migrasi — aturan yang mencegah kesalahan
@@ -1183,8 +1397,8 @@ supaya PDF Perjanjian Kinerja bisa dibuat; tidak perlu build ulang untuk itu.
 | Aplikasi mati tiap pagi | `autostart.log` (§8.2) — biasanya MySQL belum hidup atau akun tugas salah |
 | Lampiran tidak terunggah, tanpa galat | kredensial Google kosong/salah — Drive & Backup → Uji |
 | Galat SQL 1064 menyebut `GOOGLE_DRIVE…` | isian `.env.local` dijalankan di HeidiSQL (§6) |
-| PDF PK ditolak "LibreOffice belum terpasang" / pratinjau Riwayat PK bertulisan "perkiraan tampilan" | LibreOffice belum terpasang atau tidak di `C:\Program Files\LibreOffice` — §1.1, atau isi `LIBREOFFICE_PATH` |
-| PDF PK gagal "selesai tanpa menghasilkan PDF" | periksa `LIBREOFFICE_PATH` menunjuk `soffice.com`, bukan `soffice.exe` (§1.1) |
+| PDF PK ditolak "LibreOffice belum terpasang" / pratinjau Riwayat PK bertulisan "perkiraan tampilan" | LibreOffice belum terpasang atau tidak di `C:\Program Files\LibreOffice` — §1.6, atau isi `LIBREOFFICE_PATH` |
+| PDF PK gagal "selesai tanpa menghasilkan PDF" | periksa `LIBREOFFICE_PATH` menunjuk `soffice.com`, bukan `soffice.exe` (§1.6) |
 
 ### 19.2 Log backup (`scripts\backup-db.log`)
 
