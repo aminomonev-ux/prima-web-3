@@ -5,6 +5,7 @@
 import { sql, queryMany, queryOne, withTransaction, type Penanya, type TxSql } from '@/lib/data/db';
 import { bulatkanDesimal } from '@/lib/shared/desimal';
 import { acquireBludLock } from '@/lib/data/locks';
+import { bulanTerkunci, triwulanTerkunci } from '@/lib/renaksi/kunci-periode';
 import { rencanaGantiNama, type GantiNama } from '@/lib/renaksi/ganti-nama';
 import type { RaLevel, UpsertRencanaAksiInput } from './rencana-aksi-schemas';
 import { INDUK_LEVEL, namaEntitas, namaIndukLangsung, type BarisRantai } from '@/lib/renaksi/rantai';
@@ -801,7 +802,7 @@ export async function updateQuarter(
   if (row.bulan_target || row.bulan_realisasi) throw new RaMonthlyManagedError();
   // Kunci Periode: kuartal yang seluruh bulannya ≤ batas kunci tidak bisa diubah
   const lock = await getRaLock(row.tahun);
-  if (lock > 0 && quarter * 3 <= lock) throw new RaPeriodLockedError(lock);
+  if (triwulanTerkunci(quarter, lock)) throw new RaPeriodLockedError(lock);
   // Static dispatch per kolom — 4 ENUM, tidak ada SQL injection risk.
   let res: unknown;
   if (quarter === 1) {
@@ -830,8 +831,8 @@ async function tulisBulanRealisasi(
   // Kunci Periode: nilai bulan ≤ batas kunci tidak boleh berubah
   if (lock > 0) {
     const existing = row.bulan_realisasi ?? Array(12).fill(null);
-    for (let i = 0; i < lock; i++) {
-      if ((months[i] ?? null) !== (existing[i] ?? null)) throw new RaPeriodLockedError(lock);
+    for (let i = 0; i < 12; i++) {
+      if (bulanTerkunci(i, lock) && (months[i] ?? null) !== (existing[i] ?? null)) throw new RaPeriodLockedError(lock);
     }
   }
   const [r1, r2, r3, r4] = deriveQuartersFromMonthly(months, row.jenis);

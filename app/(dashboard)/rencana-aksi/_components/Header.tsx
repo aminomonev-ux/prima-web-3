@@ -8,6 +8,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { ROLE_LABELS } from '@/lib/constants';
 import { YEAR_RANGE, BULAN_LABELS } from '../_lib/types';
+import { beritahuKunciBerubah } from '../_lib/kunci-periode';
 import { apiDuplikasiTahun, apiGetLock, apiSetLock } from '../_lib/api';
 import ImportRenaksiModal from './ImportRenaksiModal';
 
@@ -84,6 +85,7 @@ export default function Header({
     setLockBusy(true);
     try {
       await apiSetLock(selectedYear, lockBulan);
+      beritahuKunciBerubah(selectedYear, lockBulan);
       setLockOpen(false);
       notify?.(lockBulan === 0
         ? `Kunci periode ${selectedYear} dibuka — semua bulan bisa diedit`

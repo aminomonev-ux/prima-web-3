@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Eye, Pencil, Save, ExternalLink } from 'lucide-react';
+import { Eye, Pencil, Save, ExternalLink, Lock } from 'lucide-react';
+import { bulanTerkunci, kalimatKunci, triwulanTerkunci } from '@/lib/renaksi/kunci-periode';
+import { useKunciPeriode } from '../_lib/kunci-periode';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
@@ -75,6 +77,8 @@ export default function MainDashboard({
   const menuName = LEVEL_LABELS[level];
   const levelRows = useMemo(() => rows.filter(r => r.level === level), [rows, level]);
   const isSub = level === 'sub-kegiatan';
+  // Kunci Periode: bulan & triwulan terkunci dimatikan di sini juga, bukan hanya di Matriks — server menolaknya.
+  const kunci = useKunciPeriode(selectedYear);
 
   // Sasaran dropdown options (level=program only) — distinct sasaran values dari row level=program
   const displaySasarans = useMemo(() => {
@@ -478,6 +482,7 @@ export default function MainDashboard({
                 <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block bg-[#EF9F27]" /> 80–99%</span>
                 <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block bg-[#E24B4A]" /> &lt;80%</span>
                 <span>· capaian bulan vs targetnya · tanpa target bulanan = tanpa warna</span>
+                {kunci > 0 && <span className="inline-flex items-center gap-1 text-[#BA7517] font-semibold"><Lock className="h-2.5 w-2.5" /> {kalimatKunci(kunci)}</span>}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -513,6 +518,7 @@ export default function MainDashboard({
                 : null;
               const nada = pctBulan == null ? null : nadaCapaian(pctBulan);
               const warnaNada = nada === 'tercapai' ? '#1D9E75' : nada === 'waspada' ? '#EF9F27' : nada === 'kurang' ? '#E24B4A' : null;
+              const terkunciBln = bulanTerkunci(i, kunci);
               return (
                 <div
                   key={bln}
@@ -520,14 +526,14 @@ export default function MainDashboard({
                   style={warnaNada
                     ? { borderColor: warnaNada, background: `color-mix(in srgb, ${warnaNada} 12%, transparent)` }
                     : { borderColor: 'var(--ra-border, #E2E8F0)' }}
-                  data-tooltip={pctBulan != null ? `Capaian ${bln}: ${pctBulan.toFixed(1)}% dari target ${tulisDesimal(targetB)}` : undefined}
+                  data-tooltip={terkunciBln ? `Kunci Periode ${kalimatKunci(kunci)} — realisasi ${bln} tidak bisa diubah` : pctBulan != null ? `Capaian ${bln}: ${pctBulan.toFixed(1)}% dari target ${tulisDesimal(targetB)}` : undefined}
                 >
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-center">{bln}</label>
+                  <label className={`text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-0.5 ${terkunciBln ? 'text-[#BA7517]' : 'text-slate-400'}`}>{terkunciBln && <Lock className="h-2.5 w-2.5" aria-label="terkunci" />}{bln}</label>
                   <PrimaNumberField
                     size="sm"
                     min={0}
                     desimal={2}
-                    disabled={!activeRow}
+                    disabled={!activeRow || terkunciBln}
                     value={nilai == null ? '' : nilai}
                     placeholder="—"
                     inputClassName="text-center"
@@ -607,9 +613,9 @@ export default function MainDashboard({
                 {isSub ? (
                   <span className="rounded-md bg-[#7C5CFC]/10 px-2 py-0.5 text-[10px] font-bold text-[#7C5CFC]">Auto</span>
                 ) : (
-                  <Tip label={`Ubah data ${q.name}`}><button
+                  <Tip label={triwulanTerkunci(q.id, kunci) ? `${q.name} terkunci — Kunci Periode ${kalimatKunci(kunci)}` : `Ubah data ${q.name}`}><button
                     onClick={() => onOpenQuarterModal(q)}
-                    disabled={!activeRow}
+                    disabled={!activeRow || triwulanTerkunci(q.id, kunci)}
                     className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11.5px] font-bold text-[#EF9F27] border border-[#EF9F27]/40 bg-[#EF9F27]/5 hover:border-[#EF9F27] hover:bg-[#EF9F27]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   >
                     <Pencil className="h-3 w-3" />
