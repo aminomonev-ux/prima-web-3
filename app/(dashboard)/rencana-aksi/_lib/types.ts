@@ -321,13 +321,13 @@ export function tulisRealisasi(n: number | null): string {
 }
 
 /**
- * Capaian yang `null` ("—") untuk Progres Negatif yang belum diisi: di jenis itu realisasi 0
- * = capaian terbaik, jadi tanpa ini indikator kosong tercatat 200% "selesai". Jenis lain
- * tetap angka — 0% dari realisasi kosong tidak menyesatkan.
+ * Capaian `null` ("—") bila target 0 (tak ada pembagi) atau realisasi belum diisi. Dulu realisasi kosong jadi 0%
+ * (Progres Negatif malah 200%) — unduhan menulis realisasi "—" berdampingan capaian 0, dan target 0 tampil 0% merah
+ * sementara PDF untuk indikator yang sama menulis "-" (laporan pemakai 2026-11-17).
  */
 function capaianAtauKosong(jenis: RaJenis, target: number, realisasi: number | null): number | null {
-  if (realisasi == null && jenis === 'Progres Negatif') return null;
-  return hitungCapaianPct(target, realisasi ?? 0, jenis);
+  if (!(target > 0) || realisasi == null) return null;
+  return hitungCapaianPct(target, realisasi, jenis);
 }
 
 /** Capaian akhir tahun — kolom "Capaian" menu Cetak: layar, PDF, dan Excel memanggil ini. */

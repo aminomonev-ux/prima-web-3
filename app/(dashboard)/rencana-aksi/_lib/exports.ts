@@ -5,7 +5,7 @@ import { realisasiAkhirTahun, tulisRealisasi, quartersOf, LEVEL_LABELS, outcomeO
 import type { CetakFilter } from './cetak-filter';
 import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, catatanPaguCetak, lebarKolomPdf, tulisSelCetak } from './cetak-filter';
 import { sanitizeCell, loadExcelJs } from '@/lib/shared/excel-export';
-import { tulisDesimal } from '@/lib/shared/desimal';
+import { tulisDesimal, tulisPersen } from '@/lib/shared/desimal';
 import { polosSelExcel } from '@/lib/shared/excel-sel';
 import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 
@@ -40,6 +40,11 @@ function saveBlob(blob: Blob, name: string) {
 // ─── Export tabel list (Data Entry) ─────────────────────────────────────────
 
 export async function exportListPdf(mentah: RaRow[], tahun: number, level: RaRow['level']) {
+  (await buatPdfList(mentah, tahun, level)).save(`rencana-aksi-${level}-${tahun}.pdf`);
+}
+
+/** Dipisah dari tombolnya supaya isi berkas bisa diperiksa di Node. */
+export async function buatPdfList(mentah: RaRow[], tahun: number, level: RaRow['level']) {
   const rows = mentah.map(barisBersih);
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -54,25 +59,25 @@ export async function exportListPdf(mentah: RaRow[], tahun: number, level: RaRow
     body: rows.map((r, i) => [
       i + 1,
       r.program,
-      r.kegiatan ?? '-',
-      r.sub_kegiatan ?? '-',
-      outcomeOf(r) || '-',
+      r.kegiatan ?? '—',
+      r.sub_kegiatan ?? '—',
+      outcomeOf(r) || '—',
       r.indikator,
       r.jenis,
       r.satuan,
       tulisDesimal(r.target_rpjmd),
       tulisDesimal(r.target_tahunan),
-      `${tulisDesimal(r.q1_realisasi)}/${tulisDesimal(r.q1_target)}`,
-      `${tulisDesimal(r.q2_realisasi)}/${tulisDesimal(r.q2_target)}`,
-      `${tulisDesimal(r.q3_realisasi)}/${tulisDesimal(r.q3_target)}`,
-      `${tulisDesimal(r.q4_realisasi)}/${tulisDesimal(r.q4_target)}`,
+      // Realisasi belum diisi = "—", bukan kosong (dulu tercetak "/5").
+      `${tulisRealisasi(r.q1_realisasi)}/${tulisDesimal(r.q1_target)}`,
+      `${tulisRealisasi(r.q2_realisasi)}/${tulisDesimal(r.q2_target)}`,
+      `${tulisRealisasi(r.q3_realisasi)}/${tulisDesimal(r.q3_target)}`,
+      `${tulisRealisasi(r.q4_realisasi)}/${tulisDesimal(r.q4_target)}`,
     ]),
     styles: { fontSize: 7, cellPadding: 1.5 },
     headStyles: { fillColor: [239, 159, 39], textColor: 255, fontSize: 7 },
     columnStyles: { 0: { cellWidth: 8 }, 4: { cellWidth: 40 }, 5: { cellWidth: 45 } },
   });
-
-  doc.save(`rencana-aksi-${level}-${tahun}.pdf`);
+  return doc;
 }
 
 /**
@@ -329,13 +334,17 @@ export async function buatWorkbookGabungan(allRows: RaRow[], filter: CetakFilter
 // ─── Export 1 indikator (Dashboard Kinerja) ────────────────────────────────
 
 export async function exportIndikatorPdf(mentah: RaRow) {
+  (await buatPdfIndikator(mentah)).save(`rencana-aksi-${mentah.level}-${mentah.tahun}-detail.pdf`);
+}
+
+export async function buatPdfIndikator(mentah: RaRow) {
   const row = barisBersih(mentah);
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const realAkhir = realisasiAkhirTahun(row);
   const pctTh = capaianTahunan(row);
   const pctRp = capaianRpjmd(row);
-  const persen = (p: number | null) => p === null ? '—' : p.toFixed(2) + '%';
+  const persen = (p: number | null) => p === null ? '—' : tulisPersen(p);
 
   doc.setFontSize(13);
   doc.text(`${LEVEL_LABELS[row.level]} — Tahun ${row.tahun}`, 14, 14);
@@ -346,9 +355,9 @@ export async function exportIndikatorPdf(mentah: RaRow) {
     startY: 35,
     body: [
       ['Program/Sasaran', row.program],
-      ['Kegiatan', row.kegiatan ?? '-'],
-      ['Sub Kegiatan', row.sub_kegiatan ?? '-'],
-      ['Sasaran (Outcome)', outcomeOf(row) || '-'],
+      ['Kegiatan', row.kegiatan ?? '—'],
+      ['Sub Kegiatan', row.sub_kegiatan ?? '—'],
+      ['Sasaran (Outcome)', outcomeOf(row) || '—'],
       ['Jenis', row.jenis],
       ['Satuan', row.satuan],
       ['Target RPJMD', tulisDesimal(row.target_rpjmd)],
@@ -366,17 +375,22 @@ export async function exportIndikatorPdf(mentah: RaRow) {
     startY: qStart,
     head: [['Triwulan', 'Target', 'Realisasi', 'Capaian (%)']],
     body: quartersOf(row).map(q => {
-      const pct = q.target > 0 ? capaianTriwulan(row, q.id) : null;
-      return [`TW ${q.id}`, tulisDesimal(q.target), tulisRealisasi(q.realisasi), pct === null ? '-' : pct.toFixed(2) + '%'];
+      // Satu aturan dengan Excel & layar: target 0 / belum bisa dihitung = "—".
+      const pct = capaianTriwulan(row, q.id);
+      return [`TW ${q.id}`, tulisDesimal(q.target), tulisRealisasi(q.realisasi), persen(pct)];
     }),
     styles: { fontSize: 9 },
     headStyles: { fillColor: [239, 159, 39] },
   });
-
-  doc.save(`rencana-aksi-${row.level}-${row.tahun}-detail.pdf`);
+  return doc;
 }
 
 export async function exportIndikatorXlsx(mentah: RaRow) {
+  const buf = await (await buatWorkbookIndikator(mentah)).xlsx.writeBuffer();
+  saveBlob(new Blob([buf]), `rencana-aksi-${mentah.level}-${mentah.tahun}-detail.xlsx`);
+}
+
+export async function buatWorkbookIndikator(mentah: RaRow) {
   const row = barisBersih(mentah);
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
@@ -387,9 +401,9 @@ export async function exportIndikatorXlsx(mentah: RaRow) {
     ['Tahun', row.tahun],
     ['Level', LEVEL_LABELS[row.level]],
     ['Program/Sasaran', row.program],
-    ['Kegiatan', row.kegiatan ?? '-'],
-    ['Sub Kegiatan', row.sub_kegiatan ?? '-'],
-    ['Sasaran (Outcome)', outcomeOf(row) || '-'],
+    ['Kegiatan', row.kegiatan ?? '—'],
+    ['Sub Kegiatan', row.sub_kegiatan ?? '—'],
+    ['Sasaran (Outcome)', outcomeOf(row) || '—'],
     ['Indikator', row.indikator],
     ['Jenis', row.jenis],
     ['Satuan', row.satuan],
@@ -407,15 +421,16 @@ export async function exportIndikatorXlsx(mentah: RaRow) {
   head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF9F27' } };
   quartersOf(row).forEach(q => {
     const pct = capaianTriwulan(row, q.id);
-    ws.addRow([`TW ${q.id}`, q.target, q.realisasi ?? '—', pct ?? '—']);
+    const baris = ws.addRow([`TW ${q.id}`, q.target, q.realisasi ?? '—', pct == null ? '—' : Math.round(pct * 100) / 100]);
+    // "—" teks dirata kanan seperti angka di kolomnya (dulu menempel kiri).
+    [2, 3, 4].forEach(c => { baris.getCell(c).alignment = { horizontal: 'right' }; });
+    baris.getCell(4).numFmt = '0.00';
   });
   ws.getColumn(1).width = 25;
   ws.getColumn(2).width = 18;
   ws.getColumn(3).width = 14;
   ws.getColumn(4).width = 14;
-
-  const buf = await wb.xlsx.writeBuffer();
-  saveBlob(new Blob([buf]), `rencana-aksi-${row.level}-${row.tahun}-detail.xlsx`);
+  return wb;
 }
 
 // ─── Matriks Bulanan: export template + parse import ────────────────────────
@@ -426,6 +441,11 @@ const MATRIX_HEAD = ['ID', 'Program', 'Kegiatan', 'Sub Kegiatan', 'Indikator', '
   'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
 export async function exportMatrixBulananXlsx(mentah: RaRow[], tahun: number) {
+  const buf = await (await buatWorkbookMatriks(mentah, tahun)).xlsx.writeBuffer();
+  saveBlob(new Blob([buf]), `rencana-aksi-${tahun}-realisasi-bulanan.xlsx`);
+}
+
+export async function buatWorkbookMatriks(mentah: RaRow[], tahun: number) {
   // Diimpor balik lewat kolom ID, jadi nama boleh ditulis bersih.
   const rows = mentah.map(barisBersih);
   const ExcelJS = await loadXlsx();
@@ -449,8 +469,7 @@ export async function exportMatrixBulananXlsx(mentah: RaRow[], tahun: number) {
   ws.getColumn(5).width = 45;
   ws.getColumn(6).width = 10;
   for (let c = 7; c <= 18; c++) ws.getColumn(c).width = 8;
-  const buf = await wb.xlsx.writeBuffer();
-  saveBlob(new Blob([buf]), `rencana-aksi-${tahun}-realisasi-bulanan.xlsx`);
+  return wb;
 }
 
 /**

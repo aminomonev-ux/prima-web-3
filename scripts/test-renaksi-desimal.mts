@@ -192,7 +192,8 @@ cek('tabel Cetak: TW berkoma', /\{tulisRealisasi\(r\[`q\$\{q\}_realisasi`\]\)\}/
 cek('tabel Cetak: realisasi akhir berkoma', /\{tulisRealisasi\(realAkhir\)\}/.test(cetak))
 
 const ekspor = kode(baca(F_EKSPOR))
-cek('PDF rekap berkoma', /`\$\{tulisDesimal\(r\.q1_realisasi\)\}\/\$\{tulisDesimal\(r\.q1_target\)\}`/.test(ekspor))
+// Realisasi lewat tulisRealisasi: belum diisi "—", bukan "0" (tulisDesimal(null) = 0).
+cek('PDF rekap berkoma', /`\$\{tulisRealisasi\(r\.q1_realisasi\)\}\/\$\{tulisDesimal\(r\.q1_target\)\}`/.test(ekspor))
 cek('PDF detail berkoma', /\['Realisasi Akhir Tahun', tulisRealisasi\(realAkhir\)\]/.test(ekspor))
 cek('Excel TETAP angka, bukan teks',
   /q1r: r\.q1_realisasi \?\? '—',/.test(ekspor),

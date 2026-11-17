@@ -12,7 +12,8 @@ import { readFileSync } from 'node:fs'
 import type { RaRow } from '../app/(dashboard)/rencana-aksi/_lib/types'
 import { capaianTahunan, capaianRpjmd, capaianTriwulan, hitungCapaianPct, realisasiAkhirTahun } from '../app/(dashboard)/rencana-aksi/_lib/types'
 import { cetakHeader, lebarKolomPdf, tulisSelCetak, tulisCapaian, DEFAULT_CETAK_FILTER, type CetakFilter } from '../app/(dashboard)/rencana-aksi/_lib/cetak-filter'
-import { buatWorkbookGabungan, buildCombinedPdf } from '../app/(dashboard)/rencana-aksi/_lib/exports'
+import { buatWorkbookGabungan, buildCombinedPdf, buatWorkbookIndikator, buatPdfIndikator, buatPdfList } from '../app/(dashboard)/rencana-aksi/_lib/exports'
+import { sanitizeCell } from '../lib/shared/excel-export'
 import { tulisPersen } from '../lib/shared/desimal'
 
 let lulus = 0
@@ -88,9 +89,10 @@ ok('A6 isi kolom = capaianTahunan baris sumbernya',
 console.log('\nB. Rumus capaian')
 ok('B1 Akumulatif 85 dari 100 = 85', capaianTahunan(sasaran) === 85)
 ok('B2 Progres Negatif dibalik: 8 dari 10 = 120', capaianTahunan(program) === 120)
-ok('B3 target nol → 0 (seperti layar)', capaianTahunan(tujuan) === 0)
+ok('B3 target nol → null (tak ada pembagi, bukan 0% merah)', capaianTahunan(tujuan) === null && capaianTriwulan(sasaran, 1) === null)
 ok('B4 yang sudah berisi = hitungCapaianPct(target_tahunan, realisasi akhir, jenis)',
-  semua.filter(r => r !== pnKosong).every(r => capaianTahunan(r) === hitungCapaianPct(r.target_tahunan, realisasiAkhirTahun(r) ?? 0, r.jenis)))
+  semua.filter(r => r.target_tahunan > 0 && realisasiAkhirTahun(r) != null)
+    .every(r => capaianTahunan(r) === hitungCapaianPct(r.target_tahunan, realisasiAkhirTahun(r)!, r.jenis)))
 ok('B5 Progres Negatif belum diisi → null, bukan 200', capaianTahunan(pnKosong) === null,
   String(capaianTahunan(pnKosong)))
 ok('B6 ...RPJMD-nya juga null', capaianRpjmd(pnKosong) === null)
@@ -98,7 +100,9 @@ ok('B7 nol SUNGGUHAN di realisasi bulanan → 200 (capaian terbaik)', capaianTah
   String(capaianTahunan(pnNolNyata)))
 ok('B8 bulanan ada tapi kosong semua → null (triwulan lama tidak dipakai, sama dgn realisasiAkhirTahun)',
   capaianTahunan(pnBulanKosong) === null)
-ok('B9 jenis lain yang belum diisi tetap ANGKA 0', capaianTahunan(akumKosong) === 0)
+ok('B9 jenis lain yang belum diisi juga null (realisasi "—" tak berdampingan capaian 0)',
+  capaianTahunan(akumKosong) === null && capaianTriwulan({ ...akumKosong, q2_target: 5 }, 2) === null)
+ok('B9b nol SUNGGUHAN Akumulatif tetap dihitung 0', capaianTriwulan({ ...akumNolNyata, q1_target: 5 }, 1) === 0)
 ok('B10 per triwulan: TW I berisi dihitung, TW II kosong → null',
   capaianTriwulan(pnSebagian, 1) === hitungCapaianPct(4, 3, 'Progres Negatif') && capaianTriwulan(pnSebagian, 2) === null)
 ok('B11 Progres Negatif yang berisi tetap dihitung setahun', capaianTahunan(pnSebagian) === hitungCapaianPct(4, 3, 'Progres Negatif'))
@@ -234,6 +238,31 @@ console.log('\nH. Lebar kolom PDF gabungan (kata tidak patah di tengah)')
   ok('H7 PDF sungguhan: tidak ada kata yang patah di tengah', patah === 0, `${patah} kata patah`)
   ok('H8 lebar kolom lewat lebarKolomPdf + minKata', /lebarKolomPdf\(hdr\.flat, .*, minKata\);/.test(ekspor)
     && /cellWidth: lebar\[i\]/.test(ekspor))
+}
+
+console.log('\nI. Unduhan per indikator & Data Entry (laporan pemakai 2026-11-17: "\'-", capaian 0 di samping "—")')
+{
+  // TW I kosong, TW II target 0 berisi 20, TW III 12 dari 8, TW IV kosong — persis tangkapan layar pemakai.
+  const r: RaRow = { ...dasar, id: 30, level: 'program', program: 'Program Uji', indikator: 'Cakupan', target_tahunan: 10,
+    q1_target: 5, q1_realisasi: null, q2_target: 0, q2_realisasi: 20, q3_target: 8, q3_realisasi: 12, q4_target: 10, q4_realisasi: null }
+  const wb = await buatWorkbookIndikator(r)
+  const sel = new Map<string, unknown[]>()
+  wb.worksheets[0].eachRow(b => { const v = (b.values as unknown[]).slice(1); sel.set(String(v[0]), v) })
+  ok('I1 Excel: realisasi kosong → capaian "—", bukan 0', JSON.stringify(sel.get('TW 1')) === JSON.stringify(['TW 1', 5, '—', '—']), JSON.stringify(sel.get('TW 1')))
+  ok('I2 Excel: target 0 → capaian "—", bukan 0', sel.get('TW 2')?.[3] === '—', JSON.stringify(sel.get('TW 2')))
+  ok('I3 Excel: yang bisa dihitung tetap ANGKA 150', sel.get('TW 3')?.[3] === 150, JSON.stringify(sel.get('TW 3')))
+  ok('I4 Excel: Kegiatan kosong "—", tanpa petik', sel.get('Kegiatan')?.[1] === '—', JSON.stringify(sel.get('Kegiatan')))
+  const isiPdf = (d: unknown) => (d as { lastAutoTable: { body: { cells: Record<string, { raw: unknown }> }[] } }).lastAutoTable.body
+    .map(b => Object.values(b.cells).map(c => String(c.raw)))
+  const tw = isiPdf(await buatPdfIndikator(r))
+  ok('I5 PDF: kolom capaian = Excel ("—", "—", angka berkoma, "—")',
+    JSON.stringify(tw.map(b => b[3])) === JSON.stringify(['—', '—', '150,00%', '—']), JSON.stringify(tw.map(b => b[3])))
+  const ringkas = isiPdf(await buatPdfIndikator({ ...r, q1_realisasi: 2.5 }))
+  ok('I5b PDF: capaian tahunan berkoma, bukan "…%" bertitik', !ringkas.flat().some(t => /\d\.\d+%/.test(t)), JSON.stringify(ringkas.flat().filter(t => t.includes('%'))))
+  const daftar = isiPdf(await buatPdfList([r], 2099, 'program'))[0]
+  ok('I6 PDF Data Entry: realisasi kosong "—/5", bukan "0/5"', daftar[10] === '—/5' && daftar[11] === '20/0', JSON.stringify(daftar.slice(10)))
+  ok('I7 sanitizeCell: tanda kosong "-" tidak diberi petik', sanitizeCell('-') === '-' && sanitizeCell(' -- ') === ' -- ')
+  ok('I8 ...rumus tetap dijinakkan', sanitizeCell('-1+2') === "'-1+2" && sanitizeCell('=SUM(A1)') === "'=SUM(A1)")
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)

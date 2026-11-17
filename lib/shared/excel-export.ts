@@ -29,8 +29,10 @@ const FORMULA_LEAD_RE = /^[=+\-@\t\r]/;
  * boolean, dan Date dibiarkan (bukan vektor injection).
  */
 export function sanitizeCell<T>(val: T): T | string {
-  return typeof val === 'string' && FORMULA_LEAD_RE.test(val) ? `'${val}` : val;
+  // Tanda kosong "-" (atau "--") bukan rumus; diberi petik ia tampil "'-" di sel (laporan pemakai 2026-11-17).
+  return typeof val === 'string' && FORMULA_LEAD_RE.test(val) && !TANDA_KOSONG_RE.test(val) ? `'${val}` : val;
 }
+const TANDA_KOSONG_RE = /^\s*-+\s*$/;
 
 export type ColWidth = { wch: number };
 
