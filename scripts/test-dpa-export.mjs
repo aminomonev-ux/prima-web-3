@@ -61,11 +61,12 @@ const baris = (o) => ({
   ...o,
 });
 
-// Pohon uji — sengaja memuat kasus sulit. Nomor baris Excel = 7 + urutan:
-//  r2 (b.8)  anaknya BERDERET  b.9–10        → SUM(F9:F10)
-//  r5 (b.11) anaknya TERPENCAR b.12 & b.14   → F12+F14
-//  r6 (b.12) beranak TUNGGAL   b.13          → SUM(F13:F13)  (pola formulir manual)
-//  r8 (b.14) vol pecahan 1,5                 → pembulatan harus terlihat
+// Pohon uji — sengaja memuat kasus sulit. Nomor baris Excel = 9 + urutan
+// (kop 1–6, kepala 7, nomor kolom 8 — CONCEPT-blud-format-unduhan §5a):
+//  r2 (b.10) anaknya BERDERET  b.11–12       → SUM(F11:F12)
+//  r5 (b.13) anaknya TERPENCAR b.14 & b.16   → F14+F16
+//  r6 (b.14) beranak TUNGGAL   b.15          → SUM(F15:F15)  (pola formulir manual)
+//  r8 (b.16) vol pecahan 1,5                 → pembulatan harus terlihat
 const rowsDpa = [
   baris({ row_id: 'r1', parent_id: null, urutan: 0, tipe_baris: 'GRANDMASTER', kode_rekening: '5.X', uraian: 'Belanja Daerah', jumlah: 6_600_004 }),
   baris({ row_id: 'r2', parent_id: 'r1', urutan: 1, tipe_baris: 'MASTER', kode_rekening: '5.1', uraian: 'Belanja Operasi', jumlah: 3_000_000, anggaran_key: 'AK-2' }),
@@ -90,39 +91,40 @@ async function ujiDpa() {
 
   // Header + kolom tersembunyi
   const judul = [];
-  for (let c = 1; c <= 10; c++) judul.push(ws.getRow(6).getCell(c).value);
+  for (let c = 1; c <= 10; c++) judul.push(ws.getRow(7).getCell(c).value);
   cek('header 10 kolom', judul[0] === 'Kode Rekening' && judul[5] === 'Jumlah', judul.join('|'));
   cek('kolom Level ada', judul[8] === 'Level');
   cek('kolom Jangkar ada', judul[9] === 'Jangkar');
   cek('kolom Level tersembunyi', ws.getColumn(9).hidden === true);
   cek('kolom Jangkar tersembunyi', ws.getColumn(10).hidden === true);
-  cek('panel dibekukan di header', ws.views?.[0]?.ySplit === 6, JSON.stringify(ws.views));
+  cek('nomor kolom (1)…(8) di baris 8', ws.getCell('A8').value === '(1)' && ws.getCell('H8').value === '(8)' && !ws.getCell('I8').value);
+  cek('panel dibekukan sampai nomor kolom', ws.views?.[0]?.ySplit === 8, JSON.stringify(ws.views));
 
-  // Baris data mulai 7, urut sesuai `urutan`
-  cek('baris 7 = akar', ws.getCell('A7').value === '5.X');
-  cek('Level akar', ws.getCell('I7').value === 'Level 1');
-  cek('Level L8.1', ws.getCell('I13').value === 'Level 8.1', String(ws.getCell('I13').value));
-  cek('Jangkar ikut turun', ws.getCell('J9').value === 'AK-3', String(ws.getCell('J9').value));
+  // Baris data mulai 9 (kop 1–6, kepala 7, nomor kolom 8), urut sesuai `urutan`
+  cek('baris 9 = akar', ws.getCell('A9').value === '5.X');
+  cek('Level akar', ws.getCell('I9').value === 'Level 1');
+  cek('Level L8.1', ws.getCell('I15').value === 'Level 8.1', String(ws.getCell('I15').value));
+  cek('Jangkar ikut turun', ws.getCell('J11').value === 'AK-3', String(ws.getCell('J11').value));
 
   // Rumus daun & induk
-  cek('daun pakai ROUND', rumus(nilaiSel(ws, 'F9')) === 'ROUND(C9*E9,0)', String(rumus(nilaiSel(ws, 'F9'))));
-  cek('induk anak berderet → SUM', rumus(nilaiSel(ws, 'F8')) === 'SUM(F9:F10)', String(rumus(nilaiSel(ws, 'F8'))));
-  cek('induk anak terpencar → penjumlahan', rumus(nilaiSel(ws, 'F11')) === 'F12+F14', String(rumus(nilaiSel(ws, 'F11'))));
-  cek('induk beranak tunggal → SUM sendiri', rumus(nilaiSel(ws, 'F12')) === 'SUM(F13:F13)', String(rumus(nilaiSel(ws, 'F12'))));
-  cek('akar menjumlah dua cabang', rumus(nilaiSel(ws, 'F7')) === 'F8+F11', String(rumus(nilaiSel(ws, 'F7'))));
+  cek('daun pakai ROUND', rumus(nilaiSel(ws, 'F11')) === 'ROUND(C11*E11,0)', String(rumus(nilaiSel(ws, 'F11'))));
+  cek('induk anak berderet → SUM', rumus(nilaiSel(ws, 'F10')) === 'SUM(F11:F12)', String(rumus(nilaiSel(ws, 'F10'))));
+  cek('induk anak terpencar → penjumlahan', rumus(nilaiSel(ws, 'F13')) === 'F14+F16', String(rumus(nilaiSel(ws, 'F13'))));
+  cek('induk beranak tunggal → SUM sendiri', rumus(nilaiSel(ws, 'F14')) === 'SUM(F15:F15)', String(rumus(nilaiSel(ws, 'F14'))));
+  cek('akar menjumlah dua cabang', rumus(nilaiSel(ws, 'F9')) === 'F10+F13', String(rumus(nilaiSel(ws, 'F9'))));
 
   // Hasil ikut tersimpan
-  cek('hasil tersimpan di sel rumus', hasil(nilaiSel(ws, 'F7')) === 6_600_004, String(hasil(nilaiSel(ws, 'F7'))));
+  cek('hasil tersimpan di sel rumus', hasil(nilaiSel(ws, 'F9')) === 6_600_004, String(hasil(nilaiSel(ws, 'F9'))));
 
   // Aritmetika: rumus dievaluasi ulang dari hasil yang dibawa harus cocok
   const f = (a) => Number(hasil(nilaiSel(ws, a)) ?? 0);
-  cek('SUM(F9:F10) konsisten', f('F9') + f('F10') === f('F8'), `${f('F9')}+${f('F10')}≠${f('F8')}`);
-  cek('F12+F14 konsisten', f('F12') + f('F14') === f('F11'), `${f('F12')}+${f('F14')}≠${f('F11')}`);
-  cek('akar konsisten', f('F8') + f('F11') === f('F7'));
+  cek('SUM(F11:F12) konsisten', f('F11') + f('F12') === f('F10'), `${f('F11')}+${f('F12')}≠${f('F10')}`);
+  cek('F14+F16 konsisten', f('F14') + f('F16') === f('F13'), `${f('F14')}+${f('F16')}≠${f('F13')}`);
+  cek('akar konsisten', f('F10') + f('F13') === f('F9'));
 
   // Pembulatan: 1,5 × 1.200.001 = 1.800.001,5 → Math.round = 1.800.002
-  cek('vol pecahan dibulatkan', f('F14') === 1_800_002, String(f('F14')));
-  cek('ROUND dipakai, bukan perkalian polos', rumus(nilaiSel(ws, 'F14')) === 'ROUND(C14*E14,0)', String(rumus(nilaiSel(ws, 'F14'))));
+  cek('vol pecahan dibulatkan', f('F16') === 1_800_002, String(f('F16')));
+  cek('ROUND dipakai, bukan perkalian polos', rumus(nilaiSel(ws, 'F16')) === 'ROUND(C16*E16,0)', String(rumus(nilaiSel(ws, 'F16'))));
 
   // Blok tanda tangan
   const semuaTeks = [];
@@ -138,17 +140,17 @@ async function ujiDpa() {
   cek('blok kepala Program tidak dicetak', !/Sub Kegiatan|PROGRAM PENUNJANG/i.test(teks));
 
   // Vol dibiarkan General — `#,##0.##` bikin angka bulat tampil "1," di Excel
-  cek('vol tanpa format desimal', !ws.getCell('C10').numFmt, String(ws.getCell('C10').numFmt));
-  cek('harga tetap berformat ribuan', ws.getCell('E10').numFmt === '#,##0', String(ws.getCell('E10').numFmt));
-  cek('jumlah tetap berformat ribuan', ws.getCell('F10').numFmt === '#,##0', String(ws.getCell('F10').numFmt));
+  cek('vol tanpa format desimal', !ws.getCell('C12').numFmt, String(ws.getCell('C12').numFmt));
+  cek('harga tetap berformat ribuan', ws.getCell('E12').numFmt === '#,##0;(#,##0);"-"', String(ws.getCell('E12').numFmt));
+  cek('jumlah tetap berformat ribuan', ws.getCell('F12').numFmt === '#,##0;(#,##0);"-"', String(ws.getCell('F12').numFmt));
 
   // Round-trip melalui berkas nyata (bukan hanya objek di memori)
   const buf = await wb.xlsx.writeBuffer();
   const wb2 = new ExcelJS.Workbook();
   await wb2.xlsx.load(buf);
   const ws2 = wb2.worksheets[0];
-  cek('rumus bertahan setelah ditulis-baca', rumus(ws2.getCell('F8').value) === 'SUM(F9:F10)', String(rumus(ws2.getCell('F8').value)));
-  cek('Level bertahan setelah ditulis-baca', ws2.getCell('I7').value === 'Level 1');
+  cek('rumus bertahan setelah ditulis-baca', rumus(ws2.getCell('F10').value) === 'SUM(F11:F12)', String(rumus(ws2.getCell('F10').value)));
+  cek('Level bertahan setelah ditulis-baca', ws2.getCell('I9').value === 'Level 1');
   cek('kolom tersembunyi bertahan', ws2.getColumn(9).hidden === true);
 }
 
@@ -167,23 +169,23 @@ async function ujiPergeseran() {
   // bertambah kolom (Bertambah/Berkurang L86, PJ/Keterangan) dan asersi bernomor tetap
   // basi diam-diam tiap kali — U2, audit 2026-09-29. Pola `test-pergeseran-pj.mts`.
   const header = [];
-  ws.getRow(6).eachCell({ includeEmpty: false }, (c, n) => { header[n] = c.value; });
+  ws.getRow(7).eachCell({ includeEmpty: false }, (c, n) => { header[n] = c.value; });
   const huruf = (nama) => { const n = header.indexOf(nama); return n > 0 ? String.fromCharCode(64 + n) : null; };
   const [kJml, kPrg, kSel] = [huruf('Jumlah'), huruf('Pergeseran'), huruf('Selisih')];
   cek('pergeseran: Jangkar kolom paling kanan', header.at(-1) === 'Jangkar', String(header.at(-1)));
   cek('pergeseran: Level tersembunyi', header.indexOf('Level') > 0 && ws.getColumn(header.indexOf('Level')).hidden === true);
   cek('pergeseran: Jangkar tersembunyi', ws.getColumn(header.length - 1).hidden === true);
-  cek('pergeseran: kolom Jumlah berumus', rumus(nilaiSel(ws, `${kJml}8`)) === `SUM(${kJml}9:${kJml}10)`, String(rumus(nilaiSel(ws, `${kJml}8`))));
-  cek('pergeseran: kolom Pergeseran berumus', rumus(nilaiSel(ws, `${kPrg}8`)) === `SUM(${kPrg}9:${kPrg}10)`, String(rumus(nilaiSel(ws, `${kPrg}8`))));
-  cek('pergeseran: daun pakai kolom Vol P/Harga P', rumus(nilaiSel(ws, `${kPrg}9`)) === `ROUND(${huruf('Vol P')}9*${huruf('Harga P')}9,0)`, String(rumus(nilaiSel(ws, `${kPrg}9`))));
-  cek('pergeseran: selisih = pergeseran − jumlah', rumus(nilaiSel(ws, `${kSel}9`)) === `${kPrg}9-${kJml}9`, String(rumus(nilaiSel(ws, `${kSel}9`))));
+  cek('pergeseran: kolom Jumlah berumus', rumus(nilaiSel(ws, `${kJml}10`)) === `SUM(${kJml}11:${kJml}12)`, String(rumus(nilaiSel(ws, `${kJml}10`))));
+  cek('pergeseran: kolom Pergeseran berumus', rumus(nilaiSel(ws, `${kPrg}10`)) === `SUM(${kPrg}11:${kPrg}12)`, String(rumus(nilaiSel(ws, `${kPrg}10`))));
+  cek('pergeseran: daun pakai kolom Vol P/Harga P', rumus(nilaiSel(ws, `${kPrg}11`)) === `ROUND(${huruf('Vol P')}11*${huruf('Harga P')}11,0)`, String(rumus(nilaiSel(ws, `${kPrg}11`))));
+  cek('pergeseran: selisih = pergeseran − jumlah', rumus(nilaiSel(ws, `${kSel}11`)) === `${kPrg}11-${kJml}11`, String(rumus(nilaiSel(ws, `${kSel}11`))));
 
   const teks = [];
   ws.eachRow({ includeEmpty: false }, (r) => r.eachCell({ includeEmpty: false }, (c) => {
     if (typeof c.value === 'string') teks.push(c.value);
   }));
   cek('pergeseran: Direktur kosong berkerangka', teks.join('\n').includes('NIP. ..............................'));
-  cek('pergeseran: vol P tanpa format desimal', !ws.getCell(`${huruf('Vol P')}9`).numFmt, String(ws.getCell(`${huruf('Vol P')}9`).numFmt));
+  cek('pergeseran: vol P tanpa format desimal', !ws.getCell(`${huruf('Vol P')}11`).numFmt, String(ws.getCell(`${huruf('Vol P')}11`).numFmt));
 }
 
 async function ujiKosong() {

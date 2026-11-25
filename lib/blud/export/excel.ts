@@ -4,10 +4,12 @@
 // PERF-C3 anti-pattern compliance: dynamic import dari client (cetak-client.tsx).
 
 import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-export'
-import type ExcelJS from 'exceljs'
 import type { ExportRow } from '@/lib/blud/cetak-data'
 import { arahDelta, HEX_NAIK, HEX_TURUN } from '@/lib/blud/export/warna-delta'
 import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
+import {
+  BARIS_KEPALA, kopExcel, kepalaExcel, nomorKolomExcel, hiasSelData, aturCetakExcel,
+} from '@/lib/blud/export/gaya-dokumen'
 
 /** Warna teks sel delta dalam bentuk ARGB exceljs, atau `null` kalau tak berwarna. */
 function warnaDelta(namaKolom: string | undefined, nilai: unknown): string | null {
@@ -40,6 +42,8 @@ export interface ExportExcelArgs {
    */
   columns?: readonly string[]
   title?:   string
+  /** Tahun anggaran untuk kop. */
+  tahun?:   number
 }
 
 export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
@@ -57,54 +61,35 @@ export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
 
   const wb = new ExcelJSLib.Workbook()
   const ws = wb.addWorksheet(sheetName)
+  const kol = columns.length
 
-  // Catatan cakupan mendorong kepala tabel turun satu baris — ditulis di ATAS,
-  // bukan di bawah, karena yang dibaca orang pertama kali baris paling atas.
-  if (catatan) {
-    ws.addRow([catatan])
-    ws.mergeCells(1, 1, 1, columns.length)
-    const c1 = ws.getRow(1).getCell(1)
-    c1.font = { bold: true, size: 10, color: { argb: 'FFB45309' } }
-    c1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
-    c1.alignment = { horizontal: 'left', vertical: 'middle' }
-  }
+  // Kop gaya dokumen (CONCEPT-blud-format-unduhan §5a). Catatan cakupan ditulis di baris kop
+  // terakhir (5), tepat di atas tabel — yang dibaca orang sebelum angkanya.
+  kopExcel(ws, kol, title.toUpperCase(), args.tahun ?? null, catatan || undefined, sanitizeCell)
+  kepalaExcel(ws, BARIS_KEPALA, columns)
+  nomorKolomExcel(ws, BARIS_KEPALA + 1, kol)
 
-  // Header row
-  const barisHeader = catatan ? 2 : 1
-  ws.addRow(columns)
-  for (let c = 0; c < columns.length; c++) {
-    const cell = ws.getRow(barisHeader).getCell(c + 1)
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
-    cell.alignment = { horizontal: 'center', vertical: 'middle' }
-    cell.border = borderAll('FFFFFFFF')
-  }
+  // Kolom angka = yang ditandai buildMeta ATAU yang memang berisi angka — kepala tabel bisa
+  // datang dari pemanggil (args.columns), dan indeks buildMeta tidak dijamin sejajar dengannya.
+  const angka = new Set<number>(numberColIdx)
+  for (let c = 0; c < kol; c++) if (exportRows.some(r => typeof r[c] === 'number')) angka.add(c)
+  const volume = (c: number) => /^vol( p)?$/i.test(columns[c] ?? '')
 
-  // Data rows (row 2+)
-  exportRows.forEach((rowData, rIdx) => {
-    const r = ws.addRow(rowData.map(c => sanitizeCell(c ?? '')))
-    for (let c = 0; c < columns.length; c++) {
+  exportRows.forEach((rowData, i) => {
+    const r = ws.getRow(BARIS_KEPALA + 2 + i)
+    r.values = rowData.map(c => sanitizeCell(c ?? ''))
+    for (let c = 0; c < kol; c++) {
       const cell = r.getCell(c + 1)
-      const isNumCol = numberColIdx.has(c)
+      hiasSelData(cell, { angka: angka.has(c), volume: volume(c) })
       const argb = warnaDelta(columns[c], rowData[c])
-      cell.font = { size: 10, ...(argb ? { color: { argb } } : {}) }
-      cell.alignment = isNumCol
-        ? { horizontal: 'right' }
-        : { horizontal: 'left', vertical: 'top', wrapText: true }
-      if (isNumCol) cell.numFmt = '#,##0'
-      cell.border = borderAll('FFBFBFBF')
+      if (argb) cell.font = { ...cell.font, bold: true, color: { argb } }
     }
-    void rIdx
   })
 
-  // Column widths
-  ws.columns = columns.map((col, i): Partial<ExcelJS.Column> => {
-    void col
-    if (i === 0) return { width: 14 }
-    if (i === 1) return { width: 40 }
-    if (numberColIdx.has(i)) return { width: 14 }
-    return { width: 12 }
+  columns.forEach((_, i) => {
+    ws.getColumn(i + 1).width = i === 0 ? 18 : i === 1 ? 46 : angka.has(i) ? 16 : 14
   })
+  aturCetakExcel(ws, { mendatar: kol > 4, kepalaAwal: BARIS_KEPALA, kepalaAkhir: BARIS_KEPALA + 1 })
 
   const tag = (versi || tanggal || tanggalHariIniWIB()).replace(/-/g, '')
   const filename = `${slug(title)}_${tag}.xlsx`
@@ -155,11 +140,6 @@ function buildMeta(menu: string, view: string, versi: string | null, tanggal: st
     columns: ['Kode', 'Uraian'],
     numberColIdx: new Set<number>(),
   }
-}
-
-function borderAll(argb: string): Partial<ExcelJS.Borders> {
-  const side = { style: 'thin' as const, color: { argb } }
-  return { top: side, bottom: side, left: side, right: side }
 }
 
 function slug(s: string): string {

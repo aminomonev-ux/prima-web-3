@@ -9,6 +9,7 @@
 import type { ExportRow } from '@/lib/blud/cetak-data'
 import { arahDelta, RGB_NAIK, RGB_TURUN } from '@/lib/blud/export/warna-delta'
 import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
+import { kopPdf, kakiPdf, opsiTabelPdf, gayaKepalaPdf, type DokPdf, type SelAutoTable } from '@/lib/blud/export/gaya-dokumen'
 
 export interface ExportPdfArgs {
   menu:    string
@@ -32,6 +33,8 @@ export interface ExportPdfArgs {
    */
   columns?: readonly string[]
   title?:   string
+  /** Tahun anggaran untuk kop. */
+  tahun?:   number
 }
 
 export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
@@ -53,55 +56,30 @@ export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
   const title    = args.title ?? cadangan.title
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const dok = doc as unknown as DokPdf
 
-  // Title
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text(title, doc.internal.pageSize.getWidth() / 2, 14, { align: 'center' })
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.text('RSJD Dr. Amino Gondohutomo · PRIMA BLUD', doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' })
+  // Kop gaya dokumen (CONCEPT-blud-format-unduhan §5a). Catatan cakupan — kalau daftarnya
+  // disaring — ditulis di baris kop terakhir, tepat di atas tabel.
+  const startY = kopPdf(dok, title.toUpperCase(), args.tahun ?? null, catatan || undefined)
 
-  // Catatan cakupan — hanya muncul kalau daftarnya memang disaring.
-  if (catatan) {
-    doc.setFontSize(8.5)
-    doc.setTextColor(180, 83, 9)
-    doc.text(catatan, doc.internal.pageSize.getWidth() / 2, 25, { align: 'center' })
-    doc.setTextColor(0)
-  }
-
-  // Tabel
   autoTable(doc, {
-    head: [columns],
+    ...(opsiTabelPdf(columns) as object),
     body: exportRows.map(r => r.map(c => formatCell(c))),
-    startY: catatan ? 30 : 26,
-    styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
-    headStyles: { fillColor: [24, 85, 187], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 10, right: 10 },
+    startY,
+    margin: { left: 10, right: 10, bottom: 14 },
     // Hijau/merah kolom delta, sepadan pratinjau di layar. Nilainya dibaca dari
     // `exportRows` (angka aslinya), bukan dari sel yang sudah jadi teks berformat.
     didParseCell: (data) => {
-      if (data.section !== 'body') return
-      const arah = arahDelta(columns[data.column.index] ?? '', exportRows[data.row.index]?.[data.column.index])
+      if (gayaKepalaPdf(data as unknown as SelAutoTable)) return
+      const v = exportRows[data.row.index]?.[data.column.index]
+      if (typeof v === 'number') data.cell.styles.halign = 'right'
+      const arah = arahDelta(columns[data.column.index] ?? '', v)
       if (!arah) return
       data.cell.styles.textColor = arah === 'naik' ? RGB_NAIK : RGB_TURUN
       data.cell.styles.fontStyle = 'bold'
     },
-    didDrawPage: (data) => {
-      // Footer: page number
-      const pageCount = doc.getNumberOfPages()
-      const pageH = doc.internal.pageSize.getHeight()
-      doc.setFontSize(8)
-      doc.setTextColor(120)
-      doc.text(
-        `Halaman ${data.pageNumber} dari ${pageCount}`,
-        doc.internal.pageSize.getWidth() / 2,
-        pageH - 6,
-        { align: 'center' },
-      )
-    },
   })
+  kakiPdf(dok)
 
   // Filename
   const tag = (versi || tanggal || tanggalHariIniWIB()).replace(/-/g, '')

@@ -24,15 +24,17 @@ import { totalMutasi, type MutasiInput } from '@/lib/blud/mutasi'
 import { HEX_NAIK, HEX_TURUN, KOLOM_SELISIH_PERUBAHAN } from '@/lib/blud/export/warna-delta'
 import { tanggalHariIniWIB, formatTanggalId } from '@/lib/blud/tanggal'
 import { teksPenandaUnduhan } from '@/lib/blud/impor-balik'
+import {
+  BARIS_KEPALA, WARNA, kopExcel, kepalaExcel, gayaKepalaExcel, nomorKolomExcel, hiasSelData,
+  warnaiTingkatExcel, hiasBarisTotalExcel, catatanExcel, tandaTanganExcel, aturCetakExcel, tingkatBaris,
+} from '@/lib/blud/export/gaya-dokumen'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
-const INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO'
-const PROVINSI = 'PROVINSI JAWA TENGAH'
-const RUPIAH = '#,##0'
-const GARIS_ISI = '..............................'
-
-const BARIS_HEADER = 6
-const BARIS_DATA_1 = 7
+// Gaya "Resmi berwarna" (CONCEPT-blud-format-unduhan §5a): kop 1–5, garis amber 6,
+// kepala 7, nomor kolom `(1)(2)…` 8, data mulai 9. Rumus tidak memakai nomor ini
+// secara mati — `siapkanPohon(rows, barisAwal)` menghitung letak tiap baris darinya.
+const BARIS_HEADER = BARIS_KEPALA
+const BARIS_DATA_1 = BARIS_HEADER + 2
 
 const WARNA_NAIK = `FF${HEX_NAIK}`
 const WARNA_TURUN = `FF${HEX_TURUN}`
@@ -43,7 +45,7 @@ export interface PejabatDokumen {
 }
 
 /** Bentuk minimum yang dibutuhkan pembangun pohon — dipenuhi DpaBaris & PergeseranBaris. */
-interface BarisPohon {
+export interface BarisPohon {
   row_id: string
   parent_id: string | null
   urutan: number
@@ -57,7 +59,7 @@ interface BarisPohon {
   jumlah: number
 }
 
-interface Pohon<T extends BarisPohon> {
+export interface Pohon<T extends BarisPohon> {
   urut: T[]
   anak: Map<string, T[]>
   barisExcel: Map<string, number>
@@ -65,7 +67,7 @@ interface Pohon<T extends BarisPohon> {
 }
 
 /** `barisAwal` — baris Excel data pertama; format Lengkap berkepala dua tingkat. */
-function siapkanPohon<T extends BarisPohon>(rows: T[], barisAwal = BARIS_DATA_1): Pohon<T> {
+export function siapkanPohon<T extends BarisPohon>(rows: T[], barisAwal = BARIS_DATA_1): Pohon<T> {
   const urut = [...rows].sort((a, b) => a.urutan - b.urutan)
 
   const anak = new Map<string, T[]>()
@@ -150,49 +152,23 @@ function selNilai<T extends BarisPohon>(
 
 // ─── Penata lembar ───────────────────────────────────────────────────────────
 
-function garisSemua(argb = 'FFBFBFBF'): Partial<ExcelJS.Borders> {
-  const sisi = { style: 'thin' as const, color: { argb } }
-  return { top: sisi, left: sisi, bottom: sisi, right: sisi }
-}
-
 /**
- * `penanda` (baris 5, yang dulu kosong) — "DPA PERUBAHAN KE-n · versi …" atau acuan
- * pergeseran. Untuk DPA ia juga PENANDA yang dibaca Impor (konsep Perubahan §11.1):
- * Excel Perubahan Ringkas tidak punya beda kolom dengan DPA murni, jadi hanya kop
- * ini yang membedakannya.
+ * `penanda` (baris 5) — "DPA PERUBAHAN KE-n · versi …", acuan pergeseran, atau versi.
+ * Untuk DPA ia juga PENANDA yang dibaca Impor (konsep Perubahan §11.1): Excel
+ * Perubahan Ringkas tidak punya beda kolom dengan DPA murni, jadi hanya kop ini
+ * yang membedakannya.
  */
 function tulisJudul(ws: ExcelJS.Worksheet, kolTerakhir: number, judul: string, tahun: number, penanda?: string): void {
-  const baris = [judul, 'BADAN LAYANAN UMUM DAERAH', `${INSTANSI} ${PROVINSI}`, `TAHUN ANGGARAN ${tahun}`]
-  if (penanda) baris.push(penanda)
-  baris.forEach((teks, i) => {
-    const r = ws.getRow(i + 1)
-    r.getCell(1).value = sanitizeCell(teks)
-    ws.mergeCells(i + 1, 1, i + 1, kolTerakhir)
-    r.getCell(1).font = { bold: true, size: i === 0 ? 13 : 11 }
-    r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-  })
+  kopExcel(ws, kolTerakhir, judul, tahun, penanda, sanitizeCell)
 }
 
-function tulisHeader(ws: ExcelJS.Worksheet, judulKolom: string[]): void {
-  const r = ws.getRow(BARIS_HEADER)
-  judulKolom.forEach((teks, i) => {
-    const sel = r.getCell(i + 1)
-    sel.value = teks
-    sel.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 }
-    sel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
-    sel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
-    sel.border = garisSemua('FFFFFFFF')
-  })
-  r.height = 28
+/** Kepala satu baris + baris nomor kolom `(1)(2)…` (yang dilewati Impor). */
+function tulisHeader(ws: ExcelJS.Worksheet, judulKolom: string[], kolTampak: number): void {
+  kepalaExcel(ws, BARIS_HEADER, judulKolom)
+  nomorKolomExcel(ws, BARIS_HEADER + 1, kolTampak)
 }
 
-/**
- * Keputusan pengguna 2026-08-05: hanya tanda tangan Direktur. Blok Dewan
- * Pengawas TIDAK dicetak — formulir kerja yang dipakai sehari-hari memang tidak
- * memuatnya, dan kerangka kosong yang tidak pernah diisi cuma jadi sampah.
- * Nama & NIP Direktur diambil dari `blud_pejabat`; kalau tidak tersedia,
- * barisnya ikut dicetak bergaris untuk diisi tangan.
- */
+/** Keputusan pengguna 2026-08-05: hanya tanda tangan Direktur (`blud_pejabat`). */
 function tulisTandaTangan(
   ws: ExcelJS.Worksheet,
   mulai: number,
@@ -200,22 +176,36 @@ function tulisTandaTangan(
   kolTerakhir: number,
   direktur: PejabatDokumen | null,
 ): void {
-  const tulis = (baris: number, teks: string, tebal = false) => {
-    const sel = ws.getRow(baris).getCell(kolAwal)
-    sel.value = sanitizeCell(teks)
-    ws.mergeCells(baris, kolAwal, baris, kolTerakhir)
-    sel.font = { size: 10, bold: tebal }
-    sel.alignment = { horizontal: 'center' }
-  }
-
-  tulis(mulai, `Semarang, ${GARIS_ISI}`)
-  tulis(mulai + 1, 'Direktur')
-  tulis(mulai + 2, INSTANSI, true)
-  tulis(mulai + 3, PROVINSI, true)
-  // mulai+4 … +6 dibiarkan kosong sebagai ruang tanda tangan basah.
-  tulis(mulai + 7, direktur?.nama?.trim() || GARIS_ISI, true)
-  tulis(mulai + 8, direktur?.nip?.trim() ? `NIP. ${direktur.nip.trim()}` : `NIP. ${GARIS_ISI}`)
+  tandaTanganExcel(ws, mulai, kolAwal, kolTerakhir, direktur, sanitizeCell)
 }
+
+/**
+ * Baris JUMLAH penutup: rumus atas baris AKAR saja (anak sudah tergulung di induknya).
+ * Impor melewatinya (`barisJumlahPenutup` di import-dpa.ts) — kalau tidak, ia terbaca
+ * sebagai akar tambahan dan totalnya dobel.
+ */
+function tulisBarisJumlah<T extends BarisPohon>(
+  ws: ExcelJS.Worksheet,
+  nomor: number,
+  pohon: Pohon<T>,
+  kolTampak: number,
+  label: string,
+  kolom: Array<{ kol: number; huruf: string; nilai: number }>,
+): void {
+  const akar = pohon.urut.filter(r => (pohon.kedalaman.get(r.row_id) ?? 0) === 0)
+  const barisAkar = akar.map(r => pohon.barisExcel.get(r.row_id)).filter((n): n is number => n != null)
+  const baris = ws.getRow(nomor)
+  baris.getCell(2).value = label
+  for (const k of kolom) {
+    baris.getCell(k.kol).value = barisAkar.length
+      ? { formula: rumusAgregat(k.huruf, barisAkar), result: k.nilai }
+      : k.nilai
+  }
+  hiasBarisTotalExcel(baris, kolTampak, kolom.map(k => k.kol))
+}
+
+const totalAkar = <T extends BarisPohon>(pohon: Pohon<T>, nilai: (r: T) => number): number =>
+  pohon.urut.filter(r => (pohon.kedalaman.get(r.row_id) ?? 0) === 0).reduce((s, r) => s + (Number(nilai(r)) || 0), 0)
 
 /**
  * Dua kolom cadangan di belakang yang disembunyikan dari mata pembaca dokumen,
@@ -241,11 +231,11 @@ function selesaikanLembar(
   ws: ExcelJS.Worksheet,
   lebar: number[],
   kolom: readonly string[],
-  barisBeku = BARIS_HEADER,
+  barisBeku = BARIS_HEADER + 1,
 ): void {
   lebar.forEach((w, i) => { ws.getColumn(i + 1).width = w })
   kolomCadangan(kolom).forEach(c => { ws.getColumn(c).hidden = true })
-  ws.views = [{ state: 'frozen', ySplit: barisBeku }]
+  aturCetakExcel(ws, { mendatar: true, kepalaAwal: BARIS_HEADER, kepalaAkhir: barisBeku })
 }
 
 function namaBerkas(awalan: string, tahun: number, versi: string | null): string {
@@ -307,14 +297,15 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
   const kolTampak = kolomTampak(KOLOM_DPA)
 
   // Format Ringkas DPA Perubahan = tata letak DPA murni + kop penanda (konsep §7).
-  tulisJudul(ws, kolTampak, 'RINCIAN BELANJA ANGGARAN', tahun, perubahanKe ? kopPerubahan(perubahanKe, versi) : undefined)
+  tulisJudul(ws, kolTampak, 'RINCIAN BELANJA ANGGARAN', tahun,
+    perubahanKe ? kopPerubahan(perubahanKe, versi) : versi ? `DPA BLUD versi ${formatTanggalId(versi)}` : undefined)
   // Di kolom Jangkar yang tersembunyi, di luar sel gabung kop — tidak tercetak, tapi
   // bertahan disunting Excel seperti isi Jangkar itu sendiri.
   if (versi && simpananKe != null) {
     ws.getRow(1).getCell(KOLOM_DPA.indexOf('Jangkar') + 1).value =
       sanitizeCell(teksPenandaUnduhan({ tahun, versi, simpananKe }))
   }
-  tulisHeader(ws, KOLOM_DPA)
+  tulisHeader(ws, KOLOM_DPA, kolTampak)
 
   for (const r of pohon.urut) {
     const nomor = pohon.barisExcel.get(r.row_id)!
@@ -340,13 +331,17 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
       kolomAngka: [3, 5, 6],
       kolomVolume: [3],
       kolTerakhir: KOLOM_DPA.length,
+      kolTampak,
       indent: pohon.kedalaman.get(r.row_id) ?? 0,
       tebal: punyaAnak,
     })
   }
 
   const akhirData = BARIS_DATA_1 + pohon.urut.length - 1
-  tulisTandaTangan(ws, akhirData + 3, 5, kolTampak, direktur)
+  tulisBarisJumlah(ws, akhirData + 1, pohon, kolTampak, 'JUMLAH BELANJA', [
+    { kol: 6, huruf: 'F', nilai: totalAkar(pohon, r => r.jumlah) },
+  ])
+  tulisTandaTangan(ws, akhirData + 4, 5, kolTampak, direktur)
   selesaikanLembar(ws, LEBAR_DPA, KOLOM_DPA)
   return wb
 }
@@ -379,7 +374,8 @@ const BLOK_PERUBAHAN = [
 const KOL_SELISIH_P = KOLOM_PERUBAHAN.indexOf(KOLOM_SELISIH_PERUBAHAN) + 1
 const KOL_PERSEN_P = KOLOM_PERUBAHAN.indexOf('%') + 1
 const BARIS_HEADER_BAWAH = BARIS_HEADER + 1
-const BARIS_DATA_PERUBAHAN = BARIS_HEADER + 2
+const BARIS_NOMOR_PERUBAHAN = BARIS_HEADER + 2
+const BARIS_DATA_PERUBAHAN = BARIS_HEADER + 3
 /** Gaya dokumen anggaran — berkurang dalam kurung, nol "-" — sama dgn `formatSelisih` di layar. */
 const RUPIAH_SELISIH = '#,##0;(#,##0);"-"'
 const PERSEN_SELISIH = '0.00%;(0.00%);"-"'
@@ -420,15 +416,10 @@ function tulisHeaderPerubahan(ws: ExcelJS.Worksheet): void {
     ws.mergeCells(BARIS_HEADER, b.dari, BARIS_HEADER, b.sampai)
   }
   for (const r of [atas, bawah]) {
-    for (let c = 1; c <= KOLOM_PERUBAHAN.length; c++) {
-      const sel = r.getCell(c)
-      sel.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 }
-      sel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
-      sel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
-      sel.border = garisSemua('FFFFFFFF')
-    }
+    for (let c = 1; c <= KOLOM_PERUBAHAN.length; c++) gayaKepalaExcel(r.getCell(c))
     r.height = 20
   }
+  nomorKolomExcel(ws, BARIS_NOMOR_PERUBAHAN, KOLOM_PERUBAHAN.length)
 }
 
 export async function buatWorkbookDpaPerubahan(args: UnduhDokumenArgs<DpaBaris>): Promise<ExcelJS.Workbook> {
@@ -486,6 +477,7 @@ export async function buatWorkbookDpaPerubahan(args: UnduhDokumenArgs<DpaBaris>)
       kolomAngka: [3, 5, 6, 7, 9, 10, KOL_SELISIH_P, KOL_PERSEN_P],
       kolomVolume: [3, 7],
       kolTerakhir: kolTampak,
+      kolTampak,
       indent: pohon.kedalaman.get(r.row_id) ?? 0,
       tebal: punyaAnak,
       warna,
@@ -495,8 +487,23 @@ export async function buatWorkbookDpaPerubahan(args: UnduhDokumenArgs<DpaBaris>)
   }
 
   const akhirData = BARIS_DATA_PERUBAHAN + pohon.urut.length - 1
-  tulisTandaTangan(ws, akhirData + 3, 9, kolTampak, direktur)
-  selesaikanLembar(ws, LEBAR_PERUBAHAN, KOLOM_PERUBAHAN, BARIS_HEADER_BAWAH)
+  const nTotal = akhirData + 1
+  const totalSebelum = totalAkar(pohon, r => Number(r.jumlah_sebelum ?? 0))
+  const totalSesudah = totalAkar(pohon, r => r.jumlah)
+  tulisBarisJumlah(ws, nTotal, pohon, kolTampak, 'JUMLAH BELANJA', [
+    { kol: 6, huruf: 'F', nilai: totalSebelum },
+    { kol: 10, huruf: 'J', nilai: totalSesudah },
+  ])
+  const total = ws.getRow(nTotal)
+  total.getCell(KOL_SELISIH_P).value = { formula: `J${nTotal}-F${nTotal}`, result: totalSesudah - totalSebelum }
+  total.getCell(KOL_SELISIH_P).numFmt = RUPIAH_SELISIH
+  total.getCell(KOL_PERSEN_P).value = {
+    formula: `IF(F${nTotal}=0,"—",K${nTotal}/F${nTotal})`,
+    result: totalSebelum ? (totalSesudah - totalSebelum) / totalSebelum : '—',
+  }
+  total.getCell(KOL_PERSEN_P).numFmt = PERSEN_SELISIH
+  tulisTandaTangan(ws, akhirData + 4, 9, kolTampak, direktur)
+  selesaikanLembar(ws, LEBAR_PERUBAHAN, KOLOM_PERUBAHAN, BARIS_NOMOR_PERUBAHAN)
   return wb
 }
 
@@ -545,9 +552,8 @@ export async function buatWorkbookPergeseran(
   const kolTampak = kolomTampak(KOLOM_PERGESERAN)
 
   const acuan = rows[0]?.dpa_versi_tanggal ?? null
-  tulisJudul(ws, kolTampak, 'PERGESERAN RINCIAN BELANJA ANGGARAN', tahun,
-    acuanPerubahanKe ? `Mengacu DPA Perubahan ke-${acuanPerubahanKe}${acuan ? ` (${formatTanggalId(acuan)})` : ''}` : undefined)
-  tulisHeader(ws, KOLOM_PERGESERAN)
+  tulisJudul(ws, kolTampak, 'PERGESERAN RINCIAN BELANJA ANGGARAN', tahun, kopPergeseran(args.versi, acuan, acuanPerubahanKe))
+  tulisHeader(ws, KOLOM_PERGESERAN, kolTampak)
 
   for (const r of pohon.urut) {
     const nomor = pohon.barisExcel.get(r.row_id)!
@@ -590,17 +596,58 @@ export async function buatWorkbookPergeseran(
       kolomAngka: [3, 5, 6, 7, 8, 9, KOL_BERTAMBAH, KOL_BERKURANG, KOL_SELISIH],
       kolomVolume: [3, 7],
       kolTerakhir: KOLOM_PERGESERAN.length,
+      kolTampak,
       indent: pohon.kedalaman.get(r.row_id) ?? 0,
       tebal: punyaAnak,
       warna,
     })
+    if (punyaAnak || !(u.bertambah || u.berkurang)) continue
+    // Rincian yang benar-benar bergeser: tanda tepi kiri amber (CONCEPT-blud-format-unduhan §5a).
+    baris.getCell(1).border = { ...baris.getCell(1).border, left: { style: 'thick', color: { argb: `FF${WARNA.amber}` } } }
   }
 
   const akhirData = BARIS_DATA_1 + pohon.urut.length - 1
-  tulisTandaTangan(ws, akhirData + 3, 6, kolTampak, direktur)
+  const nTotal = akhirData + 1
+  const urAkar = (r: PergeseranBaris) => urai.get(r.row_id) ?? URAIAN_NOL
+  const tambah = totalAkar(pohon, r => urAkar(r).bertambah)
+  const kurang = totalAkar(pohon, r => urAkar(r).berkurang)
+  const semula = totalAkar(pohon, r => r.jumlah)
+  const menjadi = totalAkar(pohon, r => r.pergeseran)
+  tulisBarisJumlah(ws, nTotal, pohon, kolTampak, 'JUMLAH', [
+    { kol: 6, huruf: 'F', nilai: semula },
+    { kol: 9, huruf: 'I', nilai: menjadi },
+    { kol: KOL_BERTAMBAH, huruf: hurufKolom(KOL_BERTAMBAH), nilai: tambah },
+    { kol: KOL_BERKURANG, huruf: hurufKolom(KOL_BERKURANG), nilai: kurang },
+  ])
+  ws.getRow(nTotal).getCell(KOL_SELISIH).value = { formula: `I${nTotal}-F${nTotal}`, result: menjadi - semula }
+  catatanExcel(ws, nTotal + 1, kolTampak, kalimatImbang(tambah, kurang))
+  tulisTandaTangan(ws, akhirData + 5, 6, kolTampak, direktur)
   selesaikanLembar(ws, LEBAR_PERGESERAN, KOLOM_PERGESERAN)
-  if (mutasi?.length) tulisLembarPerpindahan(wb, rows, mutasi)
+  if (mutasi?.length) tulisLembarPerpindahan(wb, rows, mutasi, args.tahun, kopPergeseran(args.versi, acuan, acuanPerubahanKe))
   return wb
+}
+
+/** Baris 5 kop Pergeseran — versi + acuan DPA. Satu rumus untuk Excel & PDF. */
+export function kopPergeseran(versi: string | null, acuan: string | null, acuanPerubahanKe: number | null): string | undefined {
+  const bagian: string[] = []
+  if (versi) bagian.push(`Pergeseran versi ${formatTanggalId(versi)}`)
+  if (acuanPerubahanKe) bagian.push(`Mengacu DPA Perubahan ke-${acuanPerubahanKe}${acuan ? ` (${formatTanggalId(acuan)})` : ''}`)
+  else if (acuan) bagian.push(`acuan DPA ${formatTanggalId(acuan)}`)
+  return bagian.length ? bagian.join(' · ') : undefined
+}
+
+/** "Berimbang: …" di bawah tabel Pergeseran — Excel & PDF. */
+export function kalimatImbang(tambah: number, kurang: number): string {
+  const rp = (n: number) => Math.round(n).toLocaleString('id-ID')
+  return Math.round(tambah) === Math.round(kurang)
+    ? `Berimbang: bertambah Rp ${rp(tambah)} = berkurang Rp ${rp(kurang)}.`
+    : `TIDAK berimbang: bertambah Rp ${rp(tambah)}, berkurang Rp ${rp(kurang)} (selisih Rp ${rp(tambah - kurang)}).`
+}
+
+const hurufKolom = (n: number): string => {
+  let s = ''
+  for (let k = n; k > 0; k = Math.floor((k - 1) / 26)) s = String.fromCharCode(65 + ((k - 1) % 26)) + s
+  return s
 }
 
 /**
@@ -613,6 +660,8 @@ function tulisLembarPerpindahan(
   wb: ExcelJS.Workbook,
   rows: PergeseranBaris[],
   mutasi: readonly MutasiInput[],
+  tahun: number,
+  baris5: string | undefined,
 ): void {
   const ws = wb.addWorksheet('Perpindahan')
   const nama = new Map<string, string>()
@@ -623,40 +672,37 @@ function tulisLembarPerpindahan(
   // dan baris yang hilang justru yang perlu ketahuan.
   const label = (rowId: string) => nama.get(rowId) ?? `(baris tidak ditemukan: ${rowId})`
 
-  ws.addRow(['DAFTAR PERPINDAHAN ANGGARAN'])
-  ws.getRow(1).getCell(1).font = { bold: true, size: 12 }
-  ws.mergeCells(1, 1, 1, 4)
-  ws.addRow([])
+  const kolom = ['No', 'Dari', 'Ke', 'Nilai', 'Keterangan']
+  kopExcel(ws, kolom.length, 'DAFTAR PERPINDAHAN ANGGARAN', tahun, baris5, sanitizeCell)
+  kepalaExcel(ws, BARIS_HEADER, kolom)
+  nomorKolomExcel(ws, BARIS_HEADER + 1, kolom.length)
 
-  const kolom = ['Dari', 'Ke', 'Nilai', 'Keterangan']
-  ws.addRow(kolom)
-  const barisHeader = 3
-  for (let c = 1; c <= kolom.length; c++) {
-    const cell = ws.getRow(barisHeader).getCell(c)
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
-    cell.alignment = { horizontal: 'center', vertical: 'middle' }
-  }
-
-  for (const m of mutasi) {
-    const baris = ws.addRow([
+  let n = BARIS_DATA_1
+  mutasi.forEach((m, i) => {
+    const baris = ws.getRow(n++)
+    baris.values = [
+      i + 1,
       sanitizeCell(label(m.dari_row)),
       sanitizeCell(label(m.ke_row)),
       Number(m.nilai) || 0,
       sanitizeCell(m.keterangan ?? ''),
-    ])
-    baris.getCell(3).numFmt = RUPIAH
-    baris.getCell(3).alignment = { horizontal: 'right' }
-  }
+    ]
+    for (let c = 1; c <= kolom.length; c++) hiasSelData(baris.getCell(c), { angka: c === 4 })
+    baris.getCell(1).alignment = { horizontal: 'center', vertical: 'top' }
+  })
 
-  const total = ws.addRow(['TOTAL PERPINDAHAN', '', totalMutasi(mutasi), ''])
-  total.font = { bold: true }
-  total.getCell(3).numFmt = RUPIAH
-  total.getCell(3).alignment = { horizontal: 'right' }
+  const total = ws.getRow(n)
+  total.getCell(2).value = 'TOTAL PERPINDAHAN'
+  total.getCell(4).value = mutasi.length
+    ? { formula: `SUM(D${BARIS_DATA_1}:D${n - 1})`, result: totalMutasi(mutasi) }
+    : 0
+  hiasBarisTotalExcel(total, kolom.length, [4])
+  total.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' }
 
   // Lebar lewat `getColumn`, bukan `ws.columns = […]` — pola `selesaikanLembar`;
   // menugaskan `columns` sesudah baris ditulis mendefinisikan ulang kuncinya.
-  ;[46, 46, 18, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w })
+  ;[6, 46, 46, 18, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w })
+  aturCetakExcel(ws, { mendatar: true, kepalaAwal: BARIS_HEADER, kepalaAkhir: BARIS_HEADER + 1 })
 }
 
 export async function exportPergeseranDokumen(
@@ -674,34 +720,29 @@ function hiasBarisData(
     kolomAngka: number[]
     kolomVolume: number[]
     kolTerakhir: number
+    /** Kolom yang tampak — latar tingkat berhenti di sini (kolom cadangan tetap polos). */
+    kolTampak: number
     indent: number
     tebal: boolean
-    /** Kolom → warna teks. Diterapkan DI SINI karena fungsi ini menulis ulang
+    /** Kolom → warna teks ARGB. Diterapkan DI SINI karena fungsi ini menulis ulang
      *  `font` tiap sel; mewarnai sebelum memanggilnya akan tertimpa diam-diam. */
     warna?: Map<number, string>
   },
 ): void {
   const angka = new Set(opsi.kolomAngka)
   const volume = new Set(opsi.kolomVolume)
+  const tingkat = tingkatBaris(opsi.indent, opsi.tebal)
   for (let c = 1; c <= opsi.kolTerakhir; c++) {
+    hiasSelData(baris.getCell(c), {
+      angka: angka.has(c), volume: volume.has(c), uraian: c === 2, indent: opsi.indent,
+      tebal: opsi.tebal, mono: c === 1,
+    })
+  }
+  warnaiTingkatExcel(baris, opsi.kolTampak, tingkat)
+  // Di atas latar navy baris akar hijau/merah gelap tak terbaca — pakai versi terangnya.
+  const terang = new Map([[WARNA_NAIK, `FF${WARNA.naikTerang}`], [WARNA_TURUN, `FF${WARNA.turunTerang}`]])
+  for (const [c, argb] of opsi.warna ?? []) {
     const sel = baris.getCell(c)
-    const argb = opsi.warna?.get(c)
-    // Monospace untuk angka keuangan — aturan design system.
-    sel.font = {
-      size: 10, bold: opsi.tebal, name: angka.has(c) ? 'Consolas' : 'Calibri',
-      ...(argb ? { color: { argb } } : {}),
-    }
-    sel.border = garisSemua()
-    if (angka.has(c)) {
-      sel.alignment = { horizontal: 'right', vertical: 'top' }
-      // Kolom vol dibiarkan General: format `#,##0.##` tetap mencetak pemisah
-      // desimal walau angkanya bulat (vol 1 tampil "1,"), sedangkan vol disimpan
-      // DECIMAL(18,4) jadi pecahannya tetap harus terlihat kalau memang ada.
-      if (!volume.has(c)) sel.numFmt = RUPIAH
-    } else if (c === 2) {
-      sel.alignment = { horizontal: 'left', vertical: 'top', wrapText: true, indent: opsi.indent }
-    } else {
-      sel.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
-    }
+    sel.font = { ...sel.font, color: { argb: tingkat === 'akar' ? terang.get(argb) ?? argb : argb } }
   }
 }

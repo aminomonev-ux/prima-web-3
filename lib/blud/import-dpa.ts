@@ -242,7 +242,45 @@ function cariKolomBerjudul(grid: GridDpa, pola: RegExp): number[] {
   return hasil
 }
 
-const barisDataMulai = (grid: GridDpa): number => Math.max(...barisJudul(grid)) + 1
+/**
+ * Baris nomor kolom di bawah kepala — `(1) (2) (3)…` unduhan PRIMA (CONCEPT-blud-format-unduhan
+ * §6.1) atau `1 2 3…` formulir kantor. Sengaja ketat: SEMUA sel berisi harus nomor, minimal
+ * tiga, dan berurutan 1, 2, 3… dari kiri. Baris data berkode pendek tidak pernah memenuhinya
+ * (uraiannya teks), jadi tidak ada data yang ikut terbuang.
+ */
+export function adalahBarisNomorKolom(grid: GridDpa, r: number): boolean {
+  const nomor: number[] = []
+  for (let c = 1; c <= grid.jumlahKolom; c++) {
+    const t = grid.sel(r, c).teks
+    if (!t) continue
+    const m = /^\(?\s*(\d{1,2})\s*\)?$/.exec(t)
+    if (!m) return false
+    nomor.push(Number(m[1]))
+  }
+  return nomor.length >= 3 && nomor.every((n, i) => n === i + 1)
+}
+
+const barisDataMulai = (grid: GridDpa): number => {
+  const sesudahJudul = Math.max(...barisJudul(grid)) + 1
+  return adalahBarisNomorKolom(grid, sesudahJudul) ? sesudahJudul + 1 : sesudahJudul
+}
+
+/**
+ * Baris JUMLAH penutup tabel (unduhan PRIMA sejak 2026-11-25: `JUMLAH BELANJA` dgn rumus SUM
+ * atas baris akar). Bukan data — kalau ikut dibaca ia jadi akar tambahan dan totalnya dobel.
+ * Dikenali dari: baris BERISI terakhir (`akhirBerisi`), tanpa kode, uraian persis
+ * "jumlah [belanja]"/"total", dan — kalau berkas punya kolom Level — Level kosong (baris data
+ * PRIMA selalu ber-Level). Tanpa kolom Level wajib rumus penjumlahan. Rumus TIDAK diwajibkan
+ * bila ada kolom Level: "paste as values" membuang rumusnya, dan justru di situlah kolom Level
+ * jadi cadangan hierarki.
+ */
+function barisJumlahPenutup(grid: GridDpa, kol: PetaKolom, r: number, akhirBerisi: number): boolean {
+  if (r !== akhirBerisi) return false
+  if (gabungKode(grid, r, kol)) return false
+  if (!/^(jumlah( belanja)?|total)$/i.test(bacaUraian(grid, r, kol).replace(/\s+/g, ' ').trim())) return false
+  if (kol.level != null) return !grid.sel(r, kol.level).teks
+  return barisAnakDariRumus(grid.sel(r, kol.jumlah).rumus, kol.jumlah) != null
+}
 
 /** Penandanya judul `Vol P` + `Harga P` — hanya ada di unduhan PRIMA (dokumen
  *  maupun rekap Cetak), jadi formulir provinsi tidak ikut tertolak. */
@@ -473,7 +511,13 @@ interface Mentah {
 
 function kumpulkanMentah(grid: GridDpa, kol: PetaKolom, akhir: number): Mentah[] {
   const hasil: Mentah[] = []
-  for (let r = barisDataMulai(grid); r <= akhir; r++) {
+  const mulai = barisDataMulai(grid)
+  let akhirBerisi = mulai
+  for (let r = mulai; r <= akhir; r++) {
+    if (bacaUraian(grid, r, kol) || gabungKode(grid, r, kol)) akhirBerisi = r
+  }
+  for (let r = mulai; r <= akhir; r++) {
+    if (barisJumlahPenutup(grid, kol, r, akhirBerisi)) continue
     const uraian = bacaUraian(grid, r, kol)
     const kode = gabungKode(grid, r, kol)
     const selJumlah = grid.sel(r, kol.jumlah)

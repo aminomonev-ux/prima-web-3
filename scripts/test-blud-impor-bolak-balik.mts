@@ -116,7 +116,9 @@ function bangunPergeseran(dpa: DpaBaris[]): PergeseranBaris[] {
 
 // ─── Penolong ────────────────────────────────────────────────────────────────
 
-const BARIS_DATA_1 = 7
+// Cermin tata letak dpa-dokumen.ts: kop 1–5, garis 6, kepala 7, nomor kolom 8, data 9.
+const BARIS_KEPALA = 7
+const BARIS_DATA_1 = 9
 const KOL_JUMLAH = 6
 const KOL_LEVEL = 9
 
@@ -333,8 +335,8 @@ bab('G. Rumus disunting tangan mengklaim leluhurnya sendiri')
 {
   const wb = await wbAcak()
   const ws = wb.worksheets[0]
-  // Daun O ("Komputer", Level 3) mengaku menjumlah akar (b.7) dan Belanja Operasi (b.8).
-  ws.getRow(barisDari(POHON_ACAK, 'O')).getCell(KOL_JUMLAH).value = { formula: 'SUM(F7:F8)', result: 7_000_000 }
+  // Daun O ("Komputer", Level 3) mengaku menjumlah akar dan Belanja Operasi (dua baris data pertama).
+  ws.getRow(barisDari(POHON_ACAK, 'O')).getCell(KOL_JUMLAH).value = { formula: `SUM(F${BARIS_DATA_1}:F${BARIS_DATA_1 + 1})`, result: 7_000_000 }
   // Daun L (Level 3.1) mengaku menjumlah K, saudaranya — klaim tidak sah yang
   // LEBIH DEKAT dari klaim induk aslinya. Sasarannya sengaja K: K tinggal sesudah
   // akar nyasar, jadi kalau klaim sah ikut tersingkir, cadangan Level menaruhnya
@@ -365,8 +367,9 @@ bab('H. Baris sisa salin-tempel (rumus saja, hasil 0)')
   const asal = bangunDpa(POHON_RAPI)
   const wb = await buatWorkbookDpa({ tahun: 2026, versi: '2026-08-29', rows: asal })
   const ws = wb.worksheets[0]
-  for (let n = 6; n < BARIS_DATA_1 + asal.length; n++) ws.getRow(n).getCell(KOL_LEVEL).value = null
-  const sisa = BARIS_DATA_1 + asal.length
+  for (let n = BARIS_KEPALA; n < BARIS_DATA_1 + asal.length; n++) ws.getRow(n).getCell(KOL_LEVEL).value = null
+  // +1: baris BARIS_DATA_1 + asal.length kini baris JUMLAH BELANJA penutup.
+  const sisa = BARIS_DATA_1 + asal.length + 1
   ws.getRow(sisa).getCell(KOL_JUMLAH).value = { formula: `F${barisDari(POHON_RAPI, 'S')}`, result: 0 }
   const h = await bacaBalik(wb)
   cek('Tanpa kolom Level, hierarki dari rumus', h.baris[0]?.sumberHierarki === 'rumus', String(h.baris[0]?.sumberHierarki))

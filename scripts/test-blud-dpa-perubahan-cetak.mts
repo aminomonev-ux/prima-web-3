@@ -102,16 +102,19 @@ console.log('\n── A. Excel DPA Perubahan — format Lengkap ──')
   const ws = wb.worksheets[0]
   cek('A1 kop baris 5 = kopPerubahan(1, versi)', nilai(ws, 5, 1) === kopPerubahan(1, '2099-10-08'), String(nilai(ws, 5, 1)))
   cek('A2 kop berbunyi "DPA PERUBAHAN KE-1 · versi …"', /^DPA PERUBAHAN KE-1 · versi /.test(String(nilai(ws, 5, 1))))
-  cek('A3 judul blok SEBELUM PERUBAHAN digabung C6:F6',
-    nilai(ws, 6, 3) === 'SEBELUM PERUBAHAN' && induk(ws, 6, 6) === 'C6' && induk(ws, 7, 3) === 'C7')
-  cek('A4 judul blok SESUDAH PERUBAHAN digabung G6:J6',
-    nilai(ws, 6, 7) === 'SESUDAH PERUBAHAN' && induk(ws, 6, 10) === 'G6')
-  cek('A5 sub-judul baris 7: Vol·Satuan·Harga·Jumlah di kedua blok',
-    [3, 4, 5, 6, 7, 8, 9, 10].map(c => nilai(ws, 7, c)).join('|') === 'Vol|Satuan|Harga|Jumlah|Vol|Satuan|Harga|Jumlah')
+  // Gaya dokumen (CONCEPT-blud-format-unduhan §5a): kop 1–5, garis amber 6, kepala 7–8,
+  // nomor kolom (1)(2)… 9, data mulai 10.
+  cek('A3 judul blok SEBELUM PERUBAHAN digabung C7:F7',
+    nilai(ws, 7, 3) === 'SEBELUM PERUBAHAN' && induk(ws, 7, 6) === 'C7' && induk(ws, 8, 3) === 'C8')
+  cek('A4 judul blok SESUDAH PERUBAHAN digabung G7:J7',
+    nilai(ws, 7, 7) === 'SESUDAH PERUBAHAN' && induk(ws, 7, 10) === 'G7')
+  cek('A5 sub-judul baris 8: Vol·Satuan·Harga·Jumlah di kedua blok',
+    [3, 4, 5, 6, 7, 8, 9, 10].map(c => nilai(ws, 8, c)).join('|') === 'Vol|Satuan|Harga|Jumlah|Vol|Satuan|Harga|Jumlah')
   cek('A6 Kode Rekening & Bertambah/(Berkurang) digabung dua baris kepala',
-    induk(ws, 7, 1) === 'A6' && induk(ws, 7, 11) === 'K6' && nilai(ws, 6, 11) === KOLOM_SELISIH_PERUBAHAN)
-  cek('A7 data mulai baris 8, beku sampai baris 7',
-    barisUraian(ws, 'BELANJA') === 8 && (ws.views[0] as { ySplit?: number }).ySplit === 7)
+    induk(ws, 8, 1) === 'A7' && induk(ws, 8, 11) === 'K7' && nilai(ws, 7, 11) === KOLOM_SELISIH_PERUBAHAN)
+  cek('A7 nomor kolom baris 9, data mulai baris 10, beku sampai baris 9',
+    nilai(ws, 9, 1) === '(1)' && nilai(ws, 9, 14) === '(14)'
+    && barisUraian(ws, 'BELANJA') === 10 && (ws.views[0] as { ySplit?: number }).ySplit === 9)
   cek('A8 tanpa kolom tersembunyi (format ini sengaja tidak untuk diimpor)',
     Array.from({ length: 14 }, (_, i) => ws.getColumn(i + 1).hidden).every(h => !h))
 
@@ -125,8 +128,8 @@ console.log('\n── A. Excel DPA Perubahan — format Lengkap ──')
   cek('A12 dulu daun, kini berinduk: Sebelum TETAP ROUND(C*E), bukan SUM anak baru',
     rumus(ws, gedung, 6) === `ROUND(C${gedung}*E${gedung},0)`, String(rumus(ws, gedung, 6)))
   cek('A13 … sedangkan sisi Sesudah-nya SUM anak', /^SUM\(J\d+:J\d+\)$/.test(rumus(ws, gedung, 10) ?? ''))
-  // Anak langsung akar: ATK (9), Listrik (10), Gedung (11) — Cat & Atap cucu.
-  cek('A14 akar: Sebelum SUM anak langsung (ada anak ber-Sebelum)', rumus(ws, 8, 6) === 'SUM(F9:F11)', String(rumus(ws, 8, 6)))
+  // Anak langsung akar: ATK (11), Listrik (12), Gedung (13) — Cat & Atap cucu.
+  cek('A14 akar: Sebelum SUM anak langsung (ada anak ber-Sebelum)', rumus(ws, 10, 6) === 'SUM(F11:F13)', String(rumus(ws, 10, 6)))
   cek('A15 Bertambah/(Berkurang) = J − F (rumus, bukan angka mati)', rumus(ws, atk, 11) === `J${atk}-F${atk}`)
   cek('A16 % = IF(F=0,"—",K/F)', rumus(ws, atk, 12) === `IF(F${atk}=0,"—",K${atk}/F${atk})`)
   cek('A17 % baris baru berhasil "—"', (nilai(ws, listrik, 12) as { result?: unknown }).result === '—')
@@ -157,17 +160,22 @@ console.log('\n── B. Kop penanda Ringkas & Pergeseran ──')
 {
   const ringkas = (await buatWorkbookDpa({ tahun: 2099, versi: '2099-10-08', rows: barisPerubahan(), perubahanKe: 2 })).worksheets[0]
   cek('B1 Ringkas: kop "DPA PERUBAHAN KE-2" di baris 5', /^DPA PERUBAHAN KE-2 · versi /.test(String(nilai(ringkas, 5, 1))))
-  cek('B2 Ringkas: kepala tetap baris 6 (Impor bergantung padanya)', nilai(ringkas, 6, 1) === 'Kode Rekening')
+  // Impor MENCARI kepala lewat teks "Kode Rekening" (bacaGridDpa), letaknya baris 7 sejak gaya dokumen.
+  cek('B2 Ringkas: kepala baris 7, nomor kolom baris 8', nilai(ringkas, 7, 1) === 'Kode Rekening' && nilai(ringkas, 8, 1) === '(1)')
   const murni = (await buatWorkbookDpa({ tahun: 2099, versi: '2099-01-31', rows: barisMurni() })).worksheets[0]
-  cek('B3 DPA murni: baris 5 KOSONG — bunyinya persis seperti dulu', nilai(murni, 5, 1) == null)
+  // Baris 5 DPA murni kini menyebut versinya — dan TIDAK boleh terbaca sebagai penanda Perubahan (C5).
+  cek('B3 DPA murni: baris 5 menyebut versi, bukan penanda Perubahan',
+    /^DPA BLUD versi /.test(String(nilai(murni, 5, 1))) && !/PERUBAHAN/i.test(String(nilai(murni, 5, 1))), String(nilai(murni, 5, 1)))
 
   const pg = barisMurni().map(r => ({
     ...r, dpa_versi_tanggal: '2099-10-08', vol_p: r.vol, harga_p: r.harga, pergeseran: r.jumlah, bertambah_berkurang: 0,
   })) as unknown as PergeseranBaris[]
   const wsPg = (await buatWorkbookPergeseran({ tahun: 2099, versi: '2099-10-20', rows: pg, acuanPerubahanKe: 1 })).worksheets[0]
-  cek('B4 Pergeseran: kop menyebut acuan DPA Perubahan', /^Mengacu DPA Perubahan ke-1 \(/.test(String(nilai(wsPg, 5, 1))), String(nilai(wsPg, 5, 1)))
+  cek('B4 Pergeseran: kop menyebut acuan DPA Perubahan', /Mengacu DPA Perubahan ke-1 \(/.test(String(nilai(wsPg, 5, 1))), String(nilai(wsPg, 5, 1)))
   const wsPg0 = (await buatWorkbookPergeseran({ tahun: 2099, versi: '2099-10-20', rows: pg })).worksheets[0]
-  cek('B5 Pergeseran tanpa Perubahan: baris 5 kosong', nilai(wsPg0, 5, 1) == null)
+  cek('B5 Pergeseran tanpa Perubahan: baris 5 menyebut versi & acuan, tanpa kata Perubahan',
+    /^Pergeseran versi .* · acuan DPA /.test(String(nilai(wsPg0, 5, 1))) && !/PERUBAHAN/i.test(String(nilai(wsPg0, 5, 1))),
+    String(nilai(wsPg0, 5, 1)))
 }
 
 // ─── C. Impor membaca berkasnya sendiri ─────────────────────────────────────
@@ -194,8 +202,8 @@ console.log('\n── C. Impor — §11.1 mengenali berkas ──')
 
   // Lengkap yang judul bloknya disunting tangan tetap tertangkap lewat dua kolom Jumlah.
   const disunting = await buatWorkbookDpaPerubahan({ tahun: 2099, versi: '2099-10-08', rows: barisPerubahan(), perubahanKe: 1 })
-  disunting.worksheets[0].getCell('C6').value = 'JANUARI'
-  disunting.worksheets[0].getCell('G6').value = '2099'
+  disunting.worksheets[0].getCell('C7').value = 'JANUARI'
+  disunting.worksheets[0].getCell('G7').value = '2099'
   const dua = await tangkap(disunting)
   cek('C8 judul blok disunting → tetap ditolak BerkasDuaSisiError', dua instanceof BerkasDuaSisiError, dua?.name)
 

@@ -296,20 +296,6 @@ export default function CetakClient() {
   }, [menu, view, tanggal, historyVersi, renderedData])
 
   // ── Action: PDF ──
-  const onPdf = useCallback(async () => {
-    if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
-    try {
-      const { exportToPdf } = await import('@/lib/blud/export/pdf')
-      await exportToPdf({
-        menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan,
-        columns: renderedMeta?.columns, title: renderedMeta?.title,
-      })
-      void logExport('pdf')
-    } catch (e) {
-      toast.error('Berkas PDF gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
-    }
-  }, [renderedData, renderedMeta, menu, view, tanggal, historyVersi, catatanCakupan, logExport])
-
   /**
    * Direktur ikut tercetak di blok tanda tangan. Diambil best-effort: endpoint
    * pejabat dijaga izin menu `pengaturan` + kill-switch realisasi, sedangkan
@@ -333,9 +319,45 @@ export default function CetakClient() {
     }
   }, [])
 
+  // DPA, Pergeseran (penuh), dan Rekap PJ turun sebagai DOKUMEN dari baris mentah (pohon,
+  // tanda tangan); sisanya lewat eksporter generik (CONCEPT-blud-format-unduhan §7).
+  const onPdf = useCallback(async () => {
+    if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
+    const ada = Array.isArray(rawRows) && rawRows.length > 0
+    try {
+      if (ada && (view === 'dpa' || view === 'penanggungJawab' || (view === 'rekapPergeseran' && !hanyaBergeser))) {
+        const pdf = await import('@/lib/blud/export/pdf-dokumen')
+        const direktur = await ambilDirektur(tahun)
+        if (view === 'penanggungJawab') {
+          await pdf.exportRekapPjPdf({
+            tahun, versi: rawVersi, direktur, sumber: menu === 'pergeseran' ? 'pergeseran' : 'dpa',
+            rows: rawRows as DpaBaris[] | PergeseranBaris[],
+          })
+        } else if (view === 'dpa') {
+          await pdf.exportDpaPdf({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe })
+        } else {
+          await pdf.exportPergeseranPdf({
+            tahun, versi: rawVersi, rows: rawRows as PergeseranBaris[], direktur, mutasi: rawMutasi, acuanPerubahanKe: rawBabakKe,
+          })
+        }
+        void logExport('pdf')
+        return
+      }
+      const { exportToPdf } = await import('@/lib/blud/export/pdf')
+      await exportToPdf({
+        menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan,
+        columns: renderedMeta?.columns, title: renderedMeta?.title, tahun,
+      })
+      void logExport('pdf')
+    } catch (e) {
+      toast.error('Berkas PDF gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
+
+
   // ── Action: Excel ──
-  // DPA & Pergeseran turun sebagai DOKUMEN (berumus, ada kolom Level + Jangkar).
-  // Rekap PJ dan Master Akun tetap memakai eksporter rekap lama.
+  // DPA & Pergeseran turun sebagai DOKUMEN (berumus, ada kolom Level + Jangkar), Rekap PJ
+  // lewat penyusunnya sendiri; Master Akun & daftar tersaring lewat eksporter generik.
   const onExcel = useCallback(async () => {
     if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
     const dokumenDpa = menu === 'dpa' && view === 'dpa'
@@ -367,10 +389,20 @@ export default function CetakClient() {
         void logExport('xlsx')
         return
       }
+      // Rekap PJ: kelompok + subtotal + porsi + tanda PJ dobel (CONCEPT-blud-format-unduhan §6.2).
+      if (view === 'penanggungJawab' && Array.isArray(rawRows) && rawRows.length) {
+        const { exportRekapPjDokumen } = await import('@/lib/blud/export/rekap-pj-dokumen')
+        await exportRekapPjDokumen({
+          tahun, versi: rawVersi, direktur: await ambilDirektur(tahun),
+          sumber: menu === 'pergeseran' ? 'pergeseran' : 'dpa', rows: rawRows as DpaBaris[] | PergeseranBaris[],
+        })
+        void logExport('xlsx')
+        return
+      }
       const { exportToExcel } = await import('@/lib/blud/export/excel')
       await exportToExcel({
         menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan,
-        columns: renderedMeta?.columns, title: renderedMeta?.title,
+        columns: renderedMeta?.columns, title: renderedMeta?.title, tahun,
       })
       void logExport('xlsx')
     } catch (e) {

@@ -121,3 +121,61 @@ function daunTanpaPj(rows: readonly AuditPjRow[]): { baris: number; nominal: num
   }
   return { baris, nominal }
 }
+
+// ─── Susunan dokumen unduhan (Excel & PDF) ───────────────────────────────────
+// CONCEPT-blud-format-unduhan §6.2: baris yang PJ-nya dobel dengan leluhurnya DITANDAI
+// di tabel, angkanya tidak diubah. Subtotal tetap MENTAH (= layar = Form PK); yang bersih
+// hanya JUMLAH SELURUHNYA (`auditRekapPJ.grandTotal`).
+
+export type BarisRekapPj =
+  /** `porsi` = bagian dari JUMLAH SELURUHNYA, tanpa baris dobel (semua porsi berjumlah 100%). */
+  | { jenis: 'kelompok'; huruf: string; pj: string; subtotal: number; porsi: number }
+  | { jenis: 'rincian'; nomor: number; uraian: string; jumlah: number; dobelDengan: string | null }
+  | { jenis: 'subtotal'; huruf: string; subtotal: number }
+
+export interface SusunanRekapPj {
+  baris: BarisRekapPj[]
+  /** Bersih dari dobel — sama dengan total di layar Cetak. */
+  total: number
+  totalAnggaran: number
+  selisih: number
+  jumlahDobel: number
+  /** Kalimat catatan di bawah tabel, urut tampil. */
+  catatan: string[]
+}
+
+/** Huruf kelompok: A…Z, lalu AA, AB, … */
+export function hurufKelompok(i: number): string {
+  let s = ''
+  for (let k = i + 1; k > 0; k = Math.floor((k - 1) / 26)) s = String.fromCharCode(65 + ((k - 1) % 26)) + s
+  return s
+}
+
+export function susunRekapPj(rows: readonly AuditPjRow[], labelSumber: string): SusunanRekapPj {
+  const audit = auditRekapPJ([...rows])
+  const dobel = new Map(audit.doubleEntries.map(d => [d.rowId, d.konflik.pj]))
+  const baris: BarisRekapPj[] = []
+  kelompokPerPj(rows).forEach((g, i) => {
+    const huruf = hurufKelompok(i)
+    // Porsi dari subtotal TANPA baris dobel, terhadap total bersih — kalau dari subtotal
+    // mentah, kolom % berjumlah lebih dari 100% begitu ada satu baris dobel.
+    const bersih = g.items.reduce((s, it) => s + (dobel.has(it.rowId) ? 0 : it.jumlah), 0)
+    baris.push({ jenis: 'kelompok', huruf, pj: g.pj, subtotal: g.subtotal, porsi: audit.grandTotal ? bersih / audit.grandTotal : 0 })
+    g.items.forEach((it, j) => baris.push({
+      jenis: 'rincian', nomor: j + 1, uraian: it.uraian, jumlah: it.jumlah, dobelDengan: dobel.get(it.rowId) ?? null,
+    }))
+    baris.push({ jenis: 'subtotal', huruf, subtotal: g.subtotal })
+  })
+  const rp = (n: number) => Math.round(n).toLocaleString('id-ID')
+  const selisih = audit.totalDPA - audit.grandTotal
+  const catatan = [
+    `Total Belanja Daerah di ${labelSumber}: Rp ${rp(audit.totalDPA)} · Total rekap PJ: Rp ${rp(audit.grandTotal)} · Selisih: Rp ${rp(selisih)}.`,
+  ]
+  if (audit.doubleEntries.length) {
+    catatan.push(`* ${audit.doubleEntries.length} baris ber-PJ yang leluhurnya juga ber-PJ: angkanya tetap masuk subtotal PJ-nya, tetapi tidak dihitung di JUMLAH SELURUHNYA supaya tidak dobel.`)
+  }
+  return {
+    baris, total: audit.grandTotal, totalAnggaran: audit.totalDPA, selisih,
+    jumlahDobel: audit.doubleEntries.length, catatan,
+  }
+}

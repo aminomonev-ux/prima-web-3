@@ -284,10 +284,11 @@ const XLSX  = baca('../lib/blud/export/excel.ts')
 // sementara baris induknya tetap pagu penuh.
 cek('G1 catatan cakupan dikirim ke PDF', /exportToPdf\(\{[^}]*catatan: catatanCakupan/.test(CETAK))
 cek('G2 catatan cakupan dikirim ke Excel', /exportToExcel\(\{[^}]*catatan: catatanCakupan/.test(CETAK))
-cek('G3 PDF mencetak catatannya', /if \(catatan\) \{[\s\S]{0,300}?doc\.text\(catatan/.test(PDF))
+// Sejak gaya dokumen (CONCEPT-blud-format-unduhan §5a) catatan cakupan jadi baris kop
+// terakhir — tepat di atas kepala tabel, di PDF maupun Excel.
+cek('G3 PDF mencetak catatannya', /kopPdf\(dok, [^\n]{0,80}?catatan \|\| undefined\)/.test(PDF))
 cek('G4 Excel menulis catatannya DI ATAS kepala tabel',
-  /if \(catatan\) \{[\s\S]{0,120}?ws\.addRow\(\[catatan\]\)/.test(XLSX)
-  && /const barisHeader = catatan \? 2 : 1/.test(XLSX))
+  /kopExcel\(ws, kol, [^\n]{0,80}?catatan \|\| undefined, sanitizeCell\)\s*\n\s*kepalaExcel\(ws, BARIS_KEPALA, columns\)/.test(XLSX))
 // Sakelarnya bisa diubah SESUDAH tabel tercetak tanpa menekan Cetak lagi;
 // membacanya saat unduh memberi keterangan yang tidak cocok dengan isi berkas.
 // Sumber kalimatnya kini `result.meta.cakupan` milik `renderCetakHtml` (satu

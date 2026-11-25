@@ -166,7 +166,8 @@ console.log('\n── B. Parser ──')
     kodeBaca === barisMurni().map(r => r.kode_rekening).join(' | '), kodeBaca)
   // Pagar sel sampah tetap: backtick tunggal di kolom kode bukan kode.
   const wbSampah = await buatWorkbookDpa({ tahun: 2099, versi: '2099-07-31', rows: barisMurni() })
-  wbSampah.worksheets[0].getRow(7).getCell(1).value = '`'
+  // Baris data pertama = 9 (kop 1–6, kepala 7, nomor kolom 8 — CONCEPT-blud-format-unduhan).
+  wbSampah.worksheets[0].getRow(9).getCell(1).value = '`'
   const sampah = await bacaWb(wbSampah)
   cek('B8 … sel sampah di kolom kode tetap ditolak', sampah.baris[0].kode === '', JSON.stringify(sampah.baris[0].kode))
 }

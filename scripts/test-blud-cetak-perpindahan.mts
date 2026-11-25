@@ -213,16 +213,25 @@ console.log('\n── C. T2 — dokumen resmi (workbook sungguhan) ──')
   const ws2 = wbDengan.worksheets[1]
   cek('lembar kedua bernama Perpindahan', ws2?.name === 'Perpindahan', String(ws2?.name))
 
-  const cariKolom1 = (ws: ExcelJS.Worksheet, teks: string) => {
+  // Kolom dicari dari kepala tabelnya (gaya dokumen: No · Dari · Ke · Nilai · Keterangan).
+  let kepala2 = 0
+  ws2!.eachRow((r, n) => { if (!kepala2 && String(r.getCell(2).value ?? '') === 'Dari') kepala2 = n })
+  const kol2 = (nama: string) => {
+    for (let c = 1; c <= 8; c++) if (String(ws2!.getRow(kepala2).getCell(c).value ?? '') === nama) return c
+    return 0
+  }
+  const cariDi = (ws: ExcelJS.Worksheet, kolom: number, teks: string) => {
     for (let n = 1; n <= ws.rowCount; n++) {
-      if (String(ws.getRow(n).getCell(1).value ?? '').includes(teks)) return ws.getRow(n)
+      if (String(ws.getRow(n).getCell(kolom).value ?? '').includes(teks)) return ws.getRow(n)
     }
     return null
   }
-  cek('lembar Perpindahan memuat baris asal A', !!cariKolom1(ws2!, '5.1.01'))
-  cek('lembar Perpindahan memuat keterangan', String(ws2!.getRow(4).getCell(4).value ?? '') === 'kegiatan batal')
-  const totalRow = cariKolom1(ws2!, 'TOTAL PERPINDAHAN')
-  cek('lembar Perpindahan bertotal 57jt', totalRow?.getCell(3).value === 57_000_000)
+  cek('lembar Perpindahan memuat baris asal A', !!cariDi(ws2!, kol2('Dari'), '5.1.01'))
+  cek('lembar Perpindahan memuat keterangan', !!cariDi(ws2!, kol2('Keterangan'), 'kegiatan batal'))
+  const totalRow = cariDi(ws2!, kol2('Dari'), 'TOTAL PERPINDAHAN')
+  const nilaiTotal = totalRow?.getCell(kol2('Nilai')).value as { result?: number } | number | undefined
+  cek('lembar Perpindahan bertotal 57jt',
+    (typeof nilaiTotal === 'object' ? nilaiTotal?.result : nilaiTotal) === 57_000_000, JSON.stringify(nilaiTotal))
 }
 
 // ── D. T3: view Daftar Perpindahan ───────────────────────────────────────────
@@ -323,7 +332,10 @@ console.log('\n── F. Pagar: yang sengaja tidak tersentuh ──')
 console.log('\n── G. Dokumen resmi sejajar dengan tabel di menu Cetak ──')
 {
   const kepala = (ws: ExcelJS.Worksheet) => {
-    const b = ws.getRow(6)
+    // Kepala tabel dicari dari teksnya — letaknya milik gaya dokumen (kop 1–6, kepala 7).
+    let n = 0
+    ws.eachRow((r, i) => { if (!n && String(r.getCell(1).value ?? '') === 'Kode Rekening') n = i })
+    const b = ws.getRow(n)
     const semua: { nama: string; tersembunyi: boolean }[] = []
     for (let c = 1; c <= 20; c++) {
       const nama = String(b.getCell(c).value ?? '')
@@ -418,11 +430,13 @@ console.log('\n── H. Hijau/merah kolom Bertambah, Berkurang, Selisih ──'
     (ws.getRow(baris).getCell(kolomKe(nama)).font as { color?: { argb?: string } } | undefined)?.color?.argb ?? null
 
   // Baris induk sekaligus menguji ketiga aturan: rollup 45 masuk & 45 keluar,
-  // sementara selisihnya sendiri NOL.
+  // sementara selisihnya sendiri NOL. Induk di sini baris AKAR (latar navy), jadi
+  // hijau/merahnya versi TERANG — yang gelap tak terbaca di atas navy.
   const induk = cariBaris('5.1')
-  cek('Bertambah induk hijau', argb(induk, 'Bertambah') === 'FF1D9E75', String(argb(induk, 'Bertambah')))
-  cek('Berkurang induk merah', argb(induk, 'Berkurang') === 'FFE24B4A', String(argb(induk, 'Berkurang')))
-  cek('Selisih induk TIDAK diwarnai', argb(induk, 'Selisih') === null, String(argb(induk, 'Selisih')))
+  cek('Bertambah induk hijau (terang di latar navy)', argb(induk, 'Bertambah') === 'FF6EE7B7', String(argb(induk, 'Bertambah')))
+  cek('Berkurang induk merah (terang di latar navy)', argb(induk, 'Berkurang') === 'FFFCA5A5', String(argb(induk, 'Berkurang')))
+  cek('Selisih induk TIDAK diberi warna delta',
+    !['FF1D9E75', 'FFE24B4A', 'FF6EE7B7', 'FFFCA5A5'].includes(String(argb(induk, 'Selisih'))), String(argb(induk, 'Selisih')))
 
   const a = cariBaris('5.1.01')
   cek('Selisih baris turun berwarna merah', argb(a, 'Selisih') === 'FFE24B4A', String(argb(a, 'Selisih')))
@@ -433,12 +447,13 @@ console.log('\n── H. Hijau/merah kolom Bertambah, Berkurang, Selisih ──'
   // saja membuat `if (!arah || true) return` di antaranya tetap cocok (L82c).
   const pdfSrc = kode('lib/blud/export/pdf.ts')
   cek('PDF mewarnai lewat didParseCell dari nilai ASLI, bukan teks berformat',
-    /const arah = arahDelta\(columns\[data\.column\.index\] \?\? '', exportRows\[data\.row\.index\]\?\.\[data\.column\.index\]\)\s*\r?\n\s*if \(!arah\) return\s*\r?\n\s*data\.cell\.styles\.textColor = arah === 'naik' \? RGB_NAIK : RGB_TURUN/
+    pdfSrc.includes('const v = exportRows[data.row.index]?.[data.column.index]')
+    && /const arah = arahDelta\(columns\[data\.column\.index\] \?\? '', v\)\s*\r?\n\s*if \(!arah\) return\s*\r?\n\s*data\.cell\.styles\.textColor = arah === 'naik' \? RGB_NAIK : RGB_TURUN/
       .test(pdfSrc))
   const xlsSrc = kode('lib/blud/export/excel.ts')
   cek('Excel rekap ikut mewarnai',
     xlsSrc.includes('const argb = warnaDelta(columns[c], rowData[c])')
-    && xlsSrc.includes('cell.font = { size: 10, ...(argb ? { color: { argb } } : {}) }'))
+    && xlsSrc.includes('if (argb) cell.font = { ...cell.font, bold: true, color: { argb } }'))
   cek('warna hidup di SATU berkas, dipakai tiga jalur',
     ['lib/blud/export/pdf.ts', 'lib/blud/export/excel.ts', 'lib/blud/export/dpa-dokumen.ts']
       .every(p => /from '@\/lib\/blud\/export\/warna-delta'/.test(kode(p))))
