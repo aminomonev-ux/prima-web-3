@@ -8,7 +8,11 @@
 
 import type { DpaBaris, PergeseranBaris } from '@/types'
 import { auditRekapPJ, type AuditPjRow, type AuditDoubleEntry } from './audit-pj'
-import { rekonsiliasiPj, periksaLabelPj, kalimatNeraca, kalimatPos, kalimatLabel } from './rekonsiliasi-pj'
+import {
+  rekonsiliasiPj, periksaLabelPj, kalimatNeraca, kalimatPos, kalimatLabel, bandingVersi, kalimatBanding,
+  saranPjDobel, kalimatDobel, pjTingkatTakLazim, kalimatTakLazim, labelTanpaPk, kalimatTanpaPk,
+  type KonteksPj, type BarisRekon,
+} from './rekonsiliasi-pj'
 
 export interface ItemPj {
   uraian: string
@@ -154,8 +158,41 @@ export function hurufKelompok(i: number): string {
 
 /** Batas pos penyebab selisih yang ikut tercetak — sisanya disebut jumlahnya. */
 export const BATAS_CATATAN_POS = 40
+/** Batas butir per jenis temuan lain (PJ dobel, tingkat tak lazim, label) di catatan unduhan. */
+export const BATAS_CATATAN_LAIN = 20
 
-export function susunRekapPj(rows: readonly AuditPjRow[], labelSumber: string): SusunanRekapPj {
+/**
+ * Konteks pembanding Audit Rekap PJ dalam bentuk MENTAH (baris API), seperti yang dimuat
+ * layar Cetak. `siapkanKonteksPj` menukarnya ke bentuk rekap: baris Pergeseran memakai pagu
+ * PASCA-geser (`barisRekapPergeseran`), sama dgn tabel yang direkap.
+ */
+export interface KonteksPjMentah {
+  sebelum?: { versi: string; rows: Array<DpaBaris | PergeseranBaris> } | null
+  tahunLalu?: { tahun: number; rows: Array<DpaBaris | PergeseranBaris> } | null
+  /** Pergeseran saja: DPA versi acuannya (PJ Pergeseran = salinan DPA). */
+  dpaAcuan?: { versi: string; rows: DpaBaris[] } | null
+  /** Label PJ yang dipakai Form PK (`GET /api/blud/penanggung-jawab?mode=pk`). */
+  labelPk?: string[] | null
+}
+
+export function siapkanKonteksPj(sumber: 'dpa' | 'pergeseran', raw: KonteksPjMentah | null | undefined): KonteksPj {
+  const ubah = (rows: Array<DpaBaris | PergeseranBaris>): BarisRekon[] =>
+    (sumber === 'pergeseran'
+      ? barisRekapPergeseran(rows as PergeseranBaris[])
+      : barisRekapDpa(rows as DpaBaris[])) as unknown as BarisRekon[]
+  return {
+    sebelum: raw?.sebelum?.rows.length ? { versi: raw.sebelum.versi, rows: ubah(raw.sebelum.rows) } : null,
+    tahunLalu: raw?.tahunLalu?.rows.length ? { tahun: raw.tahunLalu.tahun, rows: ubah(raw.tahunLalu.rows) } : null,
+    dpaAcuan: sumber === 'pergeseran' && raw?.dpaAcuan?.rows.length
+      ? { versi: raw.dpaAcuan.versi, rows: raw.dpaAcuan.rows as unknown as BarisRekon[] } : null,
+  }
+}
+
+export function susunRekapPj(
+  rows: readonly AuditPjRow[],
+  labelSumber: string,
+  opsi: { konteks?: KonteksPj; labelPk?: readonly string[] | null } = {},
+): SusunanRekapPj {
   const audit = auditRekapPJ([...rows])
   const dobel = new Map(audit.doubleEntries.map(d => [d.rowId, d.konflik.pj]))
   const baris: BarisRekapPj[] = []
@@ -173,8 +210,13 @@ export function susunRekapPj(rows: readonly AuditPjRow[], labelSumber: string): 
   const selisih = audit.totalDPA - audit.grandTotal
   // Catatan pemeriksaan ikut tercetak (CONCEPT-blud-audit-pj-pintar §4): neraca, lalu
   // tiap pos penyebab selisih dgn barisnya & saran PJ — sama dgn panel di layar Cetak.
-  const rekon = rekonsiliasiPj(rows)
+  const baris_ = rows as unknown as BarisRekon[]
+  const konteks = opsi.konteks ?? {}
+  const rekon = rekonsiliasiPj(baris_, konteks)
   const catatan = [kalimatNeraca(rekon, labelSumber)]
+  if (konteks.sebelum) {
+    catatan.push(kalimatBanding(bandingVersi(rekon, rekonsiliasiPj(konteks.sebelum.rows), konteks.sebelum.versi)))
+  }
   if (audit.doubleEntries.length) {
     catatan.push(`* ${audit.doubleEntries.length} baris ber-PJ yang leluhurnya juga ber-PJ: angkanya tetap masuk subtotal PJ-nya, tetapi tidak dihitung di JUMLAH SELURUHNYA supaya tidak dobel.`)
   }
@@ -186,7 +228,14 @@ export function susunRekapPj(rows: readonly AuditPjRow[], labelSumber: string): 
       catatan.push(`… dan ${rekon.pos.length - tampil.length} pos lainnya — daftar lengkap di panel Audit menu Cetak.`)
     }
   }
-  for (const t of periksaLabelPj(rows)) catatan.push(kalimatLabel(t))
+  const potong = <T>(xs: T[], ke: (x: T) => string) => {
+    for (const x of xs.slice(0, BATAS_CATATAN_LAIN)) catatan.push(ke(x))
+    if (xs.length > BATAS_CATATAN_LAIN) catatan.push(`… dan ${xs.length - BATAS_CATATAN_LAIN} lainnya — daftar lengkap di panel Audit menu Cetak.`)
+  }
+  potong(saranPjDobel(baris_), kalimatDobel)
+  potong(pjTingkatTakLazim(baris_).daftar, kalimatTakLazim)
+  potong(labelTanpaPk(baris_, opsi.labelPk), kalimatTanpaPk)
+  for (const t of periksaLabelPj(baris_)) catatan.push(kalimatLabel(t))
   return {
     baris, total: audit.grandTotal, totalAnggaran: audit.totalDPA, selisih,
     jumlahDobel: audit.doubleEntries.length, catatan,

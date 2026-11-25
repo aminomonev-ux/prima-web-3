@@ -18,10 +18,12 @@ import { auditRekapPJ } from './audit-pj'
 import { berSebelum, selisihSebelum, formatSelisih, totalSebelumSesudah } from './perubahan'
 import { KOLOM_SELISIH_PERUBAHAN } from './export/warna-delta'
 import type { AuditResult, AuditPjRow } from './audit-pj'
-import { kelompokPerPj, barisRekapPergeseran } from './rekap-pj'
+import { kelompokPerPj, barisRekapPergeseran, siapkanKonteksPj, type KonteksPjMentah } from './rekap-pj'
 import {
   rekonsiliasiPj, periksaLabelPj, kalimatNeraca, kalimatSaran, kalimatLabel, arahPos,
-  type HasilRekon, type TemuanLabel, type PosRekon,
+  kalimatRiwayat, kalimatDpa, kalimatBanding, kalimatTakLazim, kalimatTanpaPk,
+  bandingVersi, saranPjDobel, pjTingkatTakLazim, labelTanpaPk,
+  type HasilRekon, type TemuanLabel, type PosRekon, type BandingVersi, type SaranDobel, type PjTakLazim, type BarisRekon,
 } from './rekonsiliasi-pj'
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -56,6 +58,8 @@ export interface RenderArgs {
   tahun?: number
   /** Label Master Penanggung Jawab — panel audit PJ menyebut label di luar daftar ini. */
   masterPj?: readonly string[] | null
+  /** Pembanding Audit Rekap PJ (versi lalu, tahun lalu, DPA acuan, label PK), dimuat layar Cetak. */
+  konteksPj?: KonteksPjMentah | null
 }
 
 // Output shape — `rows` di sini sudah-aggregated (PJ grouping, etc.) untuk export
@@ -200,7 +204,7 @@ export function saringYangBergeser<T extends {
 // ──────────────────────────────────────────────────────────────────────────
 export function renderCetakHtml(args: RenderArgs): RenderResult {
   const { menu, view, rows, versi, tanggal, hanyaBergeser, mutasi, perubahanKe = null, acuanPerubahanKe = null } = args
-  const opsiPj = { tahun: args.tahun, masterPj: args.masterPj, versi }
+  const opsiPj = { tahun: args.tahun, masterPj: args.masterPj, versi, konteks: args.konteksPj }
 
   if (menu === 'dpa' && view === 'dpa') {
     return renderDpaView(rows as DpaBaris[], versi ?? tanggal, perubahanKe)
@@ -404,7 +408,7 @@ function renderPjView(
   sumber: 'dpa' | 'pergeseran',
   /** Selisih pagu akar terhadap DPA — != 0 berarti dokumennya masih DRAFT. */
   deltaRoot = 0,
-  opsi: { tahun?: number; masterPj?: readonly string[] | null; versi?: string | null } = {},
+  opsi: { tahun?: number; masterPj?: readonly string[] | null; versi?: string | null; konteks?: KonteksPjMentah | null } = {},
 ): RenderResult {
   const columns = ['Penanggung Jawab', 'Uraian', 'Jumlah']
   const labelSumber = sumber === 'dpa' ? 'DPA' : 'Pergeseran'
@@ -459,9 +463,17 @@ function renderPjView(
   html += `<tr style="background:rgba(239,159,39,.22);font-weight:800;color:#FFE6BF;"><td>TOTAL BELANJA BLUD</td><td></td><td style="text-align:right;font-family:monospace;">${formatRupiah(grandTotal)}</td></tr>`
   html += `</tbody></table>`
 
-  // Panel audit hybrid (rule-based, no AI)
-  const rekon = rekonsiliasiPj(rows)
+  // Panel Audit — rekonsiliasi + pembanding (CONCEPT-blud-audit-pj-pintar §2, §8)
+  const konteks = siapkanKonteksPj(sumber, opsi.konteks)
+  const rekon = rekonsiliasiPj(rows, konteks)
   const temuanLabel = periksaLabelPj(rows, opsi.masterPj)
+  const lanjut: AnalisisLanjut = {
+    banding: konteks.sebelum ? bandingVersi(rekon, rekonsiliasiPj(konteks.sebelum.rows), konteks.sebelum.versi) : null,
+    dobel: saranPjDobel(rows as unknown as BarisRekon[]),
+    takLazim: pjTingkatTakLazim(rows as unknown as BarisRekon[]).daftar,
+    tanpaPk: labelTanpaPk(rows as unknown as BarisRekon[], opsi.konteks?.labelPk),
+    adaDpaAcuan: !!konteks.dpaAcuan,
+  }
   const tautan = (anggaranKey: string | null) => {
     if (!anggaranKey) return ''
     const q = new URLSearchParams()
@@ -470,9 +482,18 @@ function renderPjView(
     q.set('fokus', anggaranKey)
     return `/blud/${sumber === 'dpa' ? 'dpa' : 'pergeseran'}?${q.toString()}`
   }
-  html += renderAuditPanel(audit, labelSumber, rekon, temuanLabel, tautan)
+  html += renderAuditPanel(audit, labelSumber, rekon, temuanLabel, tautan, lanjut)
 
   return { html, rows: exportRows, meta: { title, columns } }
+}
+
+interface AnalisisLanjut {
+  banding: BandingVersi | null
+  dobel: SaranDobel[]
+  takLazim: PjTakLazim[]
+  tanpaPk: Array<{ label: string; baris: number; nominal: number }>
+  /** Pergeseran: DPA acuan termuat — petunjuk Sinkronkan DPA bisa ditulis per celah. */
+  adaDpaAcuan: boolean
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -484,16 +505,18 @@ function renderAuditPanel(
   rekon: HasilRekon,
   temuanLabel: TemuanLabel[],
   tautan: (anggaranKey: string | null) => string,
+  lanjut: AnalisisLanjut,
 ): string {
   const kurang = rekon.selisih >= 1
   const lebih = rekon.selisih <= -1
   const status = kurang ? 'kurang' : lebih ? 'lebih' : 'ok'
   const jumlahPos = rekon.pos.length
   const persen = (rekon.tercakup * 100).toLocaleString('id-ID', { maximumFractionDigits: 1 })
+  const rapikan = lanjut.dobel.length + temuanLabel.length + lanjut.takLazim.length + lanjut.tanpaPk.length
   // Kalimat kepala MENJAWAB, bukan menghitung (CONCEPT-blud-audit-pj-pintar §2.5).
   const kepala = status === 'ok'
-    ? (a.doubleEntries.length || temuanLabel.length
-      ? `Total cocok — ${persen}% anggaran ber-PJ, ada ${a.doubleEntries.length + temuanLabel.length} hal yang perlu dirapikan`
+    ? (rapikan
+      ? `Total cocok — ${persen}% anggaran ber-PJ, ada ${rapikan} hal yang perlu dirapikan`
       : `Lengkap — seluruh anggaran ber-PJ tepat satu kali`)
     : `${persen}% anggaran sudah ber-PJ — rekap ${status} ${formatRupiah(Math.abs(rekon.selisih))}`
       + (jumlahPos ? ` dari ${jumlahPos} pos` : '')
@@ -508,13 +531,16 @@ function renderAuditPanel(
     status === 'ok' ? '0' : formatRupiah(Math.abs(rekon.selisih)), status === 'ok' ? 'baik' : status === 'lebih' ? 'buruk' : 'awas')
   h += kartu('Tercakup PJ', `${persen}%`, rekon.tercakup >= 0.9999 ? 'baik' : 'awas')
   h += kartu('Penyebab selisih', `${jumlahPos} pos`, jumlahPos ? 'awas' : 'baik')
-  h += kartu('PJ dobel', `${a.doubleEntries.length} baris`, a.doubleEntries.length ? 'buruk' : 'baik')
+  h += kartu('PJ dobel', `${lanjut.dobel.length} baris`, lanjut.dobel.length ? 'buruk' : 'baik')
   h += kartu('PJ unik', `${a.totalPJ}`, 'netral')
+  const hilang = rekon.pos.filter(p => p.jenis === 'celah' && p.riwayat).length
+  if (lanjut.banding) h += kartu('PJ hilang sejak versi lalu', `${hilang} pos`, hilang ? 'buruk' : 'baik')
   h += `</div>`
 
   if (status !== 'ok' || jumlahPos) {
     h += `<div class="apj-neraca">${esc(kalimatNeraca(rekon, labelSumber))}</div>`
   }
+  if (lanjut.banding) h += `<div class="apj-banding">${esc(kalimatBanding(lanjut.banding))}</div>`
 
   const butirPos = (p: PosRekon) => {
     const nama = [p.kode, p.uraian].filter(Boolean).join(' ') || '(tanpa uraian)'
@@ -526,8 +552,13 @@ function renderAuditPanel(
     if (p.jalur && !p.kode) ket.push(`di bawah ${esc(p.jalur)}`)
     if (p.jenis === 'celah') {
       ket.push(p.barisCabang > 1 ? `belum ber-PJ — ${p.barisCabang} baris di cabang ini` : 'belum ber-PJ')
+      const r = kalimatRiwayat(p.riwayat)
+      if (r) ket.push(`<span class="apj-hilang">${esc(r)}</span>`)
       const s = kalimatSaran(p.saran)
       if (s) ket.push(`<span class="apj-saran">${esc(s)}</span>`)
+      // PJ Pergeseran = salinan DPA; "Sinkronkan DPA" menimpanya kembali dari sana.
+      const d = kalimatDpa(p.dpa)
+      if (d) ket.push(`<span class="apj-dpa">${esc(d)}</span>`)
     } else if (p.jenis === 'induk') {
       ket.push(`angka induk ${formatRupiah(p.jumlahInduk)} ≠ jumlah anaknya ${formatRupiah(p.jumlahAnak)} — rekap anak-anaknya tidak bisa menyamai angka induk`)
     } else {
@@ -556,18 +587,32 @@ function renderAuditPanel(
     h += `<div class="apj-ket">Struktur data di luar pola yang dikenali (mis. Belanja Daerah ganda). Laporkan ke admin bersama versi ini.</div></div>`
   }
 
-  h += kelompok(`PJ dobel dalam satu rantai — ${a.doubleEntries.length} baris (tidak mengubah total, tetapi tampil di dua PJ)`,
-    a.doubleEntries.map(d => {
-      let b = `<div class="apj-butir apj-lebih"><div class="apj-butir-atas"><strong>${esc([d.kode, d.uraian].filter(Boolean).join(' '))}</strong>`
-      b += `<span class="apj-nilai">${formatRupiah(d.jumlah)}</span></div>`
-      b += `<div class="apj-ket">ber-PJ <strong>${esc(d.pj)}</strong>, leluhurnya <strong>${esc(d.konflik.uraian)}</strong> juga ber-PJ <strong>${esc(d.konflik.pj)}</strong> — hapus PJ di salah satunya`
+  const buka = (key: string | null, teks: string) => {
+    const url = tautan(key)
+    return url ? ` · <a class="apj-buka" href="${esc(url)}">${esc(teks)} →</a>` : ''
+  }
+  const jumlahDobel = new Map(a.doubleEntries.map(d => [d.rowId, d.jumlah]))
+  h += kelompok(`PJ dobel dalam satu rantai — ${lanjut.dobel.length} baris (tidak mengubah total, tetapi tampil di dua PJ)`,
+    lanjut.dobel.map(d => {
+      const nama = [d.kode, d.uraian].filter(Boolean).join(' ')
+      const sasaran = d.hapusDi === 'induk' ? d.indukUraian : nama
+      let b = `<div class="apj-butir apj-lebih"><div class="apj-butir-atas"><strong>${esc(nama)}</strong>`
+      b += `<span class="apj-nilai">${formatRupiah(jumlahDobel.get(d.rowId) ?? 0)}</span></div>`
+      b += `<div class="apj-ket">ber-PJ <strong>${esc(d.pj)}</strong>, induknya <strong>${esc(d.indukUraian)}</strong> juga ber-PJ <strong>${esc(d.indukPj)}</strong>`
+      b += ` · <span class="apj-saran">saran: hapus PJ di ${esc(sasaran)} — ${esc(d.alasan)}</span>`
+      b += buka(d.hapusDi === 'induk' ? d.indukAnggaranKey : d.anggaranKey, `Buka ${sasaran}`)
       b += `</div></div>`
       return b
-    }), a.doubleEntries.length <= 10)
+    }), lanjut.dobel.length <= 10)
+  h += kelompok(`PJ di tingkat tak lazim — ${lanjut.takLazim.length} baris`,
+    lanjut.takLazim.map(t => `<div class="apj-butir apj-kurang"><div class="apj-ket">${esc(kalimatTakLazim(t))}${buka(t.anggaranKey, 'Buka')}</div></div>`),
+    lanjut.takLazim.length <= 10)
+  h += kelompok(`PJ tidak dipetakan ke Form PK — ${lanjut.tanpaPk.length} label`,
+    lanjut.tanpaPk.map(x => `<div class="apj-butir apj-kurang"><div class="apj-ket">${esc(kalimatTanpaPk(x))}</div></div>`), true)
   h += kelompok(`Label PJ — ${temuanLabel.length} temuan`,
     temuanLabel.map(t => `<div class="apj-butir apj-kurang"><div class="apj-ket">${esc(kalimatLabel(t))}</div></div>`), true)
 
-  if (status === 'ok' && !jumlahPos && !a.doubleEntries.length && !temuanLabel.length) {
+  if (status === 'ok' && !jumlahPos && !rapikan) {
     h += `<div class="apj-lengkap">Rekap sudah sesuai dengan ${esc(labelSumber)} BLUD. Tidak ada tindakan yang diperlukan.</div>`
   }
   h += `</div>`

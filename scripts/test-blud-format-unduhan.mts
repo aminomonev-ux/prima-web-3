@@ -209,7 +209,11 @@ bab('D. Rekap PJ — §6.2')
   const dobel = s.baris.filter(b => b.jenis === 'rincian' && b.dobelDengan)
   cek('D3 hanya ATK yang ditandai dobel, dengan PJ leluhurnya',
     dobel.length === 1 && dobel[0].jenis === 'rincian' && dobel[0].uraian === 'ATK' && dobel[0].dobelDengan === 'Kasubbag Umum')
-  cek('D4 catatan dobel ikut', s.catatan.length === 2 && /^\* 1 baris/.test(s.catatan[1]))
+  // Catatan dobel + saran mana yang dihapus (CONCEPT-blud-audit-pj-pintar §8): ATK ber-PJ
+  // sama dgn induknya → hapus di ATK.
+  cek('D4 catatan dobel ikut, dgn saran baris mana yang dihapus', s.catatan.length === 3 && /^\* 1 baris/.test(s.catatan[1])
+    && /^PJ dobel: 5\.1\.01 ATK \(Kasubbag Umum\) di bawah Belanja Operasi \(Kasubbag Umum\) — saran: hapus PJ di 5\.1\.01 ATK/.test(s.catatan[2]),
+    s.catatan.join(' | '))
   cek('D5 huruf kelompok A, B', kel.map(k => (k.jenis === 'kelompok' ? k.huruf : '')).join('') === 'AB')
   // Subtotal mentah memuat baris dobel; porsi TIDAK — kalau ya, kolom % berjumlah > 100%.
   const totalPorsi = kel.reduce((t, k) => t + (k.jenis === 'kelompok' ? k.porsi : 0), 0)

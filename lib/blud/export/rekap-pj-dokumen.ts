@@ -5,7 +5,7 @@
 // dan nominal BLUD Form PK. Berkas ini hanya menata; ia tidak menghitung ulang.
 import type ExcelJS from 'exceljs'
 import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-export'
-import { susunRekapPj, barisRekapDpa, barisRekapPergeseran, type SusunanRekapPj } from '@/lib/blud/rekap-pj'
+import { susunRekapPj, barisRekapDpa, barisRekapPergeseran, siapkanKonteksPj, type SusunanRekapPj, type KonteksPjMentah } from '@/lib/blud/rekap-pj'
 import { hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { formatTanggalId, tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import {
@@ -22,6 +22,8 @@ export interface UnduhRekapPjArgs {
   sumber: SumberRekapPj
   rows: DpaBaris[] | PergeseranBaris[]
   direktur?: PejabatTtd | null
+  /** Pembanding Audit Rekap PJ (versi lalu, tahun lalu, DPA acuan, label PK) — dimuat layar Cetak. */
+  konteks?: KonteksPjMentah | null
 }
 
 export const KOLOM_REKAP_PJ = ['No', 'Penanggung Jawab / Uraian', 'Jumlah (Rp)', '%', 'Keterangan'] as const
@@ -34,7 +36,9 @@ export function bahanRekapPj(args: UnduhRekapPjArgs): { susunan: SusunanRekapPj;
     ? barisRekapPergeseran(rows as PergeseranBaris[])
     : barisRekapDpa(rows as DpaBaris[])
   const labelSumber = pergeseran ? 'Pergeseran' : 'DPA'
-  const susunan = susunRekapPj(audit, labelSumber)
+  const susunan = susunRekapPj(audit, labelSumber, {
+    konteks: siapkanKonteksPj(sumber, args.konteks), labelPk: args.konteks?.labelPk,
+  })
   // Pergeseran belum berimbang = dokumen DRAFT (sama dengan judul layar Cetak).
   const draft = pergeseran && hitungDeltaPergeseranRoot(rows as PergeseranBaris[]) !== 0
   const judul = pergeseran ? 'REKAP ANGGARAN PER PENANGGUNG JAWAB (PASCA-PERGESERAN)' : 'REKAP ANGGARAN PER PENANGGUNG JAWAB'

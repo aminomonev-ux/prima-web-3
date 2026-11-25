@@ -4,12 +4,12 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
 import { bolehLihatSalahSatu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { PenanggungJawabBodySchema } from '@/lib/blud/penanggung-jawab-schemas'
-import { getPenanggungJawab, getPenanggungJawabVersion, savePenanggungJawab, PenanggungJawabSafetyError } from '@/lib/blud/penanggung-jawab-data'
+import { getPenanggungJawab, getPenanggungJawabVersion, savePenanggungJawab, PenanggungJawabSafetyError, getLabelPjDipakaiPk } from '@/lib/blud/penanggung-jawab-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
@@ -23,6 +23,11 @@ export async function GET() {
   if (limited) return limited
 
   try {
+    // ?mode=pk — label PJ yang dipakai Form PK (Audit Rekap PJ menu Cetak). Hanya nama label,
+    // tanpa data pejabat; pagarnya sama dgn daftar master di bawah.
+    if (req.nextUrl.searchParams.get('mode') === 'pk') {
+      return NextResponse.json({ ok: true, data: await getLabelPjDipakaiPk() })
+    }
     const [data, version] = await Promise.all([getPenanggungJawab(), getPenanggungJawabVersion()])
     return NextResponse.json({ ok: true, data, version })
   } catch (err) {

@@ -18,6 +18,7 @@
 // kekurangan 1,87 M). Celah tidak pernah tumpang-tindih: jumlahnya = kekurangan.
 
 import { totalDpaBlud, auditRekapPJ, type AuditPjRow } from './audit-pj'
+import { formatTanggalId } from './tanggal'
 
 export interface BarisRekon {
   row_id: string
@@ -30,15 +31,43 @@ export interface BarisRekon {
   anggaran_key?: string | null
 }
 
+/**
+ * Dasar saran, urut KEKUATAN (yang pertama ditemukan dipakai):
+ *   dpa         baris yang sama (jangkar sama) di DPA acuan ber-PJ — khusus Pergeseran
+ *   versi lalu  baris yang sama ber-PJ di versi sebelumnya
+ *   tahun lalu  kode + uraian sama ber-PJ di versi terakhir tahun lalu (jangkar tak lintas tahun)
+ *   cabang lalu di versi sebelumnya cabang ini (anak-anaknya) ber-PJ
+ *   saudara     anak induk yang sama ber-PJ
+ *   kerabat     satu tingkat di atasnya
+ */
+export type DasarSaran = 'dpa' | 'versi lalu' | 'tahun lalu' | 'cabang lalu' | 'saudara' | 'kerabat'
 export interface SaranPj {
   pj: string
   /** Banyaknya baris pembanding ber-PJ ini. */
   dukungan: number
   /** Banyaknya baris pembanding yang ber-PJ (semua label). */
   dari: number
-  /** 'saudara' = anak induk yang sama; 'kerabat' = satu tingkat di atasnya. */
-  dasar: 'saudara' | 'kerabat'
+  dasar: DasarSaran
+  /** Versi (yyyy-mm-dd) atau tahun asal saran riwayat. */
+  asal?: string
 }
+
+/**
+ * Konteks pembanding — semuanya opsional & best-effort (layar Cetak memuatnya sendiri).
+ * Baris DPA acuan hanya untuk Rekap PJ Pergeseran: PJ Pergeseran adalah salinan DPA dan
+ * "Sinkronkan DPA" menimpanya kembali dari sana.
+ */
+export interface KonteksPj {
+  sebelum?: { versi: string; rows: readonly BarisRekon[] } | null
+  tahunLalu?: { tahun: number; rows: readonly BarisRekon[] } | null
+  dpaAcuan?: { versi: string; rows: readonly BarisRekon[] } | null
+}
+
+/** Keadaan baris yang sama di DPA acuan (celah Pergeseran). */
+export type StatusDpa =
+  | { status: 'pj'; pj: string }
+  | { status: 'tertaungi'; pj: string }
+  | { status: 'kosong' }
 
 interface PosDasar {
   rowId: string
@@ -51,7 +80,13 @@ interface PosDasar {
   nilai: number
 }
 export type PosRekon =
-  | (PosDasar & { jenis: 'celah'; barisCabang: number; saran: SaranPj | null })
+  | (PosDasar & {
+      jenis: 'celah'; barisCabang: number; saran: SaranPj | null
+      /** Baris ini SENDIRI ber-PJ di versi sebelumnya — PJ-nya hilang sejak itu. */
+      riwayat: { pj: string; versi: string } | null
+      /** Pergeseran: keadaan baris yang sama di DPA acuan; `null` = tak ada di DPA / bukan Pergeseran. */
+      dpa: StatusDpa | null
+    })
   | (PosDasar & { jenis: 'induk'; jumlahInduk: number; jumlahAnak: number })
   | (PosDasar & { jenis: 'luar'; pj: string })
 
@@ -74,7 +109,53 @@ export const adaPj = (pj: string | null | undefined): boolean => {
 const bulat = (n: number) => Math.round(Number(n) || 0)
 const teks = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim()
 
-export function rekonsiliasiPj(rows: readonly BarisRekon[]): HasilRekon {
+/** Indeks satu set baris pembanding: per jangkar, induk, anak. */
+function indeks(rows: readonly BarisRekon[]) {
+  const byId = new Map(rows.map(r => [r.row_id, r]))
+  const byKey = new Map<string, BarisRekon>()
+  for (const r of rows) if (r.anggaran_key) byKey.set(r.anggaran_key, r)
+  const anak = new Map<string, BarisRekon[]>()
+  for (const r of rows) {
+    if (r.parent_id && byId.has(r.parent_id)) anak.set(r.parent_id, [...(anak.get(r.parent_id) ?? []), r])
+  }
+  const induk = (r: BarisRekon) => (r.parent_id ? byId.get(r.parent_id) ?? null : null)
+  const pjLeluhur = (r: BarisRekon): string | null => {
+    for (let p = induk(r), n = 0; p && n < 64; p = induk(p), n++) if (adaPj(p.penanggung_jawab)) return teks(p.penanggung_jawab)
+    return null
+  }
+  /** Label PJ di cabang (diri + keturunan), dihitung per label. */
+  const pjCabang = (r: BarisRekon): Map<string, number> => {
+    const n = new Map<string, number>()
+    const jalan = (x: BarisRekon, d: number) => {
+      if (d > 64) return
+      if (adaPj(x.penanggung_jawab)) n.set(teks(x.penanggung_jawab), (n.get(teks(x.penanggung_jawab)) ?? 0) + 1)
+      for (const c of anak.get(x.row_id) ?? []) jalan(c, d + 1)
+    }
+    jalan(r, 0)
+    return n
+  }
+  return { byKey, pjLeluhur, pjCabang }
+}
+
+const kunciNama = (r: BarisRekon) => `${teks(r.kode_rekening).toLowerCase()}|${teks(r.uraian).toLowerCase()}`
+
+export function rekonsiliasiPj(rows: readonly BarisRekon[], konteks: KonteksPj = {}): HasilRekon {
+  const lalu = konteks.sebelum?.rows.length ? indeks(konteks.sebelum.rows) : null
+  const dpa = konteks.dpaAcuan?.rows.length ? indeks(konteks.dpaAcuan.rows) : null
+  // Tahun lalu: jangkar tidak lintas tahun (Salin Tahun melepasnya) → kode + uraian, hanya yang unik.
+  const tahunLalu = new Map<string, string | null>()
+  for (const r of konteks.tahunLalu?.rows ?? []) {
+    if (!adaPj(r.penanggung_jawab) || !teks(r.uraian)) continue
+    const k = kunciNama(r)
+    tahunLalu.set(k, tahunLalu.has(k) && tahunLalu.get(k) !== teks(r.penanggung_jawab) ? null : teks(r.penanggung_jawab))
+  }
+  const statusDpa = (r: BarisRekon): StatusDpa | null => {
+    const d = dpa && r.anggaran_key ? dpa.byKey.get(r.anggaran_key) : undefined
+    if (!d || !dpa) return null
+    if (adaPj(d.penanggung_jawab)) return { status: 'pj', pj: teks(d.penanggung_jawab) }
+    const atas = dpa.pjLeluhur(d)
+    return atas ? { status: 'tertaungi', pj: atas } : { status: 'kosong' }
+  }
   const byId = new Map(rows.map(r => [r.row_id, r]))
   const induk = (r: BarisRekon) => (r.parent_id && byId.has(r.parent_id) ? byId.get(r.parent_id)! : null)
   const anak = new Map<string, BarisRekon[]>()
@@ -127,7 +208,14 @@ export function rekonsiliasiPj(rows: readonly BarisRekon[]): HasilRekon {
     if (kedalaman > 64 || adaPj(n.penanggung_jawab) || pjDiAtas.get(n.row_id)) return
     if (!cabangBerPj(n)) {
       const nilai = bulat(n.jumlah)
-      if (nilai !== 0) pos.push({ ...dasar(n, nilai), jenis: 'celah', barisCabang: jumlahCabang(n), saran: saranPj(n) })
+      if (nilai !== 0) {
+        const lama = lalu && n.anggaran_key ? lalu.byKey.get(n.anggaran_key) : undefined
+        pos.push({
+          ...dasar(n, nilai), jenis: 'celah', barisCabang: jumlahCabang(n), saran: saranPj(n),
+          riwayat: lama && adaPj(lama.penanggung_jawab) && konteks.sebelum ? { pj: teks(lama.penanggung_jawab), versi: konteks.sebelum.versi } : null,
+          dpa: statusDpa(n),
+        })
+      }
       return
     }
     const anakN = anak.get(n.row_id) ?? []
@@ -146,6 +234,23 @@ export function rekonsiliasiPj(rows: readonly BarisRekon[]): HasilRekon {
       if (!n.size) return null
       const [pj, dukungan] = [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]
       return { pj, dukungan, dari: [...n.values()].reduce((s, v) => s + v, 0), dasar: dasarSaran }
+    }
+    const dariDpa = statusDpa(c)
+    if (dariDpa && dariDpa.status !== 'kosong') {
+      return { pj: dariDpa.pj, dukungan: 1, dari: 1, dasar: 'dpa', asal: konteks.dpaAcuan?.versi }
+    }
+    const lama = lalu && c.anggaran_key ? lalu.byKey.get(c.anggaran_key) : undefined
+    if (lama && adaPj(lama.penanggung_jawab)) {
+      return { pj: teks(lama.penanggung_jawab), dukungan: 1, dari: 1, dasar: 'versi lalu', asal: konteks.sebelum?.versi }
+    }
+    const dariTahunLalu = tahunLalu.get(kunciNama(c))
+    if (dariTahunLalu) return { pj: dariTahunLalu, dukungan: 1, dari: 1, dasar: 'tahun lalu', asal: String(konteks.tahunLalu?.tahun ?? '') }
+    if (lama && lalu) {
+      const n = lalu.pjCabang(lama)
+      if (n.size) {
+        const [pj, dukungan] = [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]
+        return { pj, dukungan, dari: [...n.values()].reduce((t, v) => t + v, 0), dasar: 'cabang lalu', asal: konteks.sebelum?.versi }
+      }
     }
     const p = induk(c)
     if (!p) return null
@@ -176,6 +281,140 @@ export function rekonsiliasiPj(rows: readonly BarisRekon[]): HasilRekon {
   const sisa = selisih - pos.reduce((s, p) => s + p.nilai, 0)
   const celahPositif = pos.filter(p => p.jenis === 'celah' && p.nilai > 0).reduce((s, p) => s + p.nilai, 0)
   return { total, rekap, selisih, pos, sisa, tercakup: total > 0 ? Math.max(0, Math.min(1, 1 - celahPositif / total)) : 0 }
+}
+
+// ─── Pembanding antar versi ──────────────────────────────────────────────────
+
+export interface BandingVersi {
+  versi: string
+  selisihLalu: number
+  selisihKini: number
+  /** Pos yang muncul sejak versi itu. */
+  baru: PosRekon[]
+  /** Pos versi itu yang sudah tidak ada sekarang. */
+  teratasi: PosRekon[]
+}
+const kunciPos = (p: PosRekon) => `${p.jenis}|${p.anggaranKey ?? p.rowId}`
+
+export function bandingVersi(kini: HasilRekon, lalu: HasilRekon, versi: string): BandingVersi {
+  const kLalu = new Set(lalu.pos.map(kunciPos))
+  const kKini = new Set(kini.pos.map(kunciPos))
+  return {
+    versi, selisihLalu: lalu.selisih, selisihKini: kini.selisih,
+    baru: kini.pos.filter(p => !kLalu.has(kunciPos(p))),
+    teratasi: lalu.pos.filter(p => !kKini.has(kunciPos(p))),
+  }
+}
+
+// ─── Tingkat PJ, PJ dobel, pemetaan Form PK ──────────────────────────────────
+
+function kedalamanSemua(rows: readonly BarisRekon[]): Map<string, number> {
+  const byId = new Map(rows.map(r => [r.row_id, r]))
+  const d = new Map<string, number>()
+  for (const r of rows) {
+    let n = 0
+    for (let p = r.parent_id ? byId.get(r.parent_id) : undefined; p && n < 64; p = p.parent_id ? byId.get(p.parent_id) : undefined) n++
+    d.set(r.row_id, n)
+  }
+  return d
+}
+
+export interface PjTakLazim {
+  rowId: string; anggaranKey: string | null; kode: string; uraian: string; pj: string
+  /** Tingkat 1 = akar. */
+  tingkat: number
+  lazim: number
+}
+
+/**
+ * PJ yang dipasang jauh dari tingkat yang dipakai mayoritas — sering salah tempat dan
+ * rawan jadi PJ dobel. Hanya bersuara kalau polanya jelas: ≥ 5 baris ber-PJ, ≥ 60% di
+ * satu tingkat, dan yang dilaporkan berjarak ≥ 2 tingkat dari situ.
+ */
+export function pjTingkatTakLazim(rows: readonly BarisRekon[]): { lazim: number | null; daftar: PjTakLazim[] } {
+  const d = kedalamanSemua(rows)
+  const ber = rows.filter(r => adaPj(r.penanggung_jawab))
+  if (ber.length < 5) return { lazim: null, daftar: [] }
+  const hitung = new Map<number, number>()
+  for (const r of ber) hitung.set(d.get(r.row_id)!, (hitung.get(d.get(r.row_id)!) ?? 0) + 1)
+  const [mode, banyak] = [...hitung.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]
+  if (banyak / ber.length < 0.6) return { lazim: null, daftar: [] }
+  return {
+    lazim: mode + 1,
+    daftar: ber.filter(r => Math.abs(d.get(r.row_id)! - mode) >= 2).map(r => ({
+      rowId: r.row_id, anggaranKey: r.anggaran_key ?? null, kode: teks(r.kode_rekening), uraian: teks(r.uraian),
+      pj: teks(r.penanggung_jawab), tingkat: d.get(r.row_id)! + 1, lazim: mode + 1,
+    })),
+  }
+}
+
+export interface SaranDobel {
+  rowId: string; anggaranKey: string | null; kode: string; uraian: string; pj: string
+  indukRowId: string; indukAnggaranKey: string | null; indukUraian: string; indukPj: string
+  /** Baris mana yang PJ-nya sebaiknya dihapus. */
+  hapusDi: 'bawah' | 'induk'
+  alasan: string
+}
+
+/**
+ * Untuk tiap pasangan PJ dobel (baris + leluhur ber-PJ terdekatnya): PJ mana yang sebaiknya
+ * dihapus. PJ sama → yang bawah (sudah tercakup). PJ beda → yang TIDAK di tingkat lazim;
+ * tanpa tingkat lazim → yang bawah, dgn alasan "PJ induk menaungi seluruh cabangnya".
+ */
+export function saranPjDobel(rows: readonly BarisRekon[]): SaranDobel[] {
+  const byId = new Map(rows.map(r => [r.row_id, r]))
+  const d = kedalamanSemua(rows)
+  const { lazim } = pjTingkatTakLazim(rows)
+  const out: SaranDobel[] = []
+  for (const r of rows) {
+    if (!adaPj(r.penanggung_jawab)) continue
+    let a: BarisRekon | undefined
+    for (let p = r.parent_id ? byId.get(r.parent_id) : undefined, n = 0; p && n < 64; p = p.parent_id ? byId.get(p.parent_id) : undefined, n++) {
+      if (adaPj(p.penanggung_jawab)) { a = p; break }
+    }
+    if (!a) continue
+    const sama = normPj(teks(a.penanggung_jawab)) === normPj(teks(r.penanggung_jawab))
+    const tBawah = d.get(r.row_id)! + 1
+    const tInduk = d.get(a.row_id)! + 1
+    let hapusDi: SaranDobel['hapusDi'] = 'bawah'
+    let alasan: string
+    if (sama) alasan = 'PJ-nya sama dengan induknya, jadi sudah tercakup'
+    else if (lazim != null && tBawah === lazim && tInduk !== lazim) {
+      hapusDi = 'induk'
+      alasan = `PJ baris bawah di tingkat ${lazim} seperti kebanyakan PJ, PJ induk (tingkat ${tInduk}) yang tidak lazim; sesudahnya isi PJ saudara-saudaranya`
+    } else if (lazim != null && tInduk === lazim) {
+      alasan = `PJ induk di tingkat ${lazim} seperti kebanyakan PJ; kalau pos ini memang milik ${teks(r.penanggung_jawab)}, pindahkan PJ induk ke saudara-saudaranya`
+    } else alasan = 'PJ induk menaungi seluruh cabangnya'
+    out.push({
+      rowId: r.row_id, anggaranKey: r.anggaran_key ?? null, kode: teks(r.kode_rekening), uraian: teks(r.uraian), pj: teks(r.penanggung_jawab),
+      indukRowId: a.row_id, indukAnggaranKey: a.anggaran_key ?? null, indukUraian: teks(a.uraian), indukPj: teks(a.penanggung_jawab),
+      hapusDi, alasan,
+    })
+  }
+  return out
+}
+
+/**
+ * Label PJ yang tidak dipakai unit PK mana pun (sub kegiatan = nama unitnya; program/kegiatan
+ * lewat pemetaan Master Unit Kerja). Nominal BLUD label itu tidak pernah masuk Form PK.
+ * Dicocokkan tanpa peduli huruf besar & spasi — aturan `nominalUntukUnit`.
+ */
+export function labelTanpaPk(
+  rows: readonly BarisRekon[], labelPk: readonly string[] | null | undefined,
+): Array<{ label: string; baris: number; nominal: number }> {
+  if (!labelPk?.length) return []
+  const kenal = new Set(labelPk.map(l => teks(l).toLowerCase()))
+  const per = new Map<string, { baris: number; nominal: number }>()
+  for (const r of rows) {
+    if (!adaPj(r.penanggung_jawab)) continue
+    const l = teks(r.penanggung_jawab)
+    if (kenal.has(l.toLowerCase())) continue
+    const x = per.get(l) ?? { baris: 0, nominal: 0 }
+    x.baris++
+    x.nominal += Number(r.jumlah) || 0
+    per.set(l, x)
+  }
+  return [...per.entries()].map(([label, x]) => ({ label, ...x })).sort((a, b) => b.nominal - a.nominal)
 }
 
 // ─── Label PJ ────────────────────────────────────────────────────────────────
@@ -247,10 +486,29 @@ export const arahPos = (nilai: number) => (nilai > 0 ? 'kurang' : 'lebih')
 
 export function kalimatSaran(s: SaranPj | null): string {
   if (!s) return ''
+  const tgl = s.asal && /^\d{4}-\d{2}-\d{2}$/.test(s.asal) ? formatTanggalId(s.asal) : ''
+  if (s.dasar === 'dpa') return `saran: ${s.pj} (PJ baris ini di DPA acuan${tgl ? ` ${tgl}` : ''})`
+  if (s.dasar === 'versi lalu') return `saran: ${s.pj} (PJ baris ini di versi ${tgl})`
+  if (s.dasar === 'tahun lalu') return `saran: ${s.pj} (PJ baris dengan kode & uraian sama di tahun ${s.asal})`
+  if (s.dasar === 'cabang lalu') {
+    return `saran: ${s.pj} (${s.dukungan}${s.dukungan === s.dari ? '' : ` dari ${s.dari}`} baris di cabang ini ber-PJ itu di versi ${tgl})`
+  }
   const asal = s.dasar === 'saudara' ? 'baris sejenis di bawah induk yang sama' : 'baris di cabang sebelahnya'
   return s.dukungan === s.dari
     ? `saran: ${s.pj} (${s.dukungan} ${asal} ber-PJ ini)`
     : `saran: ${s.pj} (${s.dukungan} dari ${s.dari} ${asal} — campuran)`
+}
+
+/** Petunjuk Sinkronkan DPA untuk celah Pergeseran (PJ Pergeseran = salinan DPA). */
+export function kalimatDpa(d: StatusDpa | null): string {
+  if (!d) return ''
+  if (d.status === 'pj') return `di DPA baris ini ber-PJ ${d.pj} — tekan Sinkronkan DPA di layar Pergeseran, atau isi ${d.pj} di sini`
+  if (d.status === 'tertaungi') return `di DPA tercakup PJ ${d.pj} dari induknya — Sinkronkan DPA mengembalikannya`
+  return 'di DPA juga belum ber-PJ: isi di DPA juga, kalau tidak "Sinkronkan DPA" akan mengosongkannya lagi'
+}
+
+export function kalimatRiwayat(r: { pj: string; versi: string } | null): string {
+  return r ? `dulu ber-PJ ${r.pj} di versi ${formatTanggalId(r.versi)} — PJ-nya hilang sejak itu` : ''
 }
 
 export function kalimatPos(p: PosRekon): string {
@@ -258,8 +516,8 @@ export function kalimatPos(p: PosRekon): string {
   const di = p.jalur && !p.kode ? ` — di bawah ${p.jalur}` : ''
   const dampak = `rekap ${arahPos(p.nilai)} Rp ${rp(p.nilai)}`
   if (p.jenis === 'celah') {
-    const s = kalimatSaran(p.saran)
-    return `${nama}${di}: belum ber-PJ${p.barisCabang > 1 ? ` (${p.barisCabang} baris)` : ''} — ${dampak}${s ? `; ${s}` : ''}`
+    const tambahan = [kalimatRiwayat(p.riwayat), kalimatSaran(p.saran), kalimatDpa(p.dpa)].filter(Boolean)
+    return `${nama}${di}: belum ber-PJ${p.barisCabang > 1 ? ` (${p.barisCabang} baris)` : ''} — ${dampak}${tambahan.map(t => `; ${t}`).join('')}`
   }
   if (p.jenis === 'induk') {
     return `${nama}${di}: angka induk Rp ${p.jumlahInduk.toLocaleString('id-ID')} tidak sama dengan jumlah anaknya Rp ${p.jumlahAnak.toLocaleString('id-ID')} — ${dampak}`
@@ -285,4 +543,29 @@ export function kalimatNeraca(h: HasilRekon, labelSumber: string): string {
   if (lebih) k += ` - kelebihan Rp ${rp(lebih)}`
   if (Math.abs(h.sisa) >= 1) k += ` ${h.sisa > 0 ? '+' : '-'} sisa tak terjelaskan Rp ${rp(h.sisa)}`
   return k + '.'
+}
+
+export function kalimatBanding(b: BandingVersi): string {
+  const arah = (n: number) => (n > 0 ? 'kurang' : n < 0 ? 'lebih' : 'pas')
+  const lalu = `versi ${formatTanggalId(b.versi)}: rekap ${arah(b.selisihLalu)}${b.selisihLalu ? ` Rp ${rp(b.selisihLalu)}` : ''}`
+  const kini = `sekarang ${arah(b.selisihKini)}${b.selisihKini ? ` Rp ${rp(b.selisihKini)}` : ''}`
+  const bagian = [
+    b.baru.length ? `${b.baru.length} pos baru (${b.baru.slice(0, 3).map(p => p.uraian || p.kode).join(', ')}${b.baru.length > 3 ? ', …' : ''})` : '',
+    b.teratasi.length ? `${b.teratasi.length} pos teratasi` : '',
+  ].filter(Boolean)
+  return `Dibanding ${lalu}; ${kini}${bagian.length ? ` — ${bagian.join(', ')}` : ' — penyebabnya sama'}.`
+}
+
+export function kalimatTakLazim(t: PjTakLazim): string {
+  return `${[t.kode, t.uraian].filter(Boolean).join(' ')}: PJ ${t.pj} dipasang di tingkat ${t.tingkat}, padahal kebanyakan PJ di tingkat ${t.lazim} — periksa apakah salah tempat.`
+}
+
+export function kalimatDobel(x: SaranDobel): string {
+  const bawah = [x.kode, x.uraian].filter(Boolean).join(' ')
+  const sasaran = x.hapusDi === 'induk' ? x.indukUraian : bawah
+  return `PJ dobel: ${bawah} (${x.pj}) di bawah ${x.indukUraian} (${x.indukPj}) — saran: hapus PJ di ${sasaran}; ${x.alasan}.`
+}
+
+export function kalimatTanpaPk(x: { label: string; baris: number; nominal: number }): string {
+  return `PJ "${x.label}" (${x.baris} baris, Rp ${rp(x.nominal)}) tidak dipetakan ke unit Form PK mana pun — nominal BLUD-nya tidak masuk PK. Petakan di Master Unit Kerja PK.`
 }

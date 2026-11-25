@@ -3,10 +3,13 @@
 //
 // Jalankan: npx tsx scripts/test-blud-audit-pj.mts
 
-import { rekonsiliasiPj, periksaLabelPj, kalimatPos, kalimatNeraca, type BarisRekon } from '../lib/blud/rekonsiliasi-pj'
+import {
+  rekonsiliasiPj, periksaLabelPj, kalimatPos, kalimatNeraca, bandingVersi, kalimatBanding, pjTingkatTakLazim,
+  saranPjDobel, labelTanpaPk, kalimatDobel, kalimatTakLazim, kalimatTanpaPk, type BarisRekon,
+} from '../lib/blud/rekonsiliasi-pj'
 import { auditRekapPJ, type AuditPjRow } from '../lib/blud/audit-pj'
 import { renderCetakHtml } from '../lib/blud/cetak-data'
-import { susunRekapPj, barisRekapDpa } from '../lib/blud/rekap-pj'
+import { susunRekapPj, barisRekapDpa, siapkanKonteksPj } from '../lib/blud/rekap-pj'
 import { buatWorkbookRekapPj } from '../lib/blud/export/rekap-pj-dokumen'
 import { buatPdfRekapPj } from '../lib/blud/export/pdf-dokumen'
 import type { DpaBaris } from '../types'
@@ -228,6 +231,150 @@ bab('G. Catatan unduhan Excel & PDF')
   const asing = susunRekapPj(barisRekapDpa(semua as unknown as DpaBaris[]), 'DPA').catatan.join('')
     .split('').filter(c => c.charCodeAt(0) > 255 && !cp1252.includes(c))
   cek('G6 semua kalimat catatan aman untuk huruf PDF (WinAnsi)', asing.length === 0, JSON.stringify([...new Set(asing)]))
+}
+
+// ─── H. Riwayat, DPA acuan, banding versi, tingkat, dobel, Form PK ───────────
+bab('H. Deteksi lanjut (versi lalu, tahun lalu, DPA, tingkat, dobel, PK)')
+{
+  const kini = pohonDasar()
+  const jangkar = new Map(kini.map(r => [r.row_id, r.anggaran_key]))
+  const salin = (ubah: Record<string, string | null>) => pohonDasar().map(r => ({
+    ...r, anggaran_key: jangkar.get(r.row_id),
+    penanggung_jawab: r.row_id in ubah ? ubah[r.row_id] : r.penanggung_jawab,
+  }))
+  // Versi lalu: Air ber-PJ, Komputer ber-PJ (cabang Modal).
+  const lalu = salin({ air: 'Kasubbag Umum', kom: 'Kasi Penunjang Medik' })
+  const h = rekonsiliasiPj(kini, { sebelum: { versi: '2099-08-31', rows: lalu } })
+  const air = h.pos.find(p => p.rowId === 'air')
+  const mod = h.pos.find(p => p.rowId === 'mod')
+  cek('H1 Air: PJ hilang sejak versi lalu terdeteksi', air?.jenis === 'celah' && air.riwayat?.pj === 'Kasubbag Umum' && air.riwayat.versi === '2099-08-31')
+  cek('H2 … sarannya dari versi lalu (bukan saudara)', air?.jenis === 'celah' && air.saran?.dasar === 'versi lalu')
+  cek('H3 Modal: saran dari cabangnya di versi lalu', mod?.jenis === 'celah' && mod.saran?.dasar === 'cabang lalu' && mod.saran.pj === 'Kasi Penunjang Medik' && mod.riwayat === null)
+  cek('H4 kalimat menyebut "PJ-nya hilang sejak itu"', !!air && /dulu ber-PJ Kasubbag Umum di versi 31 Agu 2099 — PJ-nya hilang/.test(kalimatPos(air)), air ? kalimatPos(air) : '')
+
+  // Tahun lalu: jangkar beda (Salin Tahun melepasnya) → dicocokkan kode + uraian.
+  nomor = 500
+  const tl = pohonDasar().map(r => (r.row_id === 'mod' ? { ...r, penanggung_jawab: 'Kasubbag Rumah Tangga' } : r))
+  const ht = rekonsiliasiPj(kini, { tahunLalu: { tahun: 2098, rows: tl } })
+  const modT = ht.pos.find(p => p.rowId === 'mod')
+  cek('H5 saran tahun lalu lewat kode + uraian', modT?.jenis === 'celah' && modT.saran?.dasar === 'tahun lalu' && modT.saran.pj === 'Kasubbag Rumah Tangga')
+
+  // DPA acuan (Pergeseran): Air ber-PJ di DPA, Modal kosong, Laptop tertaungi PJ Komputer.
+  const dpa = salin({ air: 'Kasubbag Umum', kom: 'Kasi Penunjang Medik' })
+  const hd = rekonsiliasiPj(kini, { dpaAcuan: { versi: '2099-01-31', rows: dpa }, sebelum: { versi: '2099-08-31', rows: salin({ air: 'Lain' }) } })
+  const airD = hd.pos.find(p => p.rowId === 'air')
+  cek('H6 DPA ber-PJ → saran dari DPA mengalahkan versi lalu', airD?.jenis === 'celah' && airD.saran?.dasar === 'dpa' && airD.saran.pj === 'Kasubbag Umum')
+  cek('H7 … petunjuk: tekan Sinkronkan DPA', airD?.jenis === 'celah' && airD.dpa?.status === 'pj' && /Sinkronkan DPA/.test(kalimatPos(airD)))
+  const dpaKosong = salin({})
+  const hk = rekonsiliasiPj(kini, { dpaAcuan: { versi: '2099-01-31', rows: dpaKosong } })
+  const modK = hk.pos.find(p => p.rowId === 'mod')
+  cek('H8 DPA juga kosong → "isi di DPA juga, kalau tidak Sinkronkan DPA mengosongkannya"',
+    modK?.jenis === 'celah' && modK.dpa?.status === 'kosong' && /isi di DPA juga/.test(kalimatPos(modK)))
+  const r2 = pohonDasar().map(r => (r.row_id === 'laptop' ? { ...r, penanggung_jawab: 'X' } : r))
+  const hT = rekonsiliasiPj(r2, { dpaAcuan: { versi: '2099-01-31', rows: salin({ kom: 'Kasi Penunjang Medik' }).map(r => ({ ...r, anggaran_key: jangkar.get(r.row_id) })) } })
+  const printer = hT.pos.find(p => p.rowId === 'printer')
+  cek('H9 di DPA tertaungi PJ induknya', printer?.jenis === 'celah' && printer.dpa?.status === 'tertaungi' && printer.dpa.pj === 'Kasi Penunjang Medik')
+  cek('H10 tanpa DPA acuan → tanpa petunjuk DPA', h.pos.every(p => p.jenis !== 'celah' || p.dpa === null))
+
+  // Banding versi: dulu hanya Modal yang celah; kini Air ikut.
+  const b = bandingVersi(h, rekonsiliasiPj(lalu), '2099-08-31')
+  cek('H11 banding: 2 pos baru (Modal & Air) + selisih naik', b.baru.length === 2 && b.baru.some(p => p.rowId === 'air') && b.selisihKini > b.selisihLalu,
+    `${b.baru.map(p => p.rowId)} ${b.selisihLalu}→${b.selisihKini}`)
+  cek('H12 kalimat banding: dulu pas, kini kurang 50 dari 2 pos baru', /^Dibanding versi 31 Agu 2099: rekap pas; sekarang kurang Rp 50 — 2 pos baru \(Belanja Modal, Air\)/.test(kalimatBanding(b)), kalimatBanding(b))
+
+  // Tingkat tak lazim: 6 PJ di tingkat 3, satu di tingkat 5.
+  nomor = 900
+  const t = [b0('akar', null, 0, 'GRANDMASTER')]
+  for (let i = 0; i < 3; i++) t.push(b0(`k${i}`, 'akar', 0))
+  for (let i = 0; i < 6; i++) t.push(b0(`p${i}`, `k${i % 3}`, 10, undefined, 'PJ ' + (i % 2)))
+  t.push(b0('cucu', 'p0', 5), b0('dalam', 'cucu', 5, undefined, 'PJ X'))
+  const tl2 = pjTingkatTakLazim(t)
+  cek('H13 tingkat lazim 3, "dalam" (tingkat 5) dilaporkan', tl2.lazim === 3 && tl2.daftar.length === 1 && tl2.daftar[0].rowId === 'dalam' && tl2.daftar[0].tingkat === 5)
+  cek('H14 kurang dari 5 PJ → diam', pjTingkatTakLazim(t.slice(0, 6)).daftar.length === 0)
+
+  // PJ dobel: "dalam" di bawah p0 (PJ 0) — p0 di tingkat lazim → hapus di bawah.
+  const d1 = saranPjDobel(t)
+  cek('H15 dobel beda PJ, induk di tingkat lazim → hapus di baris bawah', d1.length === 1 && d1[0].rowId === 'dalam' && d1[0].hapusDi === 'bawah')
+  const t2 = t.map(r => (r.row_id === 'k0' ? { ...r, penanggung_jawab: 'PJ 0' } : r))
+  const d2 = saranPjDobel(t2).find(x => x.rowId === 'p0')
+  cek('H16 dobel PJ sama → hapus di bawah, "sudah tercakup"', d2?.hapusDi === 'bawah' && /sama dengan induknya/.test(d2.alasan))
+  const t3 = t.map(r => (r.row_id === 'k1' ? { ...r, penanggung_jawab: 'Kabid' } : r))
+  const d3 = saranPjDobel(t3).find(x => x.rowId === 'p1')
+  cek('H17 dobel beda PJ, induk TIDAK di tingkat lazim → hapus di induk', d3?.hapusDi === 'induk' && d3.indukRowId === 'k1')
+
+  // Form PK.
+  const pk = labelTanpaPk(t, ['pj 0', 'PJ X'])
+  cek('H18 label tanpa PK: "PJ 1" saja, dgn nominal (huruf besar diabaikan)', pk.length === 1 && pk[0].label === 'PJ 1' && pk[0].baris === 3 && pk[0].nominal === 30)
+  cek('H19 tanpa daftar PK → diam (endpoint gagal)', labelTanpaPk(t, null).length === 0)
+
+  // Panel + unduhan memakai semuanya.
+  const raw = {
+    sebelum: { versi: '2099-08-31', rows: lalu as unknown as DpaBaris[] },
+    labelPk: ['Kasubbag Rumah Tangga'],
+  }
+  const html = renderCetakHtml({ menu: 'dpa', view: 'penanggungJawab', rows: kini as unknown as DpaBaris[], versi: '2099-09-30', tanggal: '', tahun: 2099, konteksPj: raw }).html
+  cek('H20 panel: kartu PJ hilang + kalimat banding + PJ hilang per pos', /PJ hilang sejak versi lalu/.test(html) && /Dibanding versi 31 Agu 2099/.test(html) && /class="apj-hilang"/.test(html))
+  cek('H21 panel: label tanpa PK disebut', /PJ tidak dipetakan ke Form PK — 1 label/.test(html) && /Kasubbag Umum/.test(html))
+  const sus = susunRekapPj(barisRekapDpa(kini as unknown as DpaBaris[]), 'DPA', { konteks: siapkanKonteksPj('dpa', raw), labelPk: raw.labelPk })
+  cek('H22 catatan unduhan: banding + PJ hilang + tanpa PK', sus.catatan.some(c => /^Dibanding versi/.test(c))
+    && sus.catatan.some(c => /PJ-nya hilang sejak itu/.test(c)) && sus.catatan.some(c => /tidak dipetakan ke unit Form PK/.test(c)))
+  const wb = await buatWorkbookRekapPj({ tahun: 2099, versi: '2099-09-30', sumber: 'dpa', rows: kini as unknown as DpaBaris[], konteks: raw })
+  let teks = ''
+  wb.worksheets[0].eachRow(r => r.eachCell(c => { teks += ` ${String(c.value ?? '')}` }))
+  cek('H23 Excel memuat kalimat banding & PK', /Dibanding versi 31 Agu 2099/.test(teks) && /Form PK/.test(teks))
+  const cp1252 = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'
+  const semuaKalimat = [...sus.catatan, kalimatPos(airD!), kalimatPos(modK!), kalimatPos(printer!),
+    ...d1.map(kalimatDobel), ...tl2.daftar.map(kalimatTakLazim), ...pk.map(kalimatTanpaPk)].join('')
+  const asing = [...semuaKalimat].filter(c => c.charCodeAt(0) > 255 && !cp1252.includes(c))
+  cek('H24 semua kalimat baru aman untuk PDF (WinAnsi)', asing.length === 0, JSON.stringify([...new Set(asing)]))
+
+  const src = (p: string) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
+  const cetak = src('app/(dashboard)/blud/cetak/cetak-client.tsx')
+  cek('H25 Cetak memuat konteks & mengopernya ke panel, Excel, PDF',
+    /await muatKonteksPj\(/.test(cetak) && /tahun, masterPj, konteksPj,/.test(cetak) && (cetak.match(/konteks: rawKonteksPj/g) ?? []).length === 2)
+  cek('H26 panel tidak meluap: .apj dibatasi selebar layar & sticky', /\.apj \{[^}]*position: sticky; left: 0; max-width: calc\(100vw - 48px\)/.test(cetak))
+  // Banding: pos yang tetap ada BUKAN "baru"; pos yang hilang = "teratasi".
+  const laluB = salin({ kom: 'Kasi Penunjang Medik', air: null })   // dulu: Air celah, Modal tertutup
+  const kiniB = salin({ air: 'Kasubbag Umum' })                       // kini: Air tertutup, Modal celah
+  const bb = bandingVersi(rekonsiliasiPj(kiniB), rekonsiliasiPj(laluB), '2099-08-31')
+  cek('H28 banding: Modal baru, Air teratasi', bb.baru.map(p => p.rowId).join() === 'mod' && bb.teratasi.map(p => p.rowId).join() === 'air',
+    `baru ${bb.baru.map(p => p.rowId)} · teratasi ${bb.teratasi.map(p => p.rowId)}`)
+  const bSama = bandingVersi(rekonsiliasiPj(kini), rekonsiliasiPj(kini), '2099-08-31')
+  cek('H29 banding: pos yang sama di dua versi tidak dihitung baru', bSama.baru.length === 0 && /penyebabnya sama/.test(kalimatBanding(bSama)))
+
+  // Tingkat: pola tidak jelas (< 60% di satu tingkat) → diam; jarak 1 tingkat → tidak dilaporkan.
+  nomor = 950
+  const campur = [b0('akar', null, 0, 'GRANDMASTER'), b0('k', 'akar', 0)]
+  for (let i = 0; i < 3; i++) campur.push(b0(`x${i}`, 'k', 1, undefined, 'A'))
+  for (let i = 0; i < 3; i++) campur.push(b0(`y${i}`, `x${i}`, 1, undefined, 'B'))
+  cek('H30 < 60% di satu tingkat → tidak ada tingkat lazim', pjTingkatTakLazim(campur).lazim === null)
+  const dekat = t.map(r => (r.row_id === 'cucu' ? { ...r, penanggung_jawab: 'PJ Y' } : r)).filter(r => r.row_id !== 'dalam')
+  cek('H31 PJ satu tingkat di bawah yang lazim tidak dilaporkan', pjTingkatTakLazim(dekat).daftar.length === 0)
+
+  // Tahun lalu ambigu (kode + uraian sama, PJ beda) → tanpa saran tahun lalu.
+  nomor = 700
+  const ambigu = [...pohonDasar().map(r => (r.row_id === 'mod' ? { ...r, penanggung_jawab: 'A' } : r)),
+    { ...pohonDasar().find(r => r.row_id === 'mod')!, row_id: 'mod2', anggaran_key: ak(999), jumlah: 1, penanggung_jawab: 'B' }]
+  const modA = rekonsiliasiPj(kini, { tahunLalu: { tahun: 2098, rows: ambigu } }).pos.find(p => p.rowId === 'mod')
+  cek('H32 kode + uraian sama tapi PJ beda di tahun lalu → tidak menebak dari tahun lalu', modA?.jenis === 'celah' && modA.saran?.dasar !== 'tahun lalu')
+
+  // Konteks Pergeseran dibandingkan dgn pagu PASCA-geser, bukan kolom jumlah DPA.
+  const pgLalu = (lalu as unknown as Record<string, unknown>[]).map(r => ({ ...r, pergeseran: Number(r.jumlah) * 2 }))
+  const kp = siapkanKonteksPj('pergeseran', { sebelum: { versi: '2099-08-31', rows: pgLalu as never } })
+  cek('H33 konteks Pergeseran memakai kolom pergeseran', kp.sebelum?.rows.find(r => r.row_id === 'akar')?.jumlah === 200)
+
+  // Panel Pergeseran menulis petunjuk DPA per celah.
+  const htmlPg = renderCetakHtml({ menu: 'pergeseran', view: 'penanggungJawab',
+    rows: kini.map(r => ({ ...r, pergeseran: r.jumlah, dpa_versi_tanggal: '2099-01-31', bertambah_berkurang: 0 })),
+    versi: '2099-09-30', tanggal: '', tahun: 2099, konteksPj: { dpaAcuan: { versi: '2099-01-31', rows: dpaKosong as unknown as DpaBaris[] } } }).html
+  cek('H34 panel Pergeseran: petunjuk "isi di DPA juga"', /class="apj-dpa">di DPA juga belum ber-PJ/.test(htmlPg))
+
+  const rute = src('app/api/blud/penanggung-jawab/route.ts')
+  cek('H27 GET ?mode=pk tetap di belakang pagar baca & sakelar', /bludMati[\s\S]*bolehLihatSalahSatu[\s\S]*mode'\) === 'pk'/.test(rute))
+}
+
+function b0(row_id: string, parent_id: string | null, jumlah: number, tipe_baris = 'CHILD', penanggung_jawab: string | null = null) {
+  return b({ row_id, parent_id, jumlah, tipe_baris, penanggung_jawab, kode_rekening: `5.${row_id}` })
 }
 
 console.log(`\n${lulus} lulus · ${gagal} gagal`)

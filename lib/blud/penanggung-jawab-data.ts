@@ -8,6 +8,18 @@ export interface PenanggungJawab {
   urutan: number
 }
 
+/**
+ * Label PJ yang dipakai Form PK: nama unit sub kegiatan (label PJ = nama unitnya) dan label
+ * yang dipetakan ke unit program/kegiatan (`pk_unit_kerja_blud_pj`). Cermin aturan
+ * `nominalBludUnit` (lib/data/pk-blud-nominal.ts) — Audit Rekap PJ memakainya untuk menyebut
+ * label yang nominalnya tidak pernah masuk PK.
+ */
+export async function getLabelPjDipakaiPk(): Promise<string[]> {
+  const rows = await sql`SELECT nama_unit AS label FROM pk_unit_kerja WHERE level = 'subkegiatan'
+    UNION SELECT blud_pj_label AS label FROM pk_unit_kerja_blud_pj LIMIT 5000`
+  return (rows as Record<string, unknown>[]).map(r => String(r.label ?? '')).filter(Boolean)
+}
+
 export class PenanggungJawabSafetyError extends Error {
   constructor(public existing: number, public incoming: number, public dropPct: number) {
     super(`Safety guard: hanya ${incoming} baris baru vs ${existing} existing (drop ${dropPct.toFixed(1)}%). Pakai force=true kalau memang sengaja.`)

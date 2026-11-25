@@ -147,3 +147,41 @@ ditaksir dari lebar kolom.
 **Regresi**: `npx tsx scripts/test-blud-audit-pj.mts` (41), 11 uji mutasi tertangkap — dua sempat
 LOLOS (PJ "-" dianggap kosong, PJ yang menaungi Belanja Daerah) lalu diberi uji A11/C5.
 Dicoba di layar (2026, tema gelap & terang): panel, tautan Pergeseran & DPA menyorot baris yang dituju.
+
+## 8. Tahap 2 — deteksi lanjut (2026-11-25)
+
+Diminta pemilik sesudah melihat panel di server ("kerjakan" butir 1–6 + peringatan Sinkronkan
+DPA + angka terpotong). Nol migrasi; satu mode baca baru `GET /api/blud/penanggung-jawab?mode=pk`.
+
+**Konteks pembanding** (`KonteksPj`, dimuat layar Cetak lewat `muatKonteksPj`, best-effort —
+yang gagal dilewati): versi SEBELUM yang dicetak (`< versi` di daftar riwayat), versi terakhir
+TAHUN LALU, DPA ACUAN (Pergeseran: `dpa_versi_tanggal`), dan label PJ yang dipakai Form PK
+(`getLabelPjDipakaiPk`: nama unit sub kegiatan ∪ `pk_unit_kerja_blud_pj` — cermin
+`nominalBludUnit`). Baris Pergeseran dibandingkan pada pagu pasca-geser (`siapkanKonteksPj`).
+
+| Butir | Fungsi (lib/blud/rekonsiliasi-pj.ts) | Aturan |
+|---|---|---|
+| 1 Saran dari riwayat | `saranPj` | urutan: DPA acuan → versi lalu (jangkar sama) → tahun lalu (kode+uraian, hanya kalau tidak ambigu) → cabang di versi lalu → saudara → kerabat |
+| 2 PJ hilang | `PosRekon.riwayat` | celah yang baris SENDIRINYA ber-PJ di versi lalu; kartu "PJ hilang sejak versi lalu" |
+| 3 Banding versi | `bandingVersi` | pos dikunci jenis + jangkar: baru vs teratasi |
+| 4 Tingkat tak lazim | `pjTingkatTakLazim` | ≥ 5 PJ, ≥ 60% di satu tingkat, dilaporkan yang berjarak ≥ 2 tingkat |
+| 5 Saran PJ dobel | `saranPjDobel` | PJ sama → hapus bawah; beda → hapus yang tidak di tingkat lazim |
+| 6 Form PK | `labelTanpaPk` | label yang tidak dipakai unit PK mana pun (tanpa peduli huruf besar) |
+| Sinkronkan DPA | `PosRekon.dpa` + `kalimatDpa` | di DPA ber-PJ → "tekan Sinkronkan DPA"; tertaungi → dikembalikan Sinkronkan; kosong → "isi di DPA juga" |
+
+**Koreksi analisis sebelumnya**: tombol "Buka" ke layar Pergeseran TIDAK salah — sejak
+2026-10-13 PJ Pergeseran bisa diisi di semua baris. Yang benar-benar perlu: peringatan bahwa
+Sinkronkan DPA menimpanya dari DPA.
+
+**Angka terpotong**: panel hidup di `.cetak-render` yang bisa digeser selebar tabel rekap →
+`.apj` kini `position: sticky; left: 0; max-width: calc(100vw - 48px)`. Diukur: tabel dipaksa
+3.000 px lalu digeser 1.500 px, panel tetap di 43–353 px pada layar 406 px.
+
+Semua temuan ikut tercetak di catatan Excel/PDF Rekap PJ (banding, PJ hilang, saran,
+petunjuk DPA, PJ dobel, tingkat, Form PK; ≤ 20 butir per jenis — `BATAS_CATATAN_LAIN`).
+
+**Regresi**: `test-blud-audit-pj.mts` 41 → **75**, uji mutasi bagian ini **16/16** — tujuh
+sempat lolos (pos teratasi, pos yang tetap ada, ambang 60%, jarak 1 tingkat, tahun lalu ambigu,
+konversi Pergeseran, petunjuk DPA di panel) lalu diberi uji H28–H34; satu putaran "16/16"
+pertama TIDAK SAH karena suite crash (variabel `b` tertimpa) — mutasi yang "tertangkap" oleh
+suite yang mati tidak membuktikan apa pun. `test-blud-format-unduhan` D4 disesuaikan.
