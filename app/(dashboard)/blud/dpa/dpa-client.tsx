@@ -4,7 +4,8 @@
 // Port dari blud-app: DpaTable + dpa-blud/page — shadcn/ui + Tailwind
 
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { tahunDariTautan, versiDariTautan } from '@/lib/blud/rekening-digeser'
 import { toast } from 'sonner'
 import {
   ChevronUp, ChevronDown, Save,
@@ -1129,6 +1130,48 @@ export default function DpaClient({
     }, 50)
     setTimeout(() => setHighlightId(null), 2600)
   }, [rows, searchQ])
+
+  // Tautan `?tahun=&versi=&fokus=<anggaran_key>` — tombol "Buka" di panel Audit Rekap PJ
+  // menu Cetak (CONCEPT-blud-audit-pj-pintar §2.3), pola layar Pergeseran: versinya dibuka
+  // begitu daftar versi datang, sorotan MENUNGGU versi itu terbuka dan barisnya dimuat.
+  const searchParams = useSearchParams()
+  const fokusTautan = searchParams.get('fokus')
+  const versiTautan = searchParams.get('versi')
+  const versiTautanSudah = useRef(false)
+  const fokusSudah = useRef<string | null>(null)
+  const tungguVersiTautan = !!versiTautan && (loading || (versi !== versiTautan
+    && (history.length === 0 || versiDariTautan(versiTautan, history) !== null)))
+  useEffect(() => {
+    if (!versiTautan || versiTautanSudah.current || !history.length) return
+    versiTautanSudah.current = true
+    const v = versiDariTautan(versiTautan, history)
+    if (!v) {
+      toast.warning(`Versi ${formatTanggalId(versiTautan)} sudah tidak ada — yang terbuka versi terbaru.`)
+      return
+    }
+    if (v !== versi) void bukaVersi(v)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per tautan; `bukaVersi` fungsi biasa (identitas baru tiap render), `versi` dibaca saat daftarnya datang
+  }, [versiTautan, history])
+  useEffect(() => {
+    if (!fokusTautan || !rows.length || fokusSudah.current === fokusTautan || tungguVersiTautan) return
+    const match = rows.find(r => r.anggaran_key === fokusTautan)
+    fokusSudah.current = fokusTautan
+    const sorot = setTimeout(() => {
+      if (!match) {
+        toast.warning('Baris yang dituju tidak ada di versi ini. Kemungkinan sudah diubah atau dihapus.')
+        return
+      }
+      setHiddenLevels(prev => {
+        const label = TIPE_LABEL[match.tipe_baris]
+        if (!prev.has(label)) return prev
+        const next = new Set(prev); next.delete(label); return next
+      })
+      setHighlightId(match.row_id)
+      document.getElementById(`dpa-row-${match.row_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 60)
+    const padam = setTimeout(() => setHighlightId(null), 6000)
+    return () => { clearTimeout(sorot); clearTimeout(padam) }
+  }, [fokusTautan, rows, tungguVersiTautan])
   // Audit BLUD v1.2 (B-NEW-3): modal konfirmasi kalau save drop >50% baris
   const [safetyWarning, setSafetyWarning] = useState<{ versiTanggal: string; existing: number; incoming: number; dropPct: number } | null>(null)
   // CONCEPT-blud-realisasi §4.3: pagu turun di bawah realisasi yang sudah terjadi.
@@ -1190,7 +1233,7 @@ export default function DpaClient({
   const [version, setVersion] = useState<number>(0)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §7) — dimensi di atas versi.
   const CURRENT_YEAR = new Date().getFullYear()
-  const [tahun, setTahun] = useState<number>(CURRENT_YEAR)
+  const [tahun, setTahun] = useState<number>(() => tahunDariTautan(searchParams.get('tahun')) ?? CURRENT_YEAR)
   const [tahunList, setTahunList] = useState<number[]>([])
   // R2: abort pending load saat user switch versi cepat
   const loadCtrlRef = useRef<AbortController | null>(null)

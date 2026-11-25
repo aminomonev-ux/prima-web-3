@@ -181,6 +181,13 @@ export function catatanExcel(ws: ExcelJS.Worksheet, baris: number, kolTerakhir: 
   ws.mergeCells(baris, 1, baris, kolTerakhir)
   sel.font = { name: 'Arial', size: 8.5, italic: true, color: { argb: argb('redup') } }
   sel.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+  // Excel tidak menyesuaikan tinggi baris sel GABUNG — kalimat panjang terpotong satu baris.
+  // Lebar ditaksir dari kolom yang digabung (± 1 huruf per satuan lebar kolom).
+  let lebar = 0
+  for (let c = 1; c <= kolTerakhir; c++) lebar += ws.getColumn(c).width ?? 10
+  const panjang = String(typeof teks === 'string' ? teks : '').length
+  const baris_ = Math.max(1, Math.ceil(panjang / Math.max(20, lebar * 1.1)))
+  if (baris_ > 1) ws.getRow(baris).height = 12 * baris_
 }
 
 export interface PejabatTtd { nama: string; nip: string | null }

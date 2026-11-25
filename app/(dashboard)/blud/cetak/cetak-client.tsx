@@ -37,6 +37,21 @@ interface VersiOption {
   dpa_versi_tanggal?: string
 }
 
+/**
+ * Label Master Penanggung Jawab — panel audit PJ menyebut label yang tidak ada di sini.
+ * Best-effort: gagal → `null`, pemeriksaan "di luar master" dilewati, audit lain tetap jalan.
+ */
+async function muatMasterPj(): Promise<string[] | null> {
+  try {
+    const r = await fetch('/api/blud/penanggung-jawab')
+    if (!r.ok) return null
+    const j = await r.json() as { ok?: boolean; data?: Array<{ label?: string }> }
+    return j.ok && Array.isArray(j.data) ? j.data.map(d => String(d.label ?? '')).filter(Boolean) : null
+  } catch {
+    return null
+  }
+}
+
 /** Penanda DPA Perubahan tahun itu — dibaca SEGAR tiap Cetak (dokumen tidak boleh basi). */
 async function muatPenanda(tahun: number, signal?: AbortSignal): Promise<PenandaPerubahan[]> {
   try {
@@ -231,9 +246,10 @@ export default function CetakClient() {
         path = '/api/blud/master-akun'
       }
 
-      const [r, penandaSegar] = await Promise.all([
+      const [r, penandaSegar, masterPj] = await Promise.all([
         fetch(path),
         menu === 'master-akun' ? Promise.resolve([]) : muatPenanda(tahun),
+        view === 'penanggungJawab' ? muatMasterPj() : Promise.resolve(null),
       ])
       if (!r.ok) { toast.error('Data tidak bisa dimuat — periksa sambungan, lalu coba lagi.'); return }
       const j = await r.json() as {
@@ -263,6 +279,7 @@ export default function CetakClient() {
         mutasi,
         perubahanKe: menu === 'dpa' ? babakKe : null,
         acuanPerubahanKe: menu === 'pergeseran' ? babakKe : null,
+        tahun, masterPj,
       })
       setRenderedHtml(result.html)
       setRenderedData(result.rows)
@@ -467,6 +484,42 @@ export default function CetakClient() {
         [data-theme="light"] .cetak-render th { background: linear-gradient(135deg,rgba(139,92,246,.18),rgba(236,72,153,.12)); color: #5B21B6; border-color: rgba(139,92,246,.22); }
         [data-theme="light"] .cetak-render td { color: #374151; border-color: rgba(139,92,246,.08); }
         [data-theme="light"] .cetak-render tr:hover td { background: rgba(139,92,246,.04); }
+
+        /* Panel Audit Rekap PJ (CONCEPT-blud-audit-pj-pintar §2.6) — warna per tema lewat
+           kelas, bukan hex pastel sebaris yang tak terbaca di tema terang. */
+        .apj { margin-top: 18px; border: 1.5px solid #EF9F27; border-radius: 10px; overflow: hidden; }
+        .apj.apj-ok { border-color: #1D9E75; }
+        .apj.apj-lebih { border-color: #E24B4A; }
+        .apj-kepala { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 12px 16px; font-size: 13px; background: rgba(239,159,39,.14); border-bottom: 1px solid rgba(239,159,39,.35); }
+        .apj.apj-ok .apj-kepala { background: rgba(29,158,117,.14); border-bottom-color: rgba(29,158,117,.35); }
+        .apj.apj-lebih .apj-kepala { background: rgba(226,75,74,.14); border-bottom-color: rgba(226,75,74,.35); }
+        .apj-kepala span { font-weight: 700; }
+        /* Garis antarsel dari border sel, bukan celah kisi berlatar: sel kosong di ujung
+           baris (jumlah kartu ganjil) dulu tampil sebagai kotak abu. */
+        .apj-kartu { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+        .apj-sel { padding: 10px 14px; background: rgba(2,15,28,.55); border-right: 1px solid rgba(127,127,127,.25); border-bottom: 1px solid rgba(127,127,127,.25); }
+        [data-theme="light"] .apj-sel { background: #FFFFFF; }
+        .apj-sel-label { font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; opacity: .8; }
+        .apj-sel-nilai { font-size: 14px; font-weight: 800; margin-top: 3px; font-family: 'JetBrains Mono', Consolas, monospace; }
+        .apj-netral-teks { color: #E6F1FB; } .apj-baik-teks { color: #6EE7B7; } .apj-awas-teks { color: #FAC775; } .apj-buruk-teks { color: #FCA5A5; }
+        [data-theme="light"] .apj-netral-teks { color: #0F0F12; }
+        [data-theme="light"] .apj-baik-teks { color: #0F5C44; }
+        [data-theme="light"] .apj-awas-teks { color: #854F0B; }
+        [data-theme="light"] .apj-buruk-teks { color: #B91C1C; }
+        .apj-neraca { padding: 10px 16px; font-size: 12px; font-weight: 600; border-top: 1px solid rgba(127,127,127,.25); font-family: 'JetBrains Mono', Consolas, monospace; }
+        .apj-blok { padding: 8px 16px 10px; border-top: 1px solid rgba(127,127,127,.25); }
+        .apj-blok > summary { cursor: pointer; font-weight: 800; font-size: 12.5px; padding: 4px 0; }
+        .apj-butir { margin: 6px 0; padding: 8px 12px; border-left: 3px solid #EF9F27; border-radius: 6px; background: rgba(239,159,39,.10); font-size: 12px; }
+        .apj-butir.apj-lebih { border-left-color: #E24B4A; background: rgba(226,75,74,.10); }
+        .apj-butir-atas { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .apj-nilai { font-family: 'JetBrains Mono', Consolas, monospace; font-weight: 800; white-space: nowrap; }
+        .apj-ket { margin-top: 3px; opacity: .92; line-height: 1.5; }
+        .apj-saran { font-weight: 700; color: #FAC775; }
+        [data-theme="light"] .apj-saran { color: #854F0B; }
+        .apj-buka { font-weight: 700; color: #FAC775; text-decoration: underline; }
+        [data-theme="light"] .apj-buka { color: #5B21B6; }
+        .apj-lengkap { padding: 12px 16px; font-weight: 600; font-size: 12.5px; color: #6EE7B7; border-top: 1px solid rgba(127,127,127,.25); }
+        [data-theme="light"] .apj-lengkap { color: #0F5C44; }
 
         .cetak-empty {
           text-align: center; color: #85B7EB; font-size: 13px; padding: 60px 20px;

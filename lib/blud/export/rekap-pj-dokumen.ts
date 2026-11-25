@@ -54,6 +54,8 @@ export async function buatWorkbookRekapPj(args: UnduhRekapPjArgs): Promise<Excel
   const wb = new ExcelJSLib.Workbook()
   const ws = wb.addWorksheet(args.sumber === 'pergeseran' ? 'Rekap PJ Pergeseran' : 'Rekap PJ')
   const kol = KOLOM_REKAP_PJ.length
+  // Lebar DULU: tinggi baris catatan di bawah tabel ditaksir dari lebar kolom.
+  ;[6, 58, 20, 8, 28].forEach((w, i) => { ws.getColumn(i + 1).width = w })
   kopExcel(ws, kol, judul, args.tahun, baris5, sanitizeCell)
   kepalaExcel(ws, BARIS_KEPALA, KOLOM_REKAP_PJ)
   nomorKolomExcel(ws, BARIS_KEPALA + 1, kol)
@@ -99,7 +101,6 @@ export async function buatWorkbookRekapPj(args: UnduhRekapPjArgs): Promise<Excel
   for (const c of susunan.catatan) catatanExcel(ws, n++, kol, sanitizeCell(c))
   tandaTanganExcel(ws, n + 1, 3, kol, args.direktur ?? null, sanitizeCell)
 
-  ;[6, 58, 20, 8, 28].forEach((w, i) => { ws.getColumn(i + 1).width = w })
   aturCetakExcel(ws, { mendatar: false, kepalaAwal: BARIS_KEPALA, kepalaAkhir: BARIS_KEPALA + 1 })
   return wb
 }

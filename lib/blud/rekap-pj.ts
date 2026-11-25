@@ -8,6 +8,7 @@
 
 import type { DpaBaris, PergeseranBaris } from '@/types'
 import { auditRekapPJ, type AuditPjRow, type AuditDoubleEntry } from './audit-pj'
+import { rekonsiliasiPj, periksaLabelPj, kalimatNeraca, kalimatPos, kalimatLabel } from './rekonsiliasi-pj'
 
 export interface ItemPj {
   uraian: string
@@ -151,6 +152,9 @@ export function hurufKelompok(i: number): string {
   return s
 }
 
+/** Batas pos penyebab selisih yang ikut tercetak — sisanya disebut jumlahnya. */
+export const BATAS_CATATAN_POS = 40
+
 export function susunRekapPj(rows: readonly AuditPjRow[], labelSumber: string): SusunanRekapPj {
   const audit = auditRekapPJ([...rows])
   const dobel = new Map(audit.doubleEntries.map(d => [d.rowId, d.konflik.pj]))
@@ -166,14 +170,23 @@ export function susunRekapPj(rows: readonly AuditPjRow[], labelSumber: string): 
     }))
     baris.push({ jenis: 'subtotal', huruf, subtotal: g.subtotal })
   })
-  const rp = (n: number) => Math.round(n).toLocaleString('id-ID')
   const selisih = audit.totalDPA - audit.grandTotal
-  const catatan = [
-    `Total Belanja Daerah di ${labelSumber}: Rp ${rp(audit.totalDPA)} · Total rekap PJ: Rp ${rp(audit.grandTotal)} · Selisih: Rp ${rp(selisih)}.`,
-  ]
+  // Catatan pemeriksaan ikut tercetak (CONCEPT-blud-audit-pj-pintar §4): neraca, lalu
+  // tiap pos penyebab selisih dgn barisnya & saran PJ — sama dgn panel di layar Cetak.
+  const rekon = rekonsiliasiPj(rows)
+  const catatan = [kalimatNeraca(rekon, labelSumber)]
   if (audit.doubleEntries.length) {
     catatan.push(`* ${audit.doubleEntries.length} baris ber-PJ yang leluhurnya juga ber-PJ: angkanya tetap masuk subtotal PJ-nya, tetapi tidak dihitung di JUMLAH SELURUHNYA supaya tidak dobel.`)
   }
+  const tampil = rekon.pos.slice(0, BATAS_CATATAN_POS)
+  if (tampil.length) {
+    catatan.push(`Penyebab selisih (${rekon.pos.length} pos):`)
+    tampil.forEach((p, i) => catatan.push(`${i + 1}. ${kalimatPos(p)}`))
+    if (rekon.pos.length > tampil.length) {
+      catatan.push(`… dan ${rekon.pos.length - tampil.length} pos lainnya — daftar lengkap di panel Audit menu Cetak.`)
+    }
+  }
+  for (const t of periksaLabelPj(rows)) catatan.push(kalimatLabel(t))
   return {
     baris, total: audit.grandTotal, totalAnggaran: audit.totalDPA, selisih,
     jumlahDobel: audit.doubleEntries.length, catatan,
