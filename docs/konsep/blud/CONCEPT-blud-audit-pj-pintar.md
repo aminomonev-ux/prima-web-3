@@ -185,3 +185,14 @@ sempat lolos (pos teratasi, pos yang tetap ada, ambang 60%, jarak 1 tingkat, tah
 konversi Pergeseran, petunjuk DPA di panel) lalu diberi uji H28–H34; satu putaran "16/16"
 pertama TIDAK SAH karena suite crash (variabel `b` tertimpa) — mutasi yang "tertangkap" oleh
 suite yang mati tidak membuktikan apa pun. `test-blud-format-unduhan` D4 disesuaikan.
+
+## 9. Rekap yang pas tidak membawa catatan (2026-11-25)
+
+Dilaporkan pemilik: Rekap PJ Pergeseran yang selisihnya 0 tetap mencetak neraca, banding versi,
+dan daftar "PJ di tingkat tak lazim" di bawah tabel Excel/PDF — dokumen resmi yang benar jadi
+tampak bermasalah. Kini `susunRekapPj` hanya membawa catatan pemeriksaan bila rekapnya
+**berselisih** (`adaSelisihRekap`: ada pos kurang/lebih — termasuk yang saling menutup sehingga
+totalnya kebetulan 0 — atau total anggaran ≠ total rekap ≥ Rp 1). Rekap pas: catatan kosong,
+kecuali keterangan tanda `*` baris dobel (tandanya tercetak di tabel, jadi keterangannya wajib
+ikut). Temuan rapi-rapi (tingkat tak lazim, saran dobel, label, tanpa PK) tetap di panel Audit
+layar Cetak. Regresi: `test-blud-format-unduhan.mts` D4–D4d (62), 4 uji mutasi tertangkap.

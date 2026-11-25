@@ -188,6 +188,11 @@ export function siapkanKonteksPj(sumber: 'dpa' | 'pergeseran', raw: KonteksPjMen
   }
 }
 
+/** Rekap berselisih = ada pos kurang/lebih, atau total anggaran ≠ total rekap (≥ Rp 1). */
+export function adaSelisihRekap(jumlahPos: number, selisih: number): boolean {
+  return jumlahPos > 0 || Math.abs(selisih) >= 1
+}
+
 export function susunRekapPj(
   rows: readonly AuditPjRow[],
   labelSumber: string,
@@ -213,12 +218,22 @@ export function susunRekapPj(
   const baris_ = rows as unknown as BarisRekon[]
   const konteks = opsi.konteks ?? {}
   const rekon = rekonsiliasiPj(baris_, konteks)
-  const catatan = [kalimatNeraca(rekon, labelSumber)]
-  if (konteks.sebelum) {
-    catatan.push(kalimatBanding(bandingVersi(rekon, rekonsiliasiPj(konteks.sebelum.rows), konteks.sebelum.versi)))
-  }
+  const catatan: string[] = []
+  // Tanda * pada baris dobel ada di tabel — keterangannya tetap ikut walau rekapnya pas.
   if (audit.doubleEntries.length) {
     catatan.push(`* ${audit.doubleEntries.length} baris ber-PJ yang leluhurnya juga ber-PJ: angkanya tetap masuk subtotal PJ-nya, tetapi tidak dihitung di JUMLAH SELURUHNYA supaya tidak dobel.`)
+  }
+  // Rekap yang pas (tanpa pos kurang/lebih, termasuk yang saling menutup) tidak membawa
+  // catatan pemeriksaan ke dokumen resmi — temuan rapi-rapi tetap di panel Audit layar.
+  if (!adaSelisihRekap(rekon.pos.length, selisih)) {
+    return {
+      baris, total: audit.grandTotal, totalAnggaran: audit.totalDPA, selisih,
+      jumlahDobel: audit.doubleEntries.length, catatan,
+    }
+  }
+  catatan.unshift(kalimatNeraca(rekon, labelSumber))
+  if (konteks.sebelum) {
+    catatan.splice(1, 0, kalimatBanding(bandingVersi(rekon, rekonsiliasiPj(konteks.sebelum.rows), konteks.sebelum.versi)))
   }
   const tampil = rekon.pos.slice(0, BATAS_CATATAN_POS)
   if (tampil.length) {

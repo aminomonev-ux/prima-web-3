@@ -10,7 +10,7 @@ import type ExcelJS from 'exceljs'
 import { buatWorkbookDpa, buatWorkbookPergeseran } from '../lib/blud/export/dpa-dokumen'
 import { buatWorkbookRekapPj } from '../lib/blud/export/rekap-pj-dokumen'
 import { buatPdfDpa, buatPdfPergeseran, buatPdfRekapPj } from '../lib/blud/export/pdf-dokumen'
-import { susunRekapPj, barisRekapDpa, kelompokPerPj } from '../lib/blud/rekap-pj'
+import { susunRekapPj, barisRekapDpa, kelompokPerPj, adaSelisihRekap } from '../lib/blud/rekap-pj'
 import { auditRekapPJ } from '../lib/blud/audit-pj'
 import { bacaGridDpa, type GridDpa } from '../lib/blud/import-dpa-grid'
 import { bacaDpaDariGrid, adalahBarisNomorKolom } from '../lib/blud/import-dpa'
@@ -209,11 +209,17 @@ bab('D. Rekap PJ — §6.2')
   const dobel = s.baris.filter(b => b.jenis === 'rincian' && b.dobelDengan)
   cek('D3 hanya ATK yang ditandai dobel, dengan PJ leluhurnya',
     dobel.length === 1 && dobel[0].jenis === 'rincian' && dobel[0].uraian === 'ATK' && dobel[0].dobelDengan === 'Kasubbag Umum')
-  // Catatan dobel + saran mana yang dihapus (CONCEPT-blud-audit-pj-pintar §8): ATK ber-PJ
-  // sama dgn induknya → hapus di ATK.
-  cek('D4 catatan dobel ikut, dgn saran baris mana yang dihapus', s.catatan.length === 3 && /^\* 1 baris/.test(s.catatan[1])
-    && /^PJ dobel: 5\.1\.01 ATK \(Kasubbag Umum\) di bawah Belanja Operasi \(Kasubbag Umum\) — saran: hapus PJ di 5\.1\.01 ATK/.test(s.catatan[2]),
+  // Rekap ini PAS (total 9 jt = anggaran): catatan pemeriksaan tidak ikut ke dokumen,
+  // hanya keterangan tanda * yang memang tercetak di tabel (CONCEPT-blud-audit-pj-pintar §9).
+  cek('D4 rekap pas → catatan hanya keterangan tanda * dobel', s.selisih === 0 && s.catatan.length === 1 && /^\* 1 baris/.test(s.catatan[0]),
     s.catatan.join(' | '))
+  const tanpaDobel = barisRekapDpa(rows).map(r => (r.uraian === 'ATK' ? { ...r, penanggung_jawab: null } : r))
+  const sPas = susunRekapPj(tanpaDobel, 'DPA')
+  cek('D4b rekap pas tanpa dobel → tanpa catatan sama sekali', sPas.selisih === 0 && sPas.catatan.length === 0, sPas.catatan.join(' | '))
+  const sKurang = susunRekapPj(barisRekapDpa(rows).map(r => (r.uraian === 'Belanja Operasi' ? { ...r, penanggung_jawab: null } : r)), 'DPA')
+  cek('D4c rekap berselisih → neraca & penyebab tetap ikut', sKurang.selisih !== 0 && /^Total DPA/.test(sKurang.catatan[0] ?? '')
+    && sKurang.catatan.some(c => /^Penyebab selisih/.test(c)), sKurang.catatan.join(' | '))
+  cek('D4d pos kurang & lebih yang saling menutup tetap dianggap berselisih', adaSelisihRekap(2, 0) && !adaSelisihRekap(0, 0.4) && adaSelisihRekap(0, -3))
   cek('D5 huruf kelompok A, B', kel.map(k => (k.jenis === 'kelompok' ? k.huruf : '')).join('') === 'AB')
   // Subtotal mentah memuat baris dobel; porsi TIDAK — kalau ya, kolom % berjumlah > 100%.
   const totalPorsi = kel.reduce((t, k) => t + (k.jenis === 'kelompok' ? k.porsi : 0), 0)
