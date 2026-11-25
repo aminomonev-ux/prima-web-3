@@ -190,12 +190,41 @@ export function catatanExcel(ws: ExcelJS.Worksheet, baris: number, kolTerakhir: 
   if (baris_ > 1) ws.getRow(baris).height = 12 * baris_
 }
 
-export interface PejabatTtd { nama: string; nip: string | null }
+/**
+ * Pejabat penanda tangan dari Pengaturan → Pejabat Penanda Tangan SPJ (`blud_pejabat`).
+ * `jabatan` = "Bunyi jabatan yang dicetak" (`jabatan_teks`); kosong → "Direktur".
+ */
+export interface PejabatTtd {
+  nama: string
+  nip: string | null
+  pangkat?: string | null
+  jabatan?: string | null
+}
+
+export interface BarisTtd { teks: string; tebal: boolean; garisBawah: boolean }
 
 /**
- * Hanya Direktur (keputusan 2026-08-05). Nama & NIP dari `blud_pejabat`; tak tersedia
- * → bergaris untuk diisi tangan.
+ * Isi blok tanda tangan — SATU daftar untuk Excel & PDF, urutan sama dgn lembar SPJ
+ * (jabatan cetak · instansi · ruang tanda tangan · nama bergaris bawah · pangkat · NIP).
+ * `null` di daftar = baris kosong (ruang tanda tangan basah). Tanpa data → bergaris diisi tangan.
  */
+export function isiTandaTangan(direktur: PejabatTtd | null): Array<BarisTtd | null> {
+  const nama = direktur?.nama?.trim()
+  const pangkat = direktur?.pangkat?.trim()
+  const nip = direktur?.nip?.trim()
+  return [
+    { teks: `Semarang, ${GARIS_ISI}`, tebal: false, garisBawah: false },
+    { teks: direktur?.jabatan?.trim() || 'Direktur', tebal: false, garisBawah: false },
+    { teks: INSTANSI, tebal: true, garisBawah: false },
+    { teks: PROVINSI, tebal: true, garisBawah: false },
+    null, null, null,
+    { teks: nama || GARIS_ISI, tebal: true, garisBawah: !!nama },
+    ...(pangkat ? [{ teks: pangkat, tebal: false, garisBawah: false }] : []),
+    { teks: nip ? `NIP. ${nip}` : `NIP. ${GARIS_ISI}`, tebal: false, garisBawah: false },
+  ]
+}
+
+/** Hanya Direktur (keputusan 2026-08-05), isinya ikut Pengaturan (`isiTandaTangan`). */
 export function tandaTanganExcel(
   ws: ExcelJS.Worksheet,
   mulai: number,
@@ -204,20 +233,17 @@ export function tandaTanganExcel(
   direktur: PejabatTtd | null,
   bersih: (s: string) => ExcelJS.CellValue,
 ): void {
-  const tulis = (baris: number, teks: string, tebal = false) => {
-    const sel = ws.getRow(baris).getCell(kolAwal)
-    sel.value = bersih(teks)
-    ws.mergeCells(baris, kolAwal, baris, kolTerakhir)
-    sel.font = { name: 'Arial', size: 10, bold: tebal, ...(tebal ? { color: { argb: argb('navy') } } : {}) }
+  isiTandaTangan(direktur).forEach((b, i) => {
+    if (!b) return
+    const sel = ws.getRow(mulai + i).getCell(kolAwal)
+    sel.value = bersih(b.teks)
+    ws.mergeCells(mulai + i, kolAwal, mulai + i, kolTerakhir)
+    sel.font = {
+      name: 'Arial', size: 10, bold: b.tebal, underline: b.garisBawah,
+      ...(b.tebal ? { color: { argb: argb('navy') } } : {}),
+    }
     sel.alignment = { horizontal: 'center' }
-  }
-  tulis(mulai, `Semarang, ${GARIS_ISI}`)
-  tulis(mulai + 1, 'Direktur')
-  tulis(mulai + 2, INSTANSI, true)
-  tulis(mulai + 3, PROVINSI, true)
-  // mulai+4 … +6 kosong — ruang tanda tangan basah.
-  tulis(mulai + 7, direktur?.nama?.trim() || GARIS_ISI, true)
-  tulis(mulai + 8, direktur?.nip?.trim() ? `NIP. ${direktur.nip.trim()}` : `NIP. ${GARIS_ISI}`)
+  })
 }
 
 /**
@@ -255,6 +281,7 @@ export interface DokPdf {
   rect(x: number, y: number, w: number, h: number, gaya?: string): unknown
   text(t: string | string[], x: number, y: number, opsi?: Record<string, unknown>): unknown
   splitTextToSize(t: string, lebar: number): string[]
+  getTextWidth(t: string): number
   getNumberOfPages(): number
   setPage(n: number): unknown
   addPage(): unknown
@@ -311,19 +338,21 @@ export function catatanPdf(doc: DokPdf, teks: string, x: number, y: number, leba
 /** Tanda tangan Direktur, rata tengah pada `x`. Pindah halaman kalau ruangnya tak cukup. */
 export function tandaTanganPdf(doc: DokPdf, x: number, yAwal: number, direktur: PejabatTtd | null): void {
   let y = yAwal
-  if (y > doc.internal.pageSize.getHeight() - 58) { doc.addPage(); y = 20 }
-  const nama = direktur?.nama?.trim() || GARIS_ISI
-  const nip = direktur?.nip?.trim() ? `NIP. ${direktur.nip.trim()}` : `NIP. ${GARIS_ISI}`
-  const baris: Array<[string, boolean, number]> = [
-    [`Semarang, ${GARIS_ISI}`, false, 0], ['Direktur', false, 5],
-    [INSTANSI, true, 10], [PROVINSI, true, 15], [nama, true, 38], [nip, false, 43],
-  ]
+  if (y > doc.internal.pageSize.getHeight() - 62) { doc.addPage(); y = 20 }
   doc.setFontSize(9.5)
-  for (const [t, tebal, dy] of baris) {
-    doc.setFont('helvetica', tebal ? 'bold' : 'normal')
-    if (tebal) doc.setTextColor(...rgb('navy')); else doc.setTextColor(0)
-    doc.text(t, x, y + dy, { align: 'center' })
-  }
+  isiTandaTangan(direktur).forEach((b, i) => {
+    if (!b) return
+    const yb = y + i * 5 + (i >= 7 ? 8 : 0) // ruang tanda tangan basah sedikit lebih lega
+    doc.setFont('helvetica', b.tebal ? 'bold' : 'normal')
+    if (b.tebal) doc.setTextColor(...rgb('navy')); else doc.setTextColor(0)
+    doc.text(b.teks, x, yb, { align: 'center' })
+    if (b.garisBawah) {
+      const w = doc.getTextWidth(b.teks)
+      doc.setDrawColor(...rgb('navy')); doc.setLineWidth(0.25)
+      doc.line(x - w / 2, yb + 0.8, x + w / 2, yb + 0.8)
+      doc.setDrawColor(0)
+    }
+  })
   doc.setTextColor(0)
 }
 

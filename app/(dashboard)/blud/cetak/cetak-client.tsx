@@ -379,11 +379,12 @@ export default function CetakClient() {
       if (!r.ok) return null
       const j = await r.json() as {
         ok?: boolean
-        data?: Array<{ jabatan: string; nama: string; nip: string | null }>
+        data?: Array<{ jabatan: string; nama: string; nip: string | null; pangkat?: string | null; jabatan_teks?: string | null }>
       }
       if (!j.ok || !Array.isArray(j.data)) return null
       const d = j.data.find(p => p.jabatan === 'DIREKTUR')
-      return d?.nama ? { nama: d.nama, nip: d.nip ?? null } : null
+      // Semua isian Pengaturan ikut: nama, NIP, pangkat, dan bunyi jabatan yang dicetak.
+      return d?.nama ? { nama: d.nama, nip: d.nip ?? null, pangkat: d.pangkat ?? null, jabatan: d.jabatan_teks ?? null } : null
     } catch {
       return null
     }

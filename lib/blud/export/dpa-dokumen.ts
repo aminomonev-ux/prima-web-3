@@ -27,6 +27,7 @@ import { teksPenandaUnduhan } from '@/lib/blud/impor-balik'
 import {
   BARIS_KEPALA, WARNA, kopExcel, kepalaExcel, gayaKepalaExcel, nomorKolomExcel, hiasSelData,
   warnaiTingkatExcel, hiasBarisTotalExcel, catatanExcel, tandaTanganExcel, aturCetakExcel, tingkatBaris,
+  type PejabatTtd,
 } from '@/lib/blud/export/gaya-dokumen'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
@@ -39,10 +40,8 @@ const BARIS_DATA_1 = BARIS_HEADER + 2
 const WARNA_NAIK = `FF${HEX_NAIK}`
 const WARNA_TURUN = `FF${HEX_TURUN}`
 
-export interface PejabatDokumen {
-  nama: string
-  nip: string | null
-}
+/** Isi dari Pengaturan → Pejabat Penanda Tangan SPJ — bentuk = `PejabatTtd` (gaya-dokumen). */
+export type PejabatDokumen = PejabatTtd
 
 /** Bentuk minimum yang dibutuhkan pembangun pohon — dipenuhi DpaBaris & PergeseranBaris. */
 export interface BarisPohon {

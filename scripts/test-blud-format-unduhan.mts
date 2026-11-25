@@ -252,6 +252,29 @@ bab('E. PDF — kop, tabel, JUMLAH, tanda tangan')
   cek('E6 Rekap PJ tanpa satu PJ pun ditolak dgn kalimat jelas', /Belum ada baris ber-Penanggung Jawab/.test(galat), galat)
 }
 
+// ─── G. Tanda tangan ikut Pengaturan → Pejabat Penanda Tangan SPJ ────────────
+bab('G. Tanda tangan = isian Pengaturan (nama, NIP, pangkat, bunyi jabatan)')
+{
+  const direktur = { nama: 'dr. IKHWAN HAMZAH', nip: '19700811 200312 1 002', pangkat: 'Pembina Tingkat I (IV/b)', jabatan: 'DIREKTUR' }
+  const ws = (await buatWorkbookDpa({ tahun: 2099, versi: '2099-01-31', rows: barisDpa(), direktur })).worksheets[0]
+  const n = cariUraian(ws, 'dr. IKHWAN HAMZAH', 5)
+  cek('G1 Excel: bunyi jabatan dari Pengaturan ("DIREKTUR"), bukan "Direktur" mati',
+    cariUraian(ws, 'DIREKTUR', 5) > 0 && !cariUraian(ws, 'Direktur', 5))
+  cek('G2 Excel: nama bergaris bawah, lalu pangkat, lalu NIP',
+    n > 0 && ws.getRow(n).getCell(5).font?.underline === true
+    && nilai(ws, n + 1, 5) === 'Pembina Tingkat I (IV/b)' && nilai(ws, n + 2, 5) === 'NIP. 19700811 200312 1 002')
+  const wsKosong = (await buatWorkbookDpa({ tahun: 2099, versi: '2099-01-31', rows: barisDpa(), direktur: { nama: 'dr. X', nip: null } })).worksheets[0]
+  const nk = cariUraian(wsKosong, 'dr. X', 5)
+  cek('G3 Excel: tanpa jabatan & pangkat → "Direktur", tanpa baris pangkat kosong',
+    cariUraian(wsKosong, 'Direktur', 5) > 0 && /^NIP\. \.+$/.test(String(nilai(wsKosong, nk + 1, 5))))
+  const pdf = await teksPdf((await buatPdfRekapPj({ tahun: 2099, versi: '2099-01-31', sumber: 'dpa', rows: barisDpa(), direktur })).output('arraybuffer'))
+  cek('G4 PDF: DIREKTUR · nama · pangkat · NIP', /DIREKTUR RSJD Dr\. AMINO GONDOHUTOMO PROVINSI JAWA TENGAH dr\. IKHWAN HAMZAH Pembina Tingkat I \(IV\/b\) NIP\. 19700811 200312 1 002/.test(pdf))
+  const fsx = await import('node:fs')
+  const cetak = fsx.readFileSync(new URL('../app/(dashboard)/blud/cetak/cetak-client.tsx', import.meta.url), 'utf8')
+  cek('G5 layar Cetak mengambil pangkat & bunyi jabatan dari /api/blud/pejabat',
+    cetak.includes('pangkat: d.pangkat ?? null, jabatan: d.jabatan_teks ?? null'))
+}
+
 // ─── F. Sumber gaya satu ─────────────────────────────────────────────────────
 bab('F. Satu sumber gaya')
 {

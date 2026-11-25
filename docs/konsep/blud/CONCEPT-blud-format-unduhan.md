@@ -245,3 +245,12 @@ sungguhan, PDF dibaca pdfjs), 10 uji mutasi tertangkap. Disesuaikan ke tata leta
 `test-dpa-export.mjs`, `test-blud-impor-bolak-balik.mts`, `test-blud-impor-balik.mts`,
 `test-blud-dpa-perubahan-cetak.mts`, `test-blud-cetak-perpindahan.mts`,
 `test-blud-riwayat-simpan.mts` (G3/G4).
+
+## 10. Tanda tangan ikut Pengaturan (2026-11-25)
+
+Dilaporkan pemilik: unduhan menulis "Direktur" mati, padahal Pengaturan → Pejabat Penanda Tangan
+SPJ punya **bunyi jabatan yang dicetak** dan **pangkat**. Nama & NIP sudah ikut sejak awal.
+Kini satu daftar baris `isiTandaTangan` (gaya-dokumen.ts) untuk Excel DAN PDF, urutan sama dgn
+lembar SPJ: jabatan cetak (`jabatan_teks`, kosong → "Direktur") · instansi · ruang tanda tangan ·
+nama bergaris bawah · pangkat (kalau diisi) · NIP. Layar Cetak mengambil keempatnya dari
+`GET /api/blud/pejabat`. Regresi: `test-blud-format-unduhan.mts` bagian G (59), 5 uji mutasi.
