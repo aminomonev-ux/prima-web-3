@@ -7,7 +7,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Plus, Search, RefreshCw, Download, SlidersHorizontal, Pencil, Paperclip, PackageCheck, Undo2, CalendarPlus, FileText, Trash2 } from 'lucide-react';
+import { Plus, Search, RefreshCw, Download, SlidersHorizontal, Pencil, Paperclip, History, Undo2, CalendarPlus, FileText, Trash2 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -27,7 +27,7 @@ import ModalItem, { LencanaRef, type TabItem } from './_components/ModalItem';
 import PerBarang from './_components/PerBarang';
 import ModalTautkan from './_components/ModalTautkan';
 import SaranTahunLalu from './_components/SaranTahunLalu';
-import ModalPengadaan from './_components/ModalPengadaan';
+import PanelRiwayat from './_components/PanelRiwayat';
 import GarisTahap from './_components/GarisTahap';
 import MenuBaris, { type ButirMenu } from './_components/MenuBaris';
 import LembarKeputusan, { LABEL_KURANG } from './_components/LembarKeputusan';
@@ -99,7 +99,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [tampilan, setTampilan] = useState<'ITEM' | 'BARANG'>('ITEM');
   const [segarkanBarang, setSegarkanBarang] = useState(0);
   const [tautkanBuka, setTautkanBuka] = useState(false);
-  const [prosesId, setProsesId] = useState<number | null>(null);
+  const [riwayatId, setRiwayatId] = useState<number | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | 'EMPTY' | null>(null);
   const [detailRow, setDetailRow] = useState<BbaRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -256,10 +256,6 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     if (d.ok) { toast.success('Dihapus'); muatUlang(); } else toast.error(d.message || 'Gagal hapus');
   }
 
-  async function caraMenghapus(alasan: string) {
-    await confirmDialog({ title: 'Item ini belum bisa dihapus', message: alasan, confirmLabel: 'Mengerti', cancelLabel: 'Tutup', variant: 'warning' });
-  }
-
   // Item tahun ini (yang dimuat) tanpa barang — usulan ditolak tidak dihitung, seperti KPI & Per Barang.
   const belumBarang = rows.filter(r => r.barang_id === null && r.usulan_keputusan !== 'DITOLAK').length;
 
@@ -293,7 +289,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       { kunci: 'ubah', label: bolehRencana ? 'Ubah' : 'Lihat', icon: <Pencil size={13} /> },
       { kunci: 'bukti', label: r.jumlah_bukti ? `Bukti dukung (${r.jumlah_bukti})` : 'Bukti dukung', icon: <Paperclip size={13} /> },
     ];
-    if (!ditolak && bolehPengadaan && r.anggaran === 'DIDANAI') b.push({ kunci: 'proses', label: 'Proses & penerimaan', icon: <PackageCheck size={13} /> });
+    b.push({ kunci: 'riwayat', label: 'Riwayat dan batalkan', icon: <History size={13} /> });
     if (r.origin === 'USULAN') b.push({ kunci: 'usulan', label: `Detail usulan ${r.usulan_no ?? ''}`, icon: <FileText size={13} /> });
     if (bolehRencana && !ditolak && r.anggaran !== 'BELUM') {
       const alasan = alasanTakBisaUbahAnggaran(r.status, r.anggaran, 'BELUM');
@@ -314,11 +310,10 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     switch (kunci) {
       case 'ubah': bukaItem(r, 'data'); break;
       case 'bukti': bukaItem(r, 'bukti'); break;
-      case 'proses': setProsesId(r.id); break;
+      case 'riwayat': case 'cara-hapus': setRiwayatId(r.id); break;
       case 'usulan': setDetailRow(r); break;
       case 'kembalikan': void kembalikanKeBelum(r); break;
       case 'ajukan': void ajukanTahunDepan(r); break;
-      case 'cara-hapus': void caraMenghapus(alasanTakBisaHapus(r.status, r.jumlah_bukti) ?? ''); break;
       case 'hapus': void del(r); break;
     }
   }
@@ -517,11 +512,11 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
 
       {tautkanBuka && <ModalTautkan tahun={tahun} c={c} onTutup={() => setTautkanBuka(false)} onSelesai={() => { setTautkanBuka(false); muatUlang(); }} />}
 
-      {/* Proses & Penerimaan — komponen yang sama dengan halaman Pengadaan (satu jalur tulis, §7.4) */}
-      {prosesId !== null && (
-        <ModalPengadaan c={c} rencanaId={prosesId} bolehUbah={bolehPengadaan} bolehKoreksiMundur={bolehBatalkanFinal(role)}
-          onTutup={() => setProsesId(null)} onTersimpan={muatUlang}
-          onBukaBukti={r => { setProsesId(null); bukaItem(r, 'bukti'); }} />
+      {/* Riwayat dan batalkan (§5.1) — komponen yang sama dengan halaman Pengadaan; "Cara menghapus…" membukanya juga. */}
+      {riwayatId !== null && (
+        <PanelRiwayat c={c} rencanaId={riwayatId} izin={izin} bolehAdmin={bolehBatalkanFinal(role)}
+          onTutup={() => setRiwayatId(null)} onTersimpan={muatUlang}
+          onBukaBukti={() => { const r = rows.find(x => x.id === riwayatId); setRiwayatId(null); if (r) bukaItem(r, 'bukti'); }} />
       )}
 
       {/* Modal Tarik dari Usulan — kosong (notif bertema, bukan alert native — L58) */}

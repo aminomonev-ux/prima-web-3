@@ -16,7 +16,7 @@ import {
   BbaNotFoundError, BbaVersionConflictError, BbaLokasiTidakDikenalError, type BbaRow,
 } from '@/lib/data/buku-besar-aset';
 import { AsetVersiError, AsetTidakAdaError, AsetDitolakError } from '@/lib/data/bba-aset';
-import { alasanTakBisaBatalTempatkan, alasanTakBisaUbahRegister } from '@/lib/bba/koreksi';
+import { alasanTakBisaBatalTempatkan, alasanTakBisaUbahRegister, alasanTakBisaHapusBerantai } from '@/lib/bba/koreksi';
 import type {
   PenerimaanInput, TempatkanInput, RegisterInput, HapusAsetInput, RehabInput, KosongkanRegisterInput, BatalTempatkanInput, BatalHapusInput,
 } from '@/lib/data/bba-penerimaan-schemas';
@@ -492,5 +492,118 @@ export async function catatRehab(input: RehabInput, userId: number): Promise<{ c
               ${input.catatan || null}, ${input.file_id || null}, ${userId})
     `;
     return { canonical_id: rr[0].canonical_id };
+  });
+}
+
+// ─── Riwayat & batalkan per rencana, hapus berantai (CONCEPT-bba-revamp-alur §5) ─────
+
+export interface RegisterRencana {
+  id: number; version: number; golongan: Golongan; nama: string | null; nama_resmi: string; register: string | null;
+  kode_barang: string | null; kunci_impor: string | null; status: 'AKTIF' | 'DIHAPUS'; penerimaan_id: number | null;
+}
+export interface RiwayatRencana { register: RegisterRencana[]; dibuat_pada: string | null; dibuat_oleh: string | null; anggaran_oleh: string | null }
+
+const petakanRegister = (r: Record<string, unknown>): RegisterRencana => ({
+  id: Number(r.id), version: Number(r.version ?? 0), golongan: r.golongan as Golongan, nama: (r.nama as string | null) ?? null,
+  nama_resmi: String(r.nama_resmi ?? ''), register: (r.register as string | null) ?? null, kode_barang: (r.kode_barang as string | null) ?? null,
+  kunci_impor: (r.kunci_impor as string | null) ?? null, status: r.status as 'AKTIF' | 'DIHAPUS', penerimaan_id: r.penerimaan_id == null ? null : Number(r.penerimaan_id),
+});
+
+/** Bahan panel "Riwayat dan batalkan": register yang lahir dari penerimaan rencana ini + siapa membuat & mendanai. */
+export async function riwayatRencana(id: number): Promise<RiwayatRencana> {
+  const [reg, info] = await Promise.all([
+    queryMany<Record<string, unknown>>(sql`
+      SELECT a.id, a.version, a.golongan, a.nama, a.nama_resmi, a.register, a.kode_barang, a.kunci_impor, a.status, a.penerimaan_id
+      FROM bba_aset a JOIN bba_penerimaan p ON p.id = a.penerimaan_id WHERE p.rencana_id = ${id} ORDER BY a.id
+    `),
+    queryMany<Record<string, unknown>>(sql`
+      SELECT DATE_FORMAT(b.created_at, '%Y-%m-%d %H:%i') AS dibuat_pada, uc.username AS dibuat_oleh, ua.username AS anggaran_oleh
+      FROM buku_besar_aset b LEFT JOIN users uc ON uc.id = b.created_by LEFT JOIN users ua ON ua.id = b.anggaran_oleh WHERE b.id = ${id}
+    `),
+  ]);
+  return {
+    register: reg.map(petakanRegister),
+    dibuat_pada: (info[0]?.dibuat_pada as string | null) ?? null, // sudah teks: DATE_FORMAT di SQL
+    dibuat_oleh: (info[0]?.dibuat_oleh as string | null) ?? null, anggaran_oleh: (info[0]?.anggaran_oleh as string | null) ?? null,
+  };
+}
+
+export class HapusBerantaiError extends Error {
+  constructor(public alasan: string[]) { super(alasan.length === 1 ? alasan[0] : `${alasan.length} hal menahan penghapusan: ${alasan.slice(0, 3).join(' ')}${alasan.length > 3 ? ' …' : ''}`); this.name = 'HapusBerantaiError'; }
+}
+
+export interface PotretBerantai {
+  item: { canonical_id: string; tahun: number; uraian: string; status: BbaStatus; anggaran: string; vol: number; nilai_rencana: number };
+  penerimaan: Array<{ id: number; tgl: string; vol: number; nilai: number }>;
+  register: Array<{ id: number; golongan: string; nama_resmi: string }>;
+  lampiran: number; referensi: number;
+}
+
+/**
+ * Hapus data salah input sekali jalan, khusus Admin (§5.2): item + penerimaan + register hasil Tempatkan dalam SATU
+ * transaksi. Urutan kunci: rencana → penerimaan → register (urut id) — rencana dulu seperti catat/hapus penerimaan.
+ * Semua pemeriksaan dibaca SESUDAH kunci. Ditolak bila ada yang sudah keluar dari PRIMA (nomor provinsi, diolah di
+ * Buku Aset, dirujuk rencana lain/ruangan, rehab sudah memperbarui gedung, data pindahan migrasi).
+ * Pengecualian ketiga §10 butir 4 CONCEPT-bba-buku-aset ("riwayat tidak dihapus"): jejaknya potret di audit log.
+ */
+export async function hapusBerantai(input: { id: number; expected_version: number; kode: string }, userId: number, bolehAdmin: boolean): Promise<PotretBerantai> {
+  if (!bolehAdmin) throw new HapusBerantaiError(['Hapus berantai hanya untuk Admin.']);
+  return withTransaction(async ({ tx, conn }) => {
+    const r = await kunciRencana(tx, input.id);
+    if (r.version !== input.expected_version) throw new BbaVersionConflictError();
+    if (input.kode.trim().toUpperCase() !== r.canonical_id.toUpperCase()) throw new HapusBerantaiError([`Kode yang diketik tidak sama dengan ${r.canonical_id}.`]);
+    const pen = (await tx`
+      SELECT id, DATE_FORMAT(tgl, '%Y-%m-%d') AS tgl, vol, nilai, pindahan FROM bba_penerimaan WHERE rencana_id = ${r.id} ORDER BY id FOR UPDATE
+    ` as Array<Record<string, unknown>>).map(p => ({ id: Number(p.id), tgl: p.tgl as string, vol: Number(p.vol), nilai: Number(p.nilai), pindahan: Number(p.pindahan) === 1 }));
+    const penIds = pen.map(p => p.id);
+    const reg = penIds.length
+      ? (await tx`
+          SELECT id, version, golongan, nama, nama_resmi, register, kode_barang, kunci_impor, status, penerimaan_id
+          FROM bba_aset WHERE penerimaan_id IN (${penIds}) ORDER BY id FOR UPDATE
+        ` as Array<Record<string, unknown>>).map(petakanRegister)
+      : [];
+    const regIds = reg.map(a => a.id);
+    const alasan: string[] = [];
+    if (pen.some(p => p.pindahan)) alasan.push(`${r.canonical_id} membawa realisasi lama hasil migrasi — barangnya sudah di KIB provinsi, tidak bisa dihapus dari sini.`);
+    if (regIds.length) {
+      const riwayat = await tx`SELECT aset_id, jenis FROM bba_aset_riwayat WHERE aset_id IN (${regIds})` as Array<{ aset_id: number; jenis: string }>;
+      const sasaran = await tx`SELECT ra.aset_id, b.canonical_id FROM bba_rencana_aset ra JOIN buku_besar_aset b ON b.id = ra.rencana_id WHERE ra.aset_id IN (${regIds}) AND ra.rencana_id <> ${r.id}` as Array<{ aset_id: number; canonical_id: string }>;
+      const gedung = await tx`SELECT gedung_aset_id, nama FROM bba_lokasi WHERE gedung_aset_id IN (${regIds})` as Array<{ gedung_aset_id: number; nama: string }>;
+      for (const a of reg) {
+        const x = alasanTakBisaHapusBerantai(a, riwayat.filter(w => Number(w.aset_id) === a.id).map(w => String(w.jenis)), {
+          sasaran: sasaran.filter(w => Number(w.aset_id) === a.id).map(w => String(w.canonical_id)),
+          gedung: gedung.filter(w => Number(w.gedung_aset_id) === a.id).map(w => String(w.nama)),
+        });
+        if (x) alasan.push(x);
+      }
+    }
+    if (r.jenis_rencana === 'REHAB') {
+      const rehab = await tx`
+        SELECT COUNT(*) AS n FROM bba_aset_riwayat WHERE jenis = 'REHAB' AND JSON_UNQUOTE(JSON_EXTRACT(sesudah, '$.rencana')) = ${r.canonical_id}
+      ` as Array<{ n: number }>;
+      if (Number(rehab[0]?.n ?? 0) > 0) alasan.push(`Kondisi gedung sudah diperbarui dari rehab ${r.canonical_id} — riwayat gedung itu tidak dihapus dari sini.`);
+    }
+    if (alasan.length) throw new HapusBerantaiError(alasan);
+
+    const hitung = await tx`
+      SELECT (SELECT COUNT(*) FROM bba_lampiran WHERE aset_id = ${r.id}) AS lampiran, (SELECT COUNT(*) FROM bba_referensi_harga WHERE aset_id = ${r.id}) AS referensi
+    ` as Array<{ lampiran: number; referensi: number }>;
+    // Penggantian yang sudah diterima penuh menandai aset lama "siap dihapus" — tanda itu ikut dilepas.
+    if (r.jenis_rencana === 'PENGGANTIAN' && r.status === 'REALISASI_PENUH') await tandaiSiapDihapus(tx, conn, r, false, userId);
+    // Sasaran rencana ini sendiri dilepas dulu: FK aset di bba_rencana_aset RESTRICT, CASCADE-nya baru jalan saat rencana dihapus.
+    await tx`DELETE FROM bba_rencana_aset WHERE rencana_id = ${r.id}`;
+    if (regIds.length) {
+      await tx`UPDATE bba_lokasi SET gedung_aset_id = NULL WHERE gedung_aset_id IN (${regIds})`;
+      await tx`DELETE FROM bba_aset WHERE id IN (${regIds})`;
+    }
+    await tx`UPDATE buku_besar_aset SET asal_rencana_id = NULL WHERE asal_rencana_id = ${r.id}`;
+    if (penIds.length) await tx`DELETE FROM bba_penerimaan WHERE id IN (${penIds})`;
+    await tx`DELETE FROM buku_besar_aset WHERE id = ${r.id}`;
+    return {
+      item: { canonical_id: r.canonical_id, tahun: r.tahun_anggaran, uraian: r.uraian, status: r.status, anggaran: r.anggaran, vol: r.vol, nilai_rencana: r.nilai_rencana },
+      penerimaan: pen.map(({ id, tgl, vol, nilai }) => ({ id, tgl, vol, nilai })),
+      register: reg.map(a => ({ id: a.id, golongan: a.golongan, nama_resmi: a.nama_resmi })),
+      lampiran: Number(hitung[0]?.lampiran ?? 0), referensi: Number(hitung[0]?.referensi ?? 0),
+    };
   });
 }

@@ -66,7 +66,7 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'bba.tab-keputusan':    { page: '/buku-besar-aset', label: 'tab tahap (Perlu dilengkapi · Siap diputuskan · Didanai · …)' },
   'bba.filter-cari':      { page: '/buku-besar-aset', label: 'kolom Cari uraian/kode/no. usulan' },
   'bba.langkah-berikutnya': { page: '/buku-besar-aset', label: 'tombol langkah berikutnya di baris', desc: 'Tiap rencana punya satu tombol langkah berikutnya sesuai tahapnya (lengkapi, putuskan, lihat di Pengadaan/Buku Aset); aksi lain ada di menu ⋯.' },
-  'bba.realisasi-simpan': { page: '/buku-besar-aset', label: 'tombol Simpan status (Proses & Penerimaan)' },
+  'bba.realisasi-simpan': { page: '/buku-besar-aset/pengadaan', label: 'tombol Tandai dipesan (modal di halaman Pengadaan)' },
 
   // ── /kinerja (F4e — tur kinerja-keliling; sidebar selalu ada) ──────────────
   'kinerja.sidebar-tahun':     { page: '/kinerja', label: 'selektor Tahun di sidebar' },

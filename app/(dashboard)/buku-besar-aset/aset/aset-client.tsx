@@ -124,6 +124,9 @@ export default function AsetClient({ username, role, themePreference, beku, izin
         const td: React.CSSProperties = { padding: '7px 10px', fontSize: 12.5, color: c.text, borderBottom: `1px solid ${c.border}`, verticalAlign: 'top' };
         const tdNum: React.CSSProperties = { ...td, fontFamily: MONO, textAlign: 'right', whiteSpace: 'nowrap' };
         return (<>
+          {/* Barang datang yang menunggu dicatat — pekerjaan paling depan Umum Aset (CONCEPT-bba-revamp-alur §3.4). */}
+          <PanelAntrean c={c} bolehUbah={bolehUbah} kunciMuat={kunciAntrean} onTersimpan={() => void muat()} />
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
             <div>
               <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📚 Buku Aset</h1>
@@ -137,8 +140,6 @@ export default function AsetClient({ username, role, themePreference, beku, izin
               <PrimaButton variant="purple" onClick={() => setImpor(true)}><Upload size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Impor KIB</PrimaButton>
             </div>}
           </div>
-
-          <PanelAntrean c={c} bolehUbah={bolehUbah} kunciMuat={kunciAntrean} onTersimpan={() => void muat()} />
 
           {kosong && tanda !== 'DIHAPUS' ? (
             <div style={{ background: c.card, border: `1px dashed ${c.border}`, borderRadius: 10, padding: 28, textAlign: 'center', fontSize: 13, color: c.sub, lineHeight: 1.6 }}>

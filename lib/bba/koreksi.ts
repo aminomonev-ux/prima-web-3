@@ -68,3 +68,21 @@ export function alasanTakBisaGabung(ini: AsetGabung, kembar: AsetGabung, fakta: 
   if (fakta.rujukan.gedung.length) return `${label} dipakai sebagai gedung ruangan ${sebut(fakta.rujukan.gedung)} — ganti gedungnya di Master → Ruangan dulu.`
   return null
 }
+
+// ─── Hapus data salah input sekali jalan (CONCEPT-bba-revamp-alur §5.2) ─────────
+
+/**
+ * Register hasil Tempatkan yang ikut dibuang "hapus berantai". Batasnya sengaja sempit: hanya catatan yang BELUM keluar
+ * dari PRIMA — belum bernomor provinsi, riwayatnya cuma TERIMA (belum dicek/dipindah/diubah/dihapus SK), dan tidak
+ * dirujuk rencana lain atau ruangan. Kalimatnya menyebut langkah yang harus dibatalkan dulu.
+ */
+export function alasanTakBisaHapusBerantai(a: AsetKoreksi, jenisRiwayat: readonly string[], rujukan: RujukanAset): string | null {
+  const nama = `${namaTampil(a)}${a.register ? ` reg. ${a.register}` : ''}`
+  if (a.status !== 'AKTIF') return `${nama} sudah dihapus dengan SK — sudah masuk buku resmi.`
+  if (a.kode_barang || a.kunci_impor) return `${nama} sudah bernomor KIB provinsi — kosongkan registernya dulu di kartu aset.`
+  const lain = [...new Set(jenisRiwayat.filter(j => j !== 'TERIMA'))]
+  if (lain.length) return `${nama} sudah diolah di Buku Aset (${lain.map(j => ISIAN_PRIMA[j] ?? j.toLowerCase()).join(', ')}) — batalkan dari kartu asetnya dulu.`
+  if (rujukan.sasaran.length) return `${nama} jadi aset sasaran rencana ${sebut(rujukan.sasaran)} — keluarkan dari rencana itu dulu.`
+  if (rujukan.gedung.length) return `${nama} dipakai sebagai gedung ruangan ${sebut(rujukan.gedung)} — ganti gedungnya di Master → Ruangan dulu.`
+  return null
+}

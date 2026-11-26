@@ -154,10 +154,11 @@ const modal = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/_components/
 ok('C14 modal item: pilihan status hilang, barang dikirim hanya kalau berubah (L87)', !modal.includes('STATUSES.map') && !/status: isian\.status/.test(modal)
   && modal.includes('...(barangBerubah ? bodyBarang(isian.barang) : {}),'))
 const klien = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx'))
-const mPengadaan = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/_components/ModalPengadaan.tsx'))
-ok('C15 Proses & Penerimaan: satu komponen untuk Rencana & Pengadaan, pilihan & pagar dari aturan bersama', klien.includes('<ModalPengadaan c={c} rencanaId={prosesId} bolehUbah={bolehPengadaan}')
-  && mPengadaan.includes('const pilihan = pilihanStatusProses(item.status);') && mPengadaan.includes('alasanTolakProses(item, status, penerimaan.length)')
-  && !klien.includes('/api/buku-besar-aset/realisasi'))
+const mPesan = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/_components/ModalPesan.tsx'))
+// Sejak revamp alur (Tahap 3): select status dibuang, tombol eksplisit per tahap — pagarnya tetap aturan bersama.
+ok('C15 Tandai dipesan / batalkan: pagar dari aturan bersama (alasanTolakProses), satu jalur PATCH /proses; tanpa route realisasi lama',
+  mPesan.includes("alasanTolakProses(m.item, 'DIPROSES', m.penerimaan.length)") && mPesan.includes('alasanTolakProses(m.item, ke, m.penerimaan.length)')
+  && mPesan.includes("fetchJson<unknown>('/api/buku-besar-aset/proses'") && !klien.includes('/api/buku-besar-aset/realisasi') && !mPesan.includes('STATUS_PROSES.map'))
 const routes = ['app/api/buku-besar-aset/barang/route.ts', 'app/api/buku-besar-aset/barang/gabung/route.ts', 'app/api/buku-besar-aset/barang/tautkan/route.ts'].map(p => tanpaKomentar(sumber(p)))
 const handler = routes.reduce((n, s) => n + (s.match(/export async function (GET|POST|PATCH|DELETE)\(/g) ?? []).length, 0)
 const dijaga = routes.reduce((n, s) => n + (s.match(/const g = await guard\(\);\s*if \(!g\.ok\) return g\.res;/g) ?? []).length, 0)

@@ -54,8 +54,10 @@ export class BbaBarangTidakDikenalError extends Error {
 export class BbaBarangKembarError extends Error {
   constructor(nama: string) { super(`Barang "${nama}" sudah ada di Master Barang.`); this.name = 'BbaBarangKembarError'; }
 }
+/** Pemakai barang yang disebut di pesan hapus (≤ 5 per jenis) — layar menjadikannya tautan (CONCEPT-bba-revamp-alur §5.3). */
+export type PemakaiBarang = { jenis: 'RENCANA'; kode: string; tahun: number } | { jenis: 'ASET'; kode: string; barang_id: number };
 export class BbaBarangDipakaiError extends Error {
-  constructor(item: number, pendataan = 0, aset = 0) {
+  constructor(item: number, pendataan = 0, aset = 0, public pemakai: PemakaiBarang[] = []) {
     const dipakai = [item > 0 ? `${item} item` : '', pendataan > 0 ? `${pendataan} pendataan eksisting lama` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
     super(`Barang ini dipakai ${dipakai}. Gabungkan ke barang lain dulu (tombol Gabungkan), baru barangnya hilang dari daftar.`);
     this.name = 'BbaBarangDipakaiError';
@@ -1047,7 +1049,16 @@ export async function hapusBarang(id: number): Promise<{ nama: string } | null> 
              (SELECT COUNT(*) FROM bba_aset WHERE barang_id = ${id}) AS aset
     ` as Array<{ item: number; pendataan: number; aset: number }>;
     const item = Number(dipakai[0]?.item ?? 0), pendataan = Number(dipakai[0]?.pendataan ?? 0), aset = Number(dipakai[0]?.aset ?? 0);
-    if (item > 0 || pendataan > 0 || aset > 0) throw new BbaBarangDipakaiError(item, pendataan, aset);
+    if (item > 0 || pendataan > 0 || aset > 0) {
+      const [ri, ra] = await Promise.all([
+        tx`SELECT canonical_id, tahun_anggaran FROM buku_besar_aset WHERE barang_id = ${id} ORDER BY tahun_anggaran DESC, canonical_id LIMIT 5`,
+        tx`SELECT register, nama_resmi FROM bba_aset WHERE barang_id = ${id} ORDER BY id LIMIT 5`,
+      ]) as [Array<{ canonical_id: string; tahun_anggaran: number }>, Array<{ register: string | null; nama_resmi: string }>];
+      throw new BbaBarangDipakaiError(item, pendataan, aset, [
+        ...ri.map(x => ({ jenis: 'RENCANA' as const, kode: String(x.canonical_id), tahun: Number(x.tahun_anggaran) })),
+        ...ra.map(x => ({ jenis: 'ASET' as const, kode: x.register ? `reg. ${x.register}` : String(x.nama_resmi), barang_id: id })),
+      ]);
+    }
     await tx`DELETE FROM bba_barang WHERE id = ${id}`;
     return { nama: String(ada[0].nama) };
   });

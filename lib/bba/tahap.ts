@@ -115,3 +115,12 @@ export function ringkasAlur(rows: readonly BahanTahap[]): RingkasAlur {
   }
   return h;
 }
+
+/** Tab halaman Pengadaan (§3.3) — semua rencana didanai, per tahap. */
+export const TAB_PENGADAAN = ['siap', 'dipesan', 'sebagian', 'selesai', 'batal'] as const;
+export type TabPengadaan = typeof TAB_PENGADAAN[number];
+export const LABEL_TAB_PENGADAAN: Record<TabPengadaan, string> = { siap: 'Siap dipesan', dipesan: 'Dipesan', sebagian: 'Diterima sebagian', selesai: 'Selesai', batal: 'Batal dibeli' };
+export const TAHAP_TAB_PENGADAAN: Record<TabPengadaan, Tahap[]> = {
+  siap: ['DIDANAI'], dipesan: ['DIPESAN'], sebagian: ['DITERIMA_SEBAGIAN'], selesai: ['DITERIMA_PENUH', 'TERCATAT'], batal: ['BATAL_DIBELI'],
+};
+export const tabPengadaan = (r: BahanTahap): TabPengadaan => TAB_PENGADAAN.find(t => TAHAP_TAB_PENGADAAN[t].includes(tahapRencana(r))) ?? 'siap';

@@ -11,11 +11,14 @@ import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import { bolehBatalkanFinal } from '@/lib/constants';
 import { izinLayarBba } from '../_izin';
 import PengadaanClient from './pengadaan-client';
+import { TAB_PENGADAAN, type TabPengadaan } from '@/lib/bba/tahap';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
-export default async function PengadaanBbaPage() {
+type Cari = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function PengadaanBbaPage({ searchParams }: { searchParams: Cari }) {
   const h = await headers();
   const userId = h.get('x-user-id');
   const role = h.get('x-user-role');
@@ -28,13 +31,17 @@ export default async function PengadaanBbaPage() {
   );
   if (!isAsetRole(role, row?.app_access ?? null)) redirect('/menu');
   const { peta } = await izinLayarBba('pengadaan');
-  const tahun = Number(tanggalHariIniWIB().slice(0, 4));
+  // ?tab= & ?tahun= dari pita alur (CONCEPT-bba-revamp-alur §3.1); isian di luar daftar diabaikan.
+  const cari = await searchParams;
+  const tahunCari = Number(cari.tahun);
+  const tahun = Number.isInteger(tahunCari) && tahunCari >= 2020 && tahunCari <= 2100 ? tahunCari : Number(tanggalHariIniWIB().slice(0, 4));
+  const tabAwal = typeof cari.tab === 'string' && (TAB_PENGADAAN as readonly string[]).includes(cari.tab) ? cari.tab as TabPengadaan : null;
   const [beku, awal, kategori] = await Promise.all([bekuLayarModul('buku_besar_aset'), pengadaanTahun(tahun), listKategori()]);
 
   return (
     <KunciTulisProvider beku={beku}>
       <PengadaanClient username={username} role={role} themePreference={(row?.theme_preference ?? 'dark') as 'dark' | 'light'}
-        beku={beku} izin={peta} awal={awal} kategori={kategori.map(k => k.nama)} bolehKoreksiMundur={bolehBatalkanFinal(role)} />
+        beku={beku} izin={peta} awal={awal} kategori={kategori.map(k => k.nama)} bolehKoreksiMundur={bolehBatalkanFinal(role)} tabAwal={tabAwal} />
     </KunciTulisProvider>
   );
 }

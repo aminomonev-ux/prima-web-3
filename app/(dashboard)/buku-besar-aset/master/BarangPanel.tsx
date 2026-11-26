@@ -11,7 +11,8 @@ import Tip from '@/components/ui/Tip';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import { rapikanNamaBarang } from '@/lib/bba/barang';
-import type { BbaBarang } from '@/lib/data/buku-besar-aset';
+import Link from 'next/link';
+import type { BbaBarang, PemakaiBarang } from '@/lib/data/buku-besar-aset';
 
 type Warna = { card: string; text: string; sub: string; border: string; rowOdd: string; input: string };
 type Isian = { nama: string; kategori_aset: string; satuan: string };
@@ -26,6 +27,8 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
   const [gabung, setGabung] = useState<{ dari: BbaBarang; ke: number | null } | null>(null);
   const [cari, setCari] = useState('');
   const [sibuk, setSibuk] = useState(false);
+  /** Barang yang ditolak dihapus karena masih dipakai — pemakainya disebut, jalan keluarnya Gabungkan (§5.3). */
+  const [dipakai, setDipakai] = useState<{ barang: BbaBarang; pesan: string; pemakai: PemakaiBarang[] } | null>(null);
 
   async function muat() {
     const d = await fetchJson<unknown>('/api/buku-besar-aset/barang');
@@ -58,6 +61,10 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
   async function hapus(b: BbaBarang) {
     if (!(await confirmDialog({ title: 'Hapus barang', message: `Hapus barang "${b.nama}" dari Master?`, confirmLabel: 'Hapus', variant: 'danger' }))) return;
     const d = await fetchJson<unknown>(`/api/buku-besar-aset/barang?id=${b.id}`, { method: 'DELETE' });
+    if (!d.ok && (d as { code?: string }).code === 'BARANG_DIPAKAI') {
+      setDipakai({ barang: b, pesan: d.message, pemakai: (d as unknown as { pemakai?: PemakaiBarang[] }).pemakai ?? [] });
+      void muat(); return;
+    }
     if (!d.ok) { toast.error(d.message || 'Gagal menghapus'); void muat(); return; }
     toast.success('Barang dihapus'); void muat();
   }
@@ -91,6 +98,24 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
         Jenis barang di tingkat perencanaan (“Laptop”, “Kursi Roda”) — kunci riwayat beli di tampilan Per Barang. Spesifikasi tetap di uraian item.
         Kembar seperti “Laptop” / “Laptop Kantor”? Pakai <b>Gabungkan</b>.
       </div>
+      {dipakai && (
+        <div role="alert" style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(186,117,23,.45)', background: 'rgba(186,117,23,.08)', fontSize: 12.5 }}>
+          <div style={{ marginBottom: 6 }}><b>“{dipakai.barang.nama}” belum bisa dihapus.</b> {dipakai.pesan}</div>
+          {dipakai.pemakai.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ color: c.sub }}>Dipakai oleh:</span>
+              {dipakai.pemakai.map((p, i) => (
+                <Link key={i} href={p.jenis === 'RENCANA' ? `/buku-besar-aset?tab=semua&tahun=${p.tahun}` : `/buku-besar-aset/aset?barang=${p.barang_id}`}
+                  style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 11.5, color: '#7C5CFC' }}>{p.kode}{p.jenis === 'RENCANA' ? ` (${p.tahun})` : ''}</Link>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {rows.length > 1 && <PrimaButton variant="warning" size="sm" onClick={() => { setGabung({ dari: dipakai.barang, ke: null }); setDipakai(null); }}>Gabungkan ke barang lain…</PrimaButton>}
+            <PrimaButton variant="ghost" size="sm" onClick={() => setDipakai(null)}>Tutup</PrimaButton>
+          </div>
+        </div>
+      )}
       <datalist id="bba-kategori-barang">{kategori.map(k => <option key={k} value={k} />)}</datalist>
       {bolehUbah && <div className="bba-mb-form" style={{ marginBottom: 14 }}>
         <input value={baru.nama} onChange={e => setBaru({ ...baru, nama: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') void tambah(); }} placeholder="Nama barang baru…" maxLength={160} style={inp} aria-label="Nama barang" />
@@ -129,9 +154,7 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
                   {bolehUbah && <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                     <Tip label="Ubah"><EditButton onClick={() => setUbah({ id: r.id, nama: r.nama, kategori_aset: r.kategori_aset ?? '', satuan: r.satuan ?? '' })} /></Tip>
                     <PrimaButton variant="ghost" size="sm" disabled={rows.length < 2} onClick={() => setGabung({ dari: r, ke: null })}>Gabungkan…</PrimaButton>
-                    {r.jumlah_item + r.jumlah_pendataan + r.jumlah_aset > 0
-                      ? <Tip label="Masih dipakai item/pendataan/aset — gabungkan ke barang lain dulu"><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
-                      : <Tip label="Hapus"><DeleteButton iconSize={12} onClick={() => void hapus(r)} /></Tip>}
+                    <Tip label={r.jumlah_item + r.jumlah_pendataan + r.jumlah_aset > 0 ? 'Masih dipakai — tekan untuk melihat pemakainya' : 'Hapus'}><DeleteButton iconSize={12} onClick={() => void hapus(r)} /></Tip>
                   </div>}
                 </td>
               </tr>

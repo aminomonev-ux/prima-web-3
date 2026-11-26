@@ -59,7 +59,7 @@ flowchart TD
 | `bba.row-edit` | Ikon EditButton baris | buku-besar-aset-client.tsx |
 | `bba.langkah-berikutnya` | Tombol langkah berikutnya di baris (+ menu ⋯) | buku-besar-aset-client.tsx |
 | `bba.row-hapus` | Ikon DeleteButton baris | buku-besar-aset-client.tsx |
-| `bba.realisasi-simpan` | Tombol "Simpan Realisasi" | buku-besar-aset-client.tsx |
+| `bba.realisasi-simpan` | Tombol "Tandai dipesan" di modal Pengadaan | _components/ModalPesan.tsx |
 | `bba.badge-usulan` | Badge no. usulan (detail provenance) | buku-besar-aset-client.tsx |
 | `bba.dock` | FloatingDock (nav Master/Kinerja/Menu) | components/ui/FloatingDock.tsx |
 
@@ -70,7 +70,7 @@ flowchart TD
 2. `bba.tarik-commit` — (Latihan: peringatan mutasi) "Preview dulu — yang pernah ditarik otomatis dilewati."
 3. `bba.tab-keputusan` — "Tab mengikuti tahap rencana; usulan Ditolak punya tab sendiri dan tidak masuk KPI."
 4. `bba.langkah-berikutnya` — "Tiap rencana punya satu tombol langkah berikutnya; aksi lain di menu ⋯."
-5. `bba.realisasi-simpan` — "Tandai Dalam Proses; realisasi mengikuti penerimaan yang dicatat."
+5. `bba.realisasi-simpan` — "Tandai dipesan, lalu Catat barang datang; realisasi mengikuti penerimaan yang dicatat."
 
 ### Tur 2 — `bba-entry-manual`
 1. `bba.tambah-item` — "Item di luar modul Usulan dicatat manual di sini."

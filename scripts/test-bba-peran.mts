@@ -65,6 +65,7 @@ const HARAP: Record<string, string> = {
   'anggaran/route.ts': "'rencana'", 'salin-tahun-lalu/route.ts': "'rencana'",
   'aset/antrean/route.ts': "'aset'", 'aset/register/route.ts': "'aset'", 'aset/hapus/route.ts': "'aset'",
   'aset/batal-tempatkan/route.ts': "'aset'", 'aset/batal-hapus/route.ts': "'aset'", 'aset/gabung/route.ts': "'aset'",
+  'hapus-berantai/route.ts': "'rencana'",
 }
 const akarApi = path.join(process.cwd(), 'app/api/buku-besar-aset')
 const semuaRoute: string[] = []
@@ -90,7 +91,7 @@ ok('C4 Tarik dari Usulan = izin EDIT Rencana (role PROGRAM bisa), tanpa daftar p
   && (imp.match(/await guardImport\(\)/g) ?? []).length === 2)
 const klien = sumber('app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx')
 ok('C5 layar Rencana: tombol ikut izin — tidak ada lagi pemeriksaan role langsung',
-  !klien.includes("role === 'ADMIN'") && klien.includes("if (!ditolak && bolehPengadaan && r.anggaran === 'DIDANAI') b.push({ kunci: 'proses'")
+  !klien.includes("role === 'ADMIN'") && klien.includes('<PanelRiwayat c={c} rencanaId={riwayatId} izin={izin} bolehAdmin={bolehBatalkanFinal(role)}')
   && klien.includes('alasanTakBisaHapus(r.status, r.jumlah_bukti)') && klien.includes('bolehUbah={bolehRencana} bolehBukti={bolehBukti}'))
 const modal = sumber('app/(dashboard)/buku-besar-aset/_components/ModalItem.tsx')
 ok('C6 modal item: isian mati tanpa izin, referensi mati sejak beku, bukti ikut izin bukti',

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { PengadaanQuerySchema, PenerimaanSchema, HapusPenerimaanSchema } from '@/lib/data/bba-penerimaan-schemas';
-import { pengadaanTahun, penerimaanUntuk, catatPenerimaan, hapusPenerimaan, PenerimaanDitolakError } from '@/lib/data/bba-penerimaan';
-import { getAsetById, listReferensi, BbaVersionConflictError, BbaNotFoundError } from '@/lib/data/buku-besar-aset';
+import { pengadaanTahun, penerimaanUntuk, riwayatRencana, catatPenerimaan, hapusPenerimaan, PenerimaanDitolakError } from '@/lib/data/bba-penerimaan';
+import { getAsetDetail, listReferensi, BbaVersionConflictError, BbaNotFoundError } from '@/lib/data/buku-besar-aset';
 import { bolehBatalkanFinal } from '@/lib/constants';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../_guard';
 
@@ -18,10 +18,11 @@ export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const rencana = Number(sp.get('rencana'));
   if (Number.isInteger(rencana) && rencana > 0) {
-    const item = await getAsetById(rencana);
+    // Lewat getAsetDetail: jumlah bukti & kelengkapan referensi ikut terhitung (panel Riwayat & tombol Hapus item).
+    const item = (await getAsetDetail(rencana))?.item;
     if (!item) return NextResponse.json({ ok: false, message: 'Rencana tidak ditemukan' }, { status: 404 });
-    const [referensi, per] = await Promise.all([listReferensi(rencana), penerimaanUntuk([rencana])]);
-    return NextResponse.json({ ok: true, item, referensi, penerimaan: per[rencana] ?? [] });
+    const [referensi, per, riwayat] = await Promise.all([listReferensi(rencana), penerimaanUntuk([rencana]), riwayatRencana(rencana)]);
+    return NextResponse.json({ ok: true, item, referensi, penerimaan: per[rencana] ?? [], riwayat });
   }
   const p = PengadaanQuerySchema.safeParse({ tahun: sp.get('tahun') });
   if (!p.success) return NextResponse.json({ ok: false, message: 'Tahun tidak valid' }, { status: 400 });

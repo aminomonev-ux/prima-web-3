@@ -105,3 +105,11 @@ export type RehabInput = z.infer<typeof RehabSchema>;
 export type KosongkanRegisterInput = z.infer<typeof KosongkanRegisterSchema>;
 export type BatalTempatkanInput = z.infer<typeof BatalTempatkanSchema>;
 export type BatalHapusInput = z.infer<typeof BatalHapusSchema>;
+
+/** Hapus data salah input sekali jalan, khusus Admin (CONCEPT-bba-revamp-alur §5.2). Yang diketik = kode BBA-nya (L76). */
+export const HapusBerantaiSchema = z.object({
+  id: z.number().int().positive(),
+  expected_version: Versi,
+  kode: z.string().trim().min(1, 'Ketik kode BBA-nya').max(20),
+  alasan: Teks(500).min(10, 'Tulis alasannya (paling sedikit 10 huruf)'),
+});

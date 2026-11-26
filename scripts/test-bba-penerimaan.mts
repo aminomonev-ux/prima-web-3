@@ -133,7 +133,7 @@ ok('C3 hapus penerimaan: ditolak bila sudah ditempatkan; dari Diterima penuh han
 ok('C3b hapus penerimaan: realisasi lama (pindahan) hanya Admin & rehab yang sudah memperbarui gedung ditolak — keduanya SEBELUM DELETE; layar mengunci tombolnya',
   bHapus.indexOf('if (Number(p[0].pindahan) === 1 && !bolehKoreksiMundur)') > 0 && bHapus.indexOf('if (Number(p[0].pindahan) === 1 && !bolehKoreksiMundur)') < bHapus.indexOf('DELETE FROM bba_penerimaan')
   && bHapus.indexOf("if (r.jenis_rencana === 'REHAB') {") > 0 && bHapus.indexOf("if (r.jenis_rencana === 'REHAB') {") < bHapus.indexOf('DELETE FROM bba_penerimaan')
-  && sumber('app/(dashboard)/buku-besar-aset/_components/ModalPengadaan.tsx').includes("p.pindahan && !bolehKoreksiMundur ? 'Realisasi lama"))
+  && sumber('app/(dashboard)/buku-besar-aset/_components/PanelRiwayat.tsx').includes("p.pindahan && !bolehAdmin ? 'Realisasi lama"))
 const bUbah = badan(dataBba, 'updateAset')
 ok('C3c jenis rencana & aset sasaran beku sejak diterima: diperiksa di server (L82), layar ikut mengunci isiannya',
   bUbah.indexOf('if (sasaranBeku(cur.status)) {') > 0 && bUbah.indexOf('if (sasaranBeku(cur.status)) {') < bUbah.indexOf('await withTransaction(')
@@ -155,8 +155,9 @@ const TGL_CADANGAN = mig.match(/COALESCE\(b\.tgl_realisasi, (.+?)\), b\.vol_real
 const nav = sumber('app/(dashboard)/buku-besar-aset/_components/BbaNav.tsx')
 const rencanaKlien = sumber('app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx')
 const pengadaanKlien = sumber('app/(dashboard)/buku-besar-aset/pengadaan/pengadaan-client.tsx')
-ok('C6 halaman Pengadaan terdaftar; Rencana & Pengadaan memakai modal Proses & Penerimaan yang SAMA',
-  nav.includes("pengadaan: '/buku-besar-aset/pengadaan',") && rencanaKlien.includes('<ModalPengadaan ') && pengadaanKlien.includes('<ModalPengadaan ')
+ok('C6 halaman Pengadaan terdaftar; Rencana & Pengadaan memakai panel Riwayat dan batalkan yang SAMA; catat barang datang satu modal',
+  nav.includes("pengadaan: '/buku-besar-aset/pengadaan',") && rencanaKlien.includes('<PanelRiwayat ') && pengadaanKlien.includes('<PanelRiwayat ')
+  && pengadaanKlien.includes('<ModalCatatDatang ') && sumber('app/(dashboard)/buku-besar-aset/_components/ModalPesan.tsx').includes("fetchJson<unknown>('/api/buku-besar-aset/pengadaan', {\n        method: 'POST'")
   && sumber('app/(dashboard)/buku-besar-aset/pengadaan/page.tsx').includes("izinLayarBba('pengadaan')"))
 const pengadaanRoute = tanpaKomentar(sumber('app/api/buku-besar-aset/pengadaan/route.ts'))
 ok('C7 daftar Pengadaan = rencana DIDANAI saja; GET berizin Lihat Pengadaan', dataPen.includes("WHERE b.tahun_anggaran = ${tahun} AND b.anggaran = 'DIDANAI'")

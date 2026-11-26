@@ -11,6 +11,7 @@ import SpandukLihat from '@/components/ui/SpandukLihat';
 import type { InfoBeku } from '@/lib/security/beku';
 import { LABEL_MENU_BBA, type MenuBba } from '@/lib/bba/peran';
 import BbaNav, { navDockBba, type PetaIzinLayar } from './BbaNav';
+import type { PindahPita } from './PitaAlur';
 
 export function warnaBba(isLight: boolean) {
   return {
@@ -30,10 +31,12 @@ type Props = {
   /** Teks kecil di kepala sesudah "Buku Besar Aset /". */
   remah: string;
   aksiDock?: AksiDock[];
+  /** Pita alur: tahunnya, pemicu muat ulang, dan pindah tab di halaman ini tanpa navigasi. */
+  tahunPita?: number; segarkanPita?: number; pindahPita?: PindahPita;
   children: (c: WarnaBba) => ReactNode;
 };
 
-export default function BbaShell({ username, role, themePreference, beku, izin, aktif, remah, aksiDock, children }: Props) {
+export default function BbaShell({ username, role, themePreference, beku, izin, aktif, remah, aksiDock, tahunPita, segarkanPita, pindahPita, children }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -52,7 +55,7 @@ export default function BbaShell({ username, role, themePreference, beku, izin, 
         </div>
       </header>
       <div style={{ padding: '24px 28px 100px' }}>
-        <BbaNav aktif={aktif} peta={izin} c={c} />
+        <BbaNav aktif={aktif} peta={izin} c={c} tahun={tahunPita} segarkan={segarkanPita} pindah={pindahPita} />
         <SpandukBeku {...beku}/>
         {izin[aktif] === 'LIHAT' && aktif !== 'cetak' && <SpandukLihat label={LABEL_MENU_BBA[aktif]} />}
         {children(c)}

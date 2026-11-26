@@ -57,8 +57,8 @@ export function PanelAntrean({ c, bolehUbah, kunciMuat, onTersimpan }: { c: Warn
   return (
     <div style={{ background: c.card, border: '1px solid #EF9F27', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, marginBottom: 8 }}>
-        <Inbox size={16} color="#EF9F27" /> Barang diterima, belum dicatat
-        <span style={{ fontSize: 12, fontWeight: 500, color: c.sub }}>· {unit} unit dari {a.terima.length} penerimaan{a.rehab.length ? ` · ${a.rehab.length} rehab selesai` : ''}</span>
+        <Inbox size={16} color="#EF9F27" /> Menunggu dicatat ({unit} unit{a.rehab.length ? ` · ${a.rehab.length} gedung direhab` : ''})
+        <span style={{ fontSize: 12, fontWeight: 500, color: c.sub }}>· barang sudah datang di Pengadaan, belum jadi register</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflow: 'auto' }}>
         {a.terima.map(x => (
@@ -69,7 +69,7 @@ export function PanelAntrean({ c, bolehUbah, kunciMuat, onTersimpan }: { c: Warn
               <span style={{ color: c.sub }}> · diterima {fmtTanggal(x.tgl)} · {fmtRp(x.harga_satuan)}/unit{x.merk_tipe ? ` · ${x.merk_tipe}` : ''}</span>
             </span>
             <span style={{ fontFamily: MONO, whiteSpace: 'nowrap' }}>{x.sisa} dari {x.vol} unit</span>
-            {bolehUbah && <PrimaButton variant="success" size="sm" onClick={() => setTempat(x)}>Tempatkan</PrimaButton>}
+            {bolehUbah && <PrimaButton variant="success" size="sm" onClick={() => setTempat(x)}>Catat di Buku Aset</PrimaButton>}
           </div>
         ))}
         {a.rehab.map(x => (
@@ -79,7 +79,7 @@ export function PanelAntrean({ c, bolehUbah, kunciMuat, onTersimpan }: { c: Warn
               <b>Rehab selesai — perbarui kondisi {x.aset_nama}</b>
               <span style={{ color: c.sub }}>{x.register ? ` · reg. ${x.register}` : ''}{x.tgl ? ` · diterima ${fmtTanggal(x.tgl)}` : ''}</span>
             </span>
-            {bolehUbah && <PrimaButton variant="success" size="sm" onClick={() => setRehab(x)}>Catat rehab</PrimaButton>}
+            {bolehUbah && <PrimaButton variant="success" size="sm" onClick={() => setRehab(x)}>Perbarui kondisi gedung</PrimaButton>}
           </div>
         ))}
       </div>

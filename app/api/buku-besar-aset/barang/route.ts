@@ -80,7 +80,7 @@ export async function DELETE(req: NextRequest) {
     await writeAuditLog({ req, eventType: 'BBA_BARANG_DELETE', userId: g.session.userId, username: g.session.username, detail: `BBA barang delete id=${parsed.data.id} "${hasil.nama}"` });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof BbaBarangDipakaiError) return NextResponse.json({ ok: false, code: 'BARANG_DIPAKAI', message: err.message }, { status: 409 });
+    if (err instanceof BbaBarangDipakaiError) return NextResponse.json({ ok: false, code: 'BARANG_DIPAKAI', message: err.message, pemakai: err.pemakai }, { status: 409 });
     throw err;
   }
 }
