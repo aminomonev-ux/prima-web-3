@@ -63,9 +63,9 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'bba.tarik-usulan':     { page: '/buku-besar-aset', label: 'tombol Tarik dari Usulan Kebutuhan' },
   'bba.tarik-cmt':        { page: '/buku-besar-aset', label: 'tombol Tarik Item di modal preview' },
   'bba.kpi-cards':        { page: '/buku-besar-aset', label: 'kartu KPI (Total Rencana, Realisasi, % Terakomodir)' },
-  'bba.tab-keputusan':    { page: '/buku-besar-aset', label: 'tab Semua / Disetujui / Ditolak' },
+  'bba.tab-keputusan':    { page: '/buku-besar-aset', label: 'tab tahap (Perlu dilengkapi · Siap diputuskan · Didanai · …)' },
   'bba.filter-cari':      { page: '/buku-besar-aset', label: 'kolom Cari uraian/kode/no. usulan' },
-  'bba.row-realisasi':    { page: '/buku-besar-aset', label: 'ikon Proses & penerimaan di baris', desc: 'Ikon Proses & penerimaan dipakai menandai pesanan dan mencatat penerimaan barang — realisasi & status diterima mengikuti penerimaan.' },
+  'bba.langkah-berikutnya': { page: '/buku-besar-aset', label: 'tombol langkah berikutnya di baris', desc: 'Tiap rencana punya satu tombol langkah berikutnya sesuai tahapnya (lengkapi, putuskan, lihat di Pengadaan/Buku Aset); aksi lain ada di menu ⋯.' },
   'bba.realisasi-simpan': { page: '/buku-besar-aset', label: 'tombol Simpan status (Proses & Penerimaan)' },
 
   // ── /kinerja (F4e — tur kinerja-keliling; sidebar selalu ada) ──────────────

@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import {
   FileText, BarChart3, Building2, ClipboardList, Target,
-  ArrowLeft, RefreshCw, Home, LayoutDashboard,
+  ArrowLeft, RefreshCw, LayoutDashboard,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
@@ -87,7 +87,6 @@ export default function DashboardDetailClient({ username, role, themePreference,
   const axisTick = { fontSize: 10, fill: isLight ? '#6B7280' : '#85B7EB' };
 
   const navItems = [
-    { icon: <Home size={18} />,          label: 'Menu',      onClick: () => open('/menu') },
     { icon: <LayoutDashboard size={18} />, label: 'Overview', onClick: () => open('/dashboard') },
     { icon: <FileText size={18} />,       label: 'Usulan',    onClick: () => open('/dashboard/usulan'),    current: modul === 'usulan' },
     { icon: <BarChart3 size={18} />,      label: 'Anggaran',  onClick: () => open('/dashboard/eanggaran'), current: modul === 'eanggaran' },

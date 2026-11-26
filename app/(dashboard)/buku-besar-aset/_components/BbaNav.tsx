@@ -3,8 +3,9 @@
 // isi FloatingDock dari daftar yang SAMA, supaya keduanya tidak pernah menawarkan pintu berbeda.
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { BookOpen, ClipboardList, ShoppingCart, Layers, Printer, LayoutGrid, Eye } from 'lucide-react';
+import { BookOpen, ClipboardList, ShoppingCart, Layers, Printer, Eye } from 'lucide-react';
 import { MENU_BBA, LABEL_MENU_BBA, MENU_BACA_SAJA_BBA, type MenuBba, type Izin } from '@/lib/bba/peran';
+import PitaAlur, { type PindahPita } from './PitaAlur';
 
 export type PetaIzinLayar = Record<MenuBba, Izin>;
 
@@ -26,21 +27,22 @@ export function bagianTerbuka(peta: PetaIzinLayar): MenuBba[] {
   return MENU_BBA.filter(m => HALAMAN_BBA[m] && peta[m] !== 'TIDAK');
 }
 
-/** Isi `nav` FloatingDock: bagian yang terbuka + kembali ke Menu. */
+/** Isi `nav` FloatingDock: bagian yang terbuka. Kembali ke Menu ada di lencana profil (CONCEPT-bba-revamp-alur §3.5). */
 export function navDockBba(peta: PetaIzinLayar, aktif: MenuBba, pergi: (href: string) => void) {
-  return [
-    ...bagianTerbuka(peta).map(m => ({
-      icon: IKON[m], label: LABEL_MENU_BBA[m], current: m === aktif,
-      onClick: () => { if (m !== aktif) pergi(HALAMAN_BBA[m]!); },
-    })),
-    { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => pergi('/menu') },
-  ];
+  return bagianTerbuka(peta).map(m => ({
+    icon: IKON[m], label: LABEL_MENU_BBA[m], current: m === aktif,
+    onClick: () => { if (m !== aktif) pergi(HALAMAN_BBA[m]!); },
+  }));
 }
 
 type Warna = { text: string; sub: string; border: string };
 
-export default function BbaNav({ aktif, peta, c }: { aktif: MenuBba; peta: PetaIzinLayar; c: Warna }) {
-  return (
+type PropsNav = { aktif: MenuBba; peta: PetaIzinLayar; c: Warna;
+  /** Tahun pita alur — tanpa ini tahun berjalan. */
+  tahun?: number; segarkan?: number; pindah?: PindahPita };
+
+export default function BbaNav({ aktif, peta, c, tahun, segarkan, pindah }: PropsNav) {
+  return (<>
     <nav aria-label="Bagian Buku Besar Aset" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
       {bagianTerbuka(peta).map(m => {
         const kini = m === aktif;
@@ -57,5 +59,6 @@ export default function BbaNav({ aktif, peta, c }: { aktif: MenuBba; peta: PetaI
         );
       })}
     </nav>
-  );
+    <PitaAlur tahun={tahun ?? new Date().getFullYear()} peta={peta} c={c} segarkan={segarkan} pindah={pindah} />
+  </>);
 }

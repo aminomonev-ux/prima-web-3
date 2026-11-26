@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import {
   LayoutDashboard, FileText, BarChart3, Building2, ClipboardList, Target,
-  ArrowRight, RefreshCw, Home,
+  ArrowRight, RefreshCw,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
@@ -77,7 +77,6 @@ export default function DashboardClient({ username, role, themePreference, initi
   const open = (href: string) => router.push(href);
 
   const navItems = [
-    { icon: <Home size={18} />,          label: 'Menu',      onClick: () => open('/menu') },
     { icon: <FileText size={18} />,       label: 'Usulan',    onClick: () => open('/dashboard/usulan') },
     { icon: <BarChart3 size={18} />,      label: 'Anggaran',  onClick: () => open('/dashboard/eanggaran') },
     { icon: <Building2 size={18} />,      label: 'BLUD',      onClick: () => open('/dashboard/blud') },

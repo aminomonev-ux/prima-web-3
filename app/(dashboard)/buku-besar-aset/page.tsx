@@ -8,11 +8,14 @@ import BukuBesarAsetClient from './buku-besar-aset-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 import { izinLayarBba } from './_izin';
+import { TAB_RENCANA, type TabRencana } from '@/lib/bba/tahap';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
-export default async function BukuBesarAsetPage() {
+type Cari = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function BukuBesarAsetPage({ searchParams }: { searchParams: Cari }) {
   const h = await headers();
   const userId   = h.get('x-user-id');
   const role     = h.get('x-user-role');
@@ -27,11 +30,15 @@ export default async function BukuBesarAsetPage() {
 
   const { peta } = await izinLayarBba('rencana');
   const beku = await bekuLayarModul('buku_besar_aset');
-  const tahun = new Date().getFullYear();
+  // ?tab= & ?tahun= dari pita alur (CONCEPT-bba-revamp-alur §3.1). Isian di luar daftar diabaikan.
+  const cari = await searchParams;
+  const tahunCari = Number(cari.tahun);
+  const tahun = Number.isInteger(tahunCari) && tahunCari >= 2020 && tahunCari <= 2100 ? tahunCari : new Date().getFullYear();
+  const tabCari = typeof cari.tab === 'string' && (TAB_RENCANA as readonly string[]).includes(cari.tab) ? cari.tab as TabRencana : null;
   const [initial, kategori, initialKpi] = await Promise.all([
-    listAset({ tahun, page: 1, limit: 50 }),
+    listAset({ tahun, page: 1, limit: 1000 }),
     listKategori(),
-    getAsetKpi({ tahun, page: 1, limit: 50 }),
+    getAsetKpi({ tahun, page: 1, limit: 1000 }),
   ]);
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
@@ -44,6 +51,7 @@ export default async function BukuBesarAsetPage() {
         initialTahun={tahun}
         initialResult={initial}
         initialKpi={initialKpi}
+        initialTab={tabCari}
         kategori={kategori.map(k => k.nama)}
         beku={beku}
         izin={peta}

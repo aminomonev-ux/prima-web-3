@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   ClipboardCheck, ArrowLeft, Save, Lock, Unlock, Plus, Download,
-  FileSpreadsheet, FileText, Import, LayoutGrid, X,
+  FileSpreadsheet, FileText, Import, X,
   AlertTriangle, History, ChevronUp, ChevronDown, LayoutTemplate,
 } from 'lucide-react';
 import { validateRhkTargets } from '@/lib/iki/validate';
@@ -839,7 +839,6 @@ export default function EditorClient({ username, role, themePreference, initialD
       <FloatingDock isLight={isLight} limelight
         nav={[
           { icon: <ClipboardCheck size={17} />, label: 'Daftar IKI', onClick: () => router.push(`/iki?tahun=${doc.tahun}`) },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={[
           { icon: <Download size={17} />, label: 'PDF', onClick: () => void handleExport('pdf') },

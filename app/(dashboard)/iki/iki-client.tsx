@@ -635,7 +635,6 @@ export default function IkiClient({ username, role, themePreference, initialRows
       <FloatingDock isLight={isLight} limelight
         nav={[
           { icon: <ClipboardCheck size={17} />, label: 'IKI', onClick: () => {}, current: true },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={[
           { icon: <Plus size={17} />, label: 'Buat', onClick: () => openCreate() },

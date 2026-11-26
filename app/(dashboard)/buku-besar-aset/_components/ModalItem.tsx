@@ -29,6 +29,8 @@ import { JENIS_RENCANA, LABEL_JENIS, KAPAN_JENIS, LABEL_ANGGARAN, type JenisRenc
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
 import PilihSasaran from './PilihSasaran';
 import KartuBarang from './KartuBarang';
+import GarisTahap from './GarisTahap';
+import { tahapRencana } from '@/lib/bba/tahap';
 
 export type TabItem = 'data' | 'ref' | 'bukti';
 export type Warna = { card: string; text: string; sub: string; border: string; input: string; canvas: string; rowOdd: string };
@@ -323,6 +325,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
             <div style={{ fontSize: 15, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{judul}</div>
             {item && <div style={{ fontSize: 11.5, color: c.sub, fontFamily: MONO }}>{item.canonical_id} · {item.tahun_anggaran} · {fmtVol(item.vol)} {item.satuan || ''}</div>}
           </div>
+          {item && <GarisTahap tahap={tahapRencana(item)} sub={c.sub} />}
           {tampilDaftar && daftarTampil.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="bba-mi-pager" style={{ alignItems: 'center', gap: 4 }}>

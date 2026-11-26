@@ -1,11 +1,13 @@
 'use client';
-// UserBadge — shared avatar+nama+role pill dengan dropdown (Ganti Password / Keluar).
+// UserBadge — shared avatar+nama+role pill dengan dropdown (Menu aplikasi / Ganti Password / Keluar).
 // Mengangkat pola kinerja-user-badge jadi komponen reusable. Token ikut DESIGN-SYSTEM.
+// Tiga butirnya meninggalkan halaman, jadi semuanya bertanya dulu lewat `bolehTinggalkanHalaman()` —
+// Keluar SEBELUM sesi dimatikan (lib/shared/belum-tersimpan.ts).
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ShieldCheck, LogOut } from 'lucide-react';
-import { fetchJson } from '@/lib/shared/api';
+import { ChevronDown, ShieldCheck, LogOut, LayoutGrid } from 'lucide-react';
+import { bolehTinggalkanHalaman, lepaskanPengingat } from '@/lib/shared/belum-tersimpan';
 
 interface Props {
   username: string;
@@ -29,10 +31,18 @@ export default function UserBadge({ username, role, isLight }: Props) {
 
   async function handleLogout() {
     if (loggingOut) return;
+    setOpen(false);
+    if (!(await bolehTinggalkanHalaman())) return;
     setLoggingOut(true);
-    try { await fetchJson('/api/auth/logout', { method: 'POST' }); } catch { /* tetap redirect */ }
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* tetap redirect */ }
+    lepaskanPengingat();
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
     window.location.href = '/login';
+  }
+
+  async function pergi(href: string) {
+    setOpen(false);
+    if (await bolehTinggalkanHalaman()) router.push(href);
   }
 
   const initials = username.slice(0, 2).toUpperCase();
@@ -52,7 +62,13 @@ export default function UserBadge({ username, role, isLight }: Props) {
       </div>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 190, background: isLight ? 'rgba(255,255,255,0.98)' : 'rgba(4,44,83,.98)', backdropFilter: 'blur(20px)', borderRadius: 12, border: `1px solid ${isLight ? 'rgba(0,0,0,0.1)' : '#0C447C'}`, boxShadow: isLight ? '0 16px 48px rgba(0,0,0,.15)' : '0 16px 48px rgba(0,0,0,.5)', overflow: 'hidden', zIndex: 300 }}>
-          <button onClick={() => { setOpen(false); router.push('/profil'); }}
+          <button onClick={() => void pergi('/menu')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', fontSize: 13, fontWeight: 500, color: isLight ? '#374151' : '#B5D4F4', cursor: 'pointer', border: 'none', background: 'none', width: '100%', textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(0,0,0,.04)' : 'rgba(255,255,255,.05)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+            <LayoutGrid size={14} /> Menu aplikasi
+          </button>
+          <button onClick={() => void pergi('/profil')}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', fontSize: 13, fontWeight: 500, color: isLight ? '#374151' : '#B5D4F4', cursor: 'pointer', border: 'none', background: 'none', width: '100%', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(0,0,0,.04)' : 'rgba(255,255,255,.05)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}>

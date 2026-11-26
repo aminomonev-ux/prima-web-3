@@ -58,7 +58,7 @@ export const BbaQuerySchema = z.object({
   anggaran:  z.enum(ANGGARAN).optional(),
   q:         z.string().max(120).optional(),
   page:      z.coerce.number().int().min(1).default(1),
-  limit:     z.coerce.number().int().min(1).max(200).default(50),
+  limit:     z.coerce.number().int().min(1).max(1000).default(50),
 });
 
 // ─── Referensi harga & bukti dukung (CONCEPT-bba-perencanaan §4) ────────────
@@ -148,13 +148,16 @@ export const BbaUpdateSchema = z.object({
   aset_sasaran:     AsetSasaranSchema,
 }).refine(satuBarang, PESAN_SATU_BARANG);
 
-/** Tanda anggaran borongan (§7.4) — tiap item membawa angka kuncinya; satu basi = seluruhnya 409. */
+/**
+ * Tanda anggaran (§7.4) — tiap item membawa angka kuncinya; satu basi = seluruhnya 409. Keputusan per item
+ * (lembar keputusan, CONCEPT-bba-revamp-alur §6) ATAU satu keputusan untuk semua (bentuk lama, tab lama).
+ */
 export const AnggaranSchema = z.object({
-  anggaran: z.enum(ANGGARAN),
-  item: z.array(z.object({ id: z.number().int().positive(), expected_version: z.number().int().min(0) }))
+  anggaran: z.enum(ANGGARAN).optional(),
+  item: z.array(z.object({ id: z.number().int().positive(), expected_version: z.number().int().min(0), anggaran: z.enum(ANGGARAN).optional() }))
     .min(1, 'Belum ada rencana yang dipilih').max(1000)
     .refine(xs => new Set(xs.map(x => x.id)).size === xs.length, 'Rencana yang sama muncul dua kali'),
-});
+}).refine(d => d.item.every(x => (x.anggaran ?? d.anggaran) !== undefined), 'Keputusan anggaran belum dipilih');
 
 /** Salin rencana tahun lalu yang tidak didanai ke tahun `tahun` (§14). */
 export const SalinTahunLaluSchema = z.object({

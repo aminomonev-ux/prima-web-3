@@ -90,7 +90,7 @@ ok('C4 Tarik dari Usulan = izin EDIT Rencana (role PROGRAM bisa), tanpa daftar p
   && (imp.match(/await guardImport\(\)/g) ?? []).length === 2)
 const klien = sumber('app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx')
 ok('C5 layar Rencana: tombol ikut izin — tidak ada lagi pemeriksaan role langsung',
-  !klien.includes("role === 'ADMIN'") && klien.includes('{!isRejected && bolehPengadaan && <span data-rima="bba.row-realisasi">')
+  !klien.includes("role === 'ADMIN'") && klien.includes("if (!ditolak && bolehPengadaan && r.anggaran === 'DIDANAI') b.push({ kunci: 'proses'")
   && klien.includes('alasanTakBisaHapus(r.status, r.jumlah_bukti)') && klien.includes('bolehUbah={bolehRencana} bolehBukti={bolehBukti}'))
 const modal = sumber('app/(dashboard)/buku-besar-aset/_components/ModalItem.tsx')
 ok('C6 modal item: isian mati tanpa izin, referensi mati sejak beku, bukti ikut izin bukti',

@@ -83,6 +83,8 @@ const PASANGAN: Record<string, string> = {
   'app/(dashboard)/blud/dpa/dpa-client.tsx':               'app/(dashboard)/blud/blud-shell.tsx',
   'app/(dashboard)/blud/pergeseran/pergeseran-client.tsx': 'app/(dashboard)/blud/blud-shell.tsx',
   'app/(dashboard)/admin/_panels/TabPusatAkses.tsx':       'app/(dashboard)/admin/admin-client.tsx',
+  // Lembar keputusan anggaran BBA (CONCEPT-bba-revamp-alur §3.2) — Keluar & Menu lewat lencana profil bersama.
+  'app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx': 'components/ui/UserBadge.tsx',
 }
 {
   const pemakai = SUMBER.filter(p => kode(p).includes('useIngatkanBelumTersimpan(')).sort()
@@ -92,6 +94,15 @@ const PASANGAN: Record<string, string> = {
     const b = badan(kode(shell), 'function handleLogout')
     cek(`B2 ${shell}: tanya → logout → lepas pengingat → pindah`, urut(b, TANYA, LOGOUT, LEPAS, PINDAH))
   }
+}
+
+// ── B3. Lencana profil bersama: Menu aplikasi & Ganti Password juga bertanya dulu ──
+{
+  const badge = kode('components/ui/UserBadge.tsx')
+  cek('B3 UserBadge: Menu aplikasi & Ganti Password lewat pergi() yang bertanya dulu',
+    urut(badan(badge, 'async function pergi'), 'if (await bolehTinggalkanHalaman()) router.push(href)')
+    && badge.includes("onClick={() => void pergi('/menu')}") && badge.includes("onClick={() => void pergi('/profil')}")
+    && !badge.includes("router.push('/profil')"))
 }
 
 // ── C. E-Anggaran punya penjaga sendiri (pendingMasterRef + guardPending) ─────

@@ -53,11 +53,11 @@ flowchart TD
 | `bba.tarik-usulan` | Tombol "Tarik dari Usulan Kebutuhan" | buku-besar-aset-client.tsx |
 | `bba.tarik-commit` | Tombol "Tarik n Item" di modal preview | buku-besar-aset-client.tsx |
 | `bba.kpi-cards` | Grid 5 kartu KPI | buku-besar-aset-client.tsx |
-| `bba.tab-keputusan` | Pill "Semua / Disetujui / Ditolak" | buku-besar-aset-client.tsx |
+| `bba.tab-keputusan` | Tab tahap "Perlu dilengkapi · Siap diputuskan · Didanai · Tidak didanai · Usulan ditolak · Semua" | buku-besar-aset-client.tsx |
 | `bba.filter-tahun` | Input tahun register | buku-besar-aset-client.tsx |
 | `bba.filter-cari` | Input "Cari uraian/kode/no. usulan…" + "Terapkan" | buku-besar-aset-client.tsx |
 | `bba.row-edit` | Ikon EditButton baris | buku-besar-aset-client.tsx |
-| `bba.row-realisasi` | Ikon RealisasiButton baris | buku-besar-aset-client.tsx |
+| `bba.langkah-berikutnya` | Tombol langkah berikutnya di baris (+ menu ⋯) | buku-besar-aset-client.tsx |
 | `bba.row-hapus` | Ikon DeleteButton baris | buku-besar-aset-client.tsx |
 | `bba.realisasi-simpan` | Tombol "Simpan Realisasi" | buku-besar-aset-client.tsx |
 | `bba.badge-usulan` | Badge no. usulan (detail provenance) | buku-besar-aset-client.tsx |
@@ -68,8 +68,8 @@ flowchart TD
 ### Tur 1 — `bba-tarik-usulan` (alur utama Admin)
 1. `bba.tarik-usulan` — "Tarik semua usulan belanja modal yang sudah final (Disetujui Kabag / Ditolak) ke register."
 2. `bba.tarik-commit` — (Latihan: peringatan mutasi) "Preview dulu — yang pernah ditarik otomatis dilewati."
-3. `bba.tab-keputusan` — "Baris Ditolak tetap dicatat sebagai sejarah — tidak masuk KPI."
-4. `bba.row-realisasi` — "Saat barang dipesan/datang, klik ikon Proses & penerimaan di baris."
+3. `bba.tab-keputusan` — "Tab mengikuti tahap rencana; usulan Ditolak punya tab sendiri dan tidak masuk KPI."
+4. `bba.langkah-berikutnya` — "Tiap rencana punya satu tombol langkah berikutnya; aksi lain di menu ⋯."
 5. `bba.realisasi-simpan` — "Tandai Dalam Proses; realisasi mengikuti penerimaan yang dicatat."
 
 ### Tur 2 — `bba-entry-manual`

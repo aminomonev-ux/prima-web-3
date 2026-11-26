@@ -8,7 +8,7 @@ import { toDateStr, tanggalHariIniWIB, waktuSekarangWIB } from '@/lib/shared/wak
 import { fmtTanggal, batasCek, ringkasDimiliki, ringkasDimilikiPerBarang, type Dimiliki } from '@/lib/bba/kondisi';
 import { KUNCI_PENGATURAN, bacaPengaturan, type PengaturanBba } from '@/lib/bba/pengaturan';
 import type { Golongan, Kondisi } from '@/lib/bba/kib';
-import { alasanTakBisaUbahAnggaran, bolehDitandai, type JenisRencana, type Anggaran } from '@/lib/bba/rencana';
+import { alasanTakBisaUbahAnggaran, bolehDitandai, ANGGARAN, type JenisRencana, type Anggaran } from '@/lib/bba/rencana';
 import type { DibeliLalu } from '@/lib/bba/penerimaan';
 import { isSafeFileUrl } from '@/lib/shared/url';
 import {
@@ -154,6 +154,8 @@ export interface BbaRow {
   anggaran_pada: string | null;
   asal_rencana_id: number | null;
   jumlah_sasaran: number;
+  /** Unit diterima yang belum jadi register; rehab = gedung sasaran yang kondisinya belum diperbarui (lib/bba/tahap.ts). */
+  belum_dicatat: number;
   // Derived (runtime, tidak di DB):
   sisa: number;
   pct_realisasi: number;
@@ -180,6 +182,16 @@ export const SELECT_COLS = sql`
   b.jenis_rencana, b.alasan, b.anggaran, b.anggaran_vol, b.anggaran_nilai,
   DATE_FORMAT(b.anggaran_pada, '%Y-%m-%d %H:%i') AS anggaran_pada, b.asal_rencana_id,
   (SELECT COUNT(*) FROM bba_rencana_aset ra WHERE ra.rencana_id = b.id) AS jumlah_sasaran,
+  CASE
+    WHEN b.status NOT IN ('REALISASI_PENUH', 'REALISASI_SEBAGIAN') THEN 0
+    WHEN b.jenis_rencana = 'REHAB' THEN (
+      SELECT COUNT(*) FROM bba_rencana_aset rr JOIN bba_aset ga ON ga.id = rr.aset_id AND ga.status = 'AKTIF'
+      WHERE rr.rencana_id = b.id AND NOT EXISTS (SELECT 1 FROM bba_aset_riwayat rw WHERE rw.aset_id = ga.id AND rw.jenis = 'REHAB'
+        AND JSON_UNQUOTE(JSON_EXTRACT(rw.sesudah, '$.rencana')) = b.canonical_id))
+    ELSE (
+      SELECT COALESCE(SUM(GREATEST(0, FLOOR(pn.vol + 0.005) - (SELECT COUNT(*) FROM bba_aset ta WHERE ta.penerimaan_id = pn.id))), 0)
+      FROM bba_penerimaan pn WHERE pn.rencana_id = b.id AND pn.pindahan = 0)
+  END AS belum_dicatat,
   ui.pengusul AS pengusul,
   CASE b.ditolak_oleh
     WHEN 'ADMIN'   THEN ui.admin_catatan
@@ -223,6 +235,7 @@ export function mapRow(r: Record<string, unknown>): BbaRow {
     anggaran_pada: (r.anggaran_pada as string | null) ?? null, // sudah teks: DATE_FORMAT di SQL
     asal_rencana_id: r.asal_rencana_id == null ? null : Number(r.asal_rencana_id),
     jumlah_sasaran: Number(r.jumlah_sasaran ?? 0),
+    belum_dicatat: Number(r.belum_dicatat ?? 0),
     // A3: over-realisasi tampil sisa minus apa adanya (konsisten dgn pct >100%), tidak disembunyikan jadi 0
     sisa: nilai_rencana - nilai_realisasi,
     pct_realisasi: nilai_rencana > 0 ? Math.round((nilai_realisasi / nilai_rencana) * 10000) / 100 : 0,
@@ -327,6 +340,12 @@ export async function listAset(f: BbaQuery): Promise<BbaListResult> {
   `);
   const totalRow = await queryOne<{ total: number }>(sql`SELECT COUNT(*) AS total FROM buku_besar_aset b ${where}`);
   return { rows: await isiRingkasan(rows.map(mapRow)), total: Number(totalRow?.total ?? 0), page: f.page, limit: f.limit };
+}
+
+/** Semua rencana setahun dengan ringkasan referensi — bahan `tahapRencana` untuk pita alur (§3.1). */
+export async function rencanaSetahun(tahun: number): Promise<BbaRow[]> {
+  const rows = await queryMany<Record<string, unknown>>(sql`SELECT ${SELECT_COLS} ${FROM_JOIN} WHERE b.tahun_anggaran = ${tahun} ORDER BY b.canonical_id`);
+  return isiRingkasan(rows.map(mapRow));
 }
 
 export async function getAsetById(id: number): Promise<BbaRow | null> {
@@ -655,11 +674,11 @@ export async function deleteAset(id: number): Promise<boolean> {
 type BarisAnggaran = { id: number; canonical_id: string; status: BbaStatus; anggaran: Anggaran; usulan_keputusan: string | null; version: number };
 
 /**
- * Borongan, semua-atau-tidak. Versi tiap rencana diperiksa di bawah kunci (L77) dan dinaikkan —
- * modal item yang sedang terbuka atas rencana itu dapat 409, tidak menimpa tanda yang baru dipasang.
- * Volume & nilai yang didanai = volume & nilai rencana saat ditandai (Pengadaan bekerja di atasnya).
+ * Semua-atau-tidak. Keputusan per item (lembar keputusan) atau satu untuk semua (bentuk lama). Versi tiap
+ * rencana diperiksa di bawah kunci (L77) dan dinaikkan — modal item yang sedang terbuka atas rencana itu dapat
+ * 409, tidak menimpa tanda yang baru dipasang. Volume & nilai yang didanai = volume & nilai rencana saat ditandai.
  */
-export async function tandaiAnggaran(input: AnggaranInput, userId: number): Promise<{ ditandai: number; tetap: number }> {
+export async function tandaiAnggaran(input: AnggaranInput, userId: number): Promise<{ ditandai: number; tetap: number; per: Record<Anggaran, number> }> {
   return withTransaction(async ({ tx }) => {
     const ids = input.item.map(x => x.id);
     const rows = (await tx`
@@ -668,22 +687,29 @@ export async function tandaiAnggaran(input: AnggaranInput, userId: number): Prom
     if (rows.length !== ids.length) throw new BbaNotFoundError();
     const per = new Map(rows.map(r => [r.id, r]));
     if (input.item.some(x => per.get(x.id)!.version !== x.expected_version)) throw new BbaVersionConflictError();
+    const tujuan = new Map(input.item.map(x => [x.id, (x.anggaran ?? input.anggaran)!]));
     const alasan = rows.flatMap(r => {
       if (!bolehDitandai(r)) return [`${r.canonical_id}: usulan ditolak — catatan sejarah, tidak ditandai.`];
-      const a = alasanTakBisaUbahAnggaran(r.status, r.anggaran, input.anggaran);
+      const a = alasanTakBisaUbahAnggaran(r.status, r.anggaran, tujuan.get(r.id)!);
       return a ? [`${r.canonical_id}: ${a}`] : [];
     });
     if (alasan.length) throw new BbaAnggaranError(alasan);
-    const ubah = rows.filter(r => r.anggaran !== input.anggaran).map(r => r.id);
-    if (ubah.length === 0) return { ditandai: 0, tetap: rows.length };
-    const didanai = input.anggaran === 'DIDANAI';
-    await tx`
-      UPDATE buku_besar_aset SET anggaran = ${input.anggaran},
-        anggaran_vol = ${didanai ? sql`vol` : null}, anggaran_nilai = ${didanai ? sql`nilai_rencana` : null},
-        anggaran_pada = ${waktuSekarangWIB()}, anggaran_oleh = ${userId}, version = version + 1, updated_by = ${userId}
-      WHERE id IN (${ubah})
-    `;
-    return { ditandai: ubah.length, tetap: rows.length - ubah.length };
+    const jumlah: Record<Anggaran, number> = { BELUM: 0, DIDANAI: 0, TIDAK_DIDANAI: 0 };
+    const pada = waktuSekarangWIB();
+    for (const anggaran of ANGGARAN) {
+      const ubah = rows.filter(r => tujuan.get(r.id) === anggaran && r.anggaran !== anggaran).map(r => r.id);
+      if (ubah.length === 0) continue;
+      jumlah[anggaran] = ubah.length;
+      const didanai = anggaran === 'DIDANAI';
+      await tx`
+        UPDATE buku_besar_aset SET anggaran = ${anggaran},
+          anggaran_vol = ${didanai ? sql`vol` : null}, anggaran_nilai = ${didanai ? sql`nilai_rencana` : null},
+          anggaran_pada = ${pada}, anggaran_oleh = ${userId}, version = version + 1, updated_by = ${userId}
+        WHERE id IN (${ubah})
+      `;
+    }
+    const ditandai = jumlah.BELUM + jumlah.DIDANAI + jumlah.TIDAK_DIDANAI;
+    return { ditandai, tetap: rows.length - ditandai, per: jumlah };
   });
 }
 

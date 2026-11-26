@@ -4,7 +4,8 @@ import { AnggaranSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas
 import { tandaiAnggaran, BbaVersionConflictError, BbaNotFoundError, BbaAnggaranError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from '../_guard';
 
-// Tanda "masuk anggaran" borongan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4): Didanai · Tidak didanai · Belum.
+// Tanda "masuk anggaran" (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4): Didanai · Tidak didanai · Belum —
+// per item dari lembar keputusan (CONCEPT-bba-revamp-alur §6), atau satu untuk semua (bentuk lama).
 // Ditandai Perencanaan (izin EDIT Rencana); daftar Pengadaan berdiri di atas tanda ini.
 export async function POST(req: NextRequest) {
   const g = await guard();
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
     if (hasil.ditandai > 0) {
       await writeAuditLog({
         req, eventType: 'BBA_RENCANA_ANGGARAN', userId: g.session.userId, username: g.session.username,
-        detail: `BBA tandai ${hasil.ditandai} rencana ${p.data.anggaran} (id ${p.data.item.slice(0, 20).map(x => x.id).join(',')}${p.data.item.length > 20 ? ',…' : ''})`,
+        detail: `BBA tandai ${hasil.ditandai} rencana (${Object.entries(hasil.per).filter(([, n]) => n > 0).map(([a, n]) => `${a} ${n}`).join(', ')}; id ${p.data.item.slice(0, 20).map(x => x.id).join(',')}${p.data.item.length > 20 ? ',…' : ''})`,
       });
     }
     return NextResponse.json({ ok: true, ...hasil });

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { FileText, Plus, BookText, LayoutGrid, RefreshCw, FileUp } from 'lucide-react';
+import { FileText, Plus, BookText, RefreshCw, FileUp } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
@@ -159,7 +159,6 @@ export default function LkjipClient({ username, role, themePreference, initialRo
       <FloatingDock isLight={isLight} limelight
         nav={[
           { icon: <BookText size={17} />, label: 'E-LKJIP', onClick: () => {}, current: true },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={[
           { icon: <Plus size={17} />, label: 'Buat', onClick: () => setShowCreate(true) },

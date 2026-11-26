@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import {
   Download, CornerDownRight, Plus, ChevronUp, ChevronDown,
   IndentIncrease, IndentDecrease, Pencil, Save, Table2, Image as ImageIcon, Type, Settings,
-  BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
+  BookText, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
   GripVertical, Upload, BarChart3, HelpCircle, MoreVertical, Lock, RefreshCw, ClipboardPaste,
   Search, Eye, FileText, AlignLeft, AlignCenter, AlignRight,
 } from 'lucide-react';
@@ -984,7 +984,6 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
       <FloatingDock isLight={isLight} limelight
         nav={[
           { icon: <BookText size={17} />, label: 'Daftar', onClick: () => router.push('/lkjip') },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={dockActions}
       />
