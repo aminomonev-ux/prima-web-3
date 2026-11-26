@@ -1,348 +1,355 @@
-# Konsep — Defender PRIMA (deteksi & respons serangan)
+# Konsep — Penjaga Keamanan PRIMA (mengenali serangan & menanggapinya)
 
-> Status: **KONSEP SAJA, belum ada kode, belum ada tabel.** Dokumen ini sengaja ditulis
-> lebih dulu supaya ambang, pagar, dan teks pesannya disepakati sebelum satu baris pun
-> ditulis. Skema di §5 masih usulan; kalau disetujui, ia wajib masuk
-> `docs/schema-mysql.sql` + `docs/migrations/migration-defender-*.sql` pada saat
-> dikerjakan (bukan sebelumnya).
+> Status: **KONSEP, revisi 2 (2026-11-24). Belum ada kode, belum ada tabel.**
+> Revisi 1 ditulis sebelum Pemeliharaan & Keluar Otomatis, Pemeriksaan Mandiri, Tinjauan
+> Akses, dan panel Drive & Backup ada. Revisi ini menyesuaikan dengan yang sudah terpasang
+> dan dengan keadaan server kantor. Yang berubah dari revisi 1 dirangkum di §13.
+> Skema di §6 masih usulan; kalau disetujui, ia masuk `docs/schema-mysql.sql` +
+> `docs/migrations/migration-penjaga-*.sql` saat dikerjakan, bukan sebelumnya.
 
 ## 0. Kedudukan dokumen ini
 
-PRIMA sudah punya banyak bahan keamanan: sakelar modul tiga keadaan, mode beku global,
-audit trail, broadcast, rate limit, lockout akun. Yang belum ada adalah **yang
-menyambung semuanya**: sesuatu yang mengenali pola serangan, memberi tahu SUPER_ADMIN
-saat itu juga, dan menyediakan satu tombol yang aman untuk menghentikan kerusakan tanpa
-mematikan pekerjaan orang lain.
+PRIMA sudah punya banyak bahan keamanan: sakelar modul tiga keadaan, pembekuan seluruh
+aplikasi, Pemeliharaan & keluar otomatis, jejak audit, rem laju (*rate limit*), kunci akun
+setelah salah sandi, Pemeriksaan Mandiri, dan Tinjauan Akses. Yang belum ada adalah yang
+**membaca semua itu bersama-sama**: mengenali pola yang mencurigakan, memberi tahu SUPER_ADMIN
+tanpa harus membuka tab satu per satu, dan menyediakan tindakan yang aman untuk menghentikan
+kerusakan tanpa menghentikan pekerjaan orang lain.
 
-Dokumen ini menjawab empat pertanyaan: apa yang dideteksi, bagaimana caranya tahu, ke
-siapa diberitahukan, dan apa yang boleh dilakukan sistem/administrator sebagai respons.
+Dokumen ini menjawab empat hal: apa yang dikenali, dari mana datanya, ke siapa diberitahukan,
+dan apa yang boleh dilakukan sesudahnya.
 
 ## 1. Masalah
 
-1. **Deteksi hari ini hanya soal login.** `TabAttackMonitor` membaca `audit_log` untuk
-   `LOGIN_SUCCESS/FAILED/BLOCKED` selama 24 jam. Serangan yang tidak lewat login —
-   pemindaian URL, probing IDOR (`403 "Bukan dokumen Anda"`), pencurian data lewat
-   unduhan berulang, perubahan wewenang yang aneh — tidak terlihat sama sekali.
-2. **Tidak realtime.** Monitor hanya memuat saat tombol "MUAT ULANG" ditekan. Tidak ada
-   satu pun jalur yang mendorong peringatan ke SUPER_ADMIN.
-3. **Aksi darurat tersebar dan tidak seragam.** Membekukan tulisan hari ini berarti
-   membuka Admin Panel → App Control → ubah satu per satu sakelar modul → lalu broadcast
-   manual. Tiga layar, empat keputusan, dan tidak ada catatan "kenapa".
-4. **Tidak ada jejak ancaman.** `audit_log` mencatat aksi yang *berhasil* (siapa
-   mengubah apa). Ia bukan tempat menyimpan "ada 60 permintaan 404 dari satu sumber
-   dalam 2 menit" — dan kalau dipaksa, audit yang tadinya enak dibaca jadi banjir.
+1. **Yang dipantau hari ini hanya login.** Tab `ATTACK MONITOR` membaca `audit_log` untuk
+   login berhasil/gagal/diblokir selama 24 jam. Unduhan borongan, penolakan berkas milik orang
+   lain, perubahan wewenang yang aneh, dan sakelar yang dimatikan-dinyalakan berulang sudah
+   **tercatat** di `audit_log`, tapi tidak ada yang membacanya sebagai pola.
+2. **Tidak ada yang memberi tahu.** Semua tab keamanan baru memuat saat dibuka. Kalau tidak ada
+   yang membuka Admin Panel, tidak ada yang tahu.
+3. **Tidak ada jejak "dugaan".** `audit_log` menjawab "siapa melakukan apa". Pertanyaan "apa
+   yang tampaknya sedang dicoba, sejak kapan, dan apa yang sudah dilakukan admin" tidak punya
+   tempat.
 
 ## 2. Yang SUDAH ada dan TIDAK dibuat ulang
 
-| Kemampuan | Berkas | Catatan untuk konsep ini |
+| Kemampuan | Berkas | Dipakai konsep ini untuk |
 |---|---|---|
-| Sakelar 3 keadaan (`online`/`readonly`/`maintenance`), pesan, tenggat `_sampai` | `lib/security/guard.ts`, `lib/registry/apps.ts`, `app_config` | Mode Aman = `app_status_global = 'readonly'`. Nol kode baru untuk membekukan tulisan |
-| Modul dibekukan → 503 `MODUL_BACA_SAJA` dengan kalimat seragam | `balasSakelar` di `guard.ts` | Pesan darurat tidak perlu dibuat ulang; cukup diisi lewat `app_status_*_pesan` |
-| Halaman `/maintenance` + pemberitahuan di halaman login | `lib/security/pemeliharaan.ts` | Dipakai apa adanya; tidak perlu layar darurat kedua |
-| Broadcast masal + riwayat | `TabBroadcast`, `/api/admin/broadcast` | Tinggal dipanggil dari playbook |
-| Lonceng notifikasi (per orang / per antrean peran) | `lib/services/notifications.ts` (`addNotif`, `NOTIF_SUPER_ADMIN`) | Jalur notifikasi in-app yang sudah terbukti |
-| Rate limit + lockout akun | `lib/security/ratelimit.ts`, `users.locked_until` | Menjadi sumber sinyal, bukan diganti |
-| Audit trail + retensi per jenis | `lib/security/auditlog.ts`, `lib/security/retensi-audit.ts` | Jenis event baru WAJIB digolongkan di `Record<AuditEventType, …>` |
-| Admin Panel dengan tab terpisah | `app/(dashboard)/admin/_panels/*` | Tab baru mengikuti pola `_panels` yang ada |
-| CSP/nonce, strip header `x-user-*`, penjaga per route | `proxy.ts`, `lib/security/*` | Titik pasang sensor, bukan diganti |
+| Jejak audit + jenis peristiwa bertipe + retensi per jenis | `lib/security/auditlog.ts`, `lib/security/retensi-audit.ts` | **Sumber data utama fase 1** (§5) |
+| Sakelar 3 keadaan per modul + sakelar seluruh aplikasi, pesan, tenggat | `lib/security/guard.ts`, `lib/registry/apps.ts`, `app_config` | Membekukan penyimpanan (§7) — nol kode pembekuan baru |
+| Keterangan beku di layar (spanduk, tombol mati bersebab) | `lib/security/beku.ts`, `beku-lingkup.ts` | Kalimat yang dibaca pegawai saat penyimpanan dibekukan |
+| Pemeliharaan & keluar otomatis: pesan, jeda, hitung mundur di tiap tab, tanya tiap 30 detik, tahan login | `lib/security/jadwal-keluar.ts`, `TabPemeliharaan`, `PenjagaPemeliharaan`, `/api/auth/pemeliharaan` | Pintu "bekukan penyimpanan" (§7) dan jalur lencana (§5.5) |
+| Lonceng notifikasi, status baca per orang | `lib/services/notifications.ts` (`addNotif`, `NOTIF_SUPER_ADMIN`) | Kabar insiden saat Admin Panel tidak dibuka |
+| Pemeriksaan Mandiri (temuan wewenang, tanpa tombol perbaiki) | `TabPemeriksaan`, `/api/admin/pemeriksaan` | Pola tampilan: temuan + jumlah + ke mana harus pergi |
+| Tinjauan Akses berkala | `TabTinjauan` | Tindak lanjut insiden wewenang mengarah ke sini |
+| Putus sesi per orang | `TabSessions`, `/api/admin/sessions` | Tanggapan tingkat 1 (§8) |
+| Ganti sandi SUPER_ADMIN dari server | `scripts/setel-sandi-superadmin.mjs` | Tanggapan akun SUPER_ADMIN dibajak (§9) |
+| Rem laju + kunci akun | `lib/security/ratelimit.ts`, `users.locked_until` | Sinyal fase 3, tidak diganti |
 
-## 3. Prinsip rancangan
+## 3. Keadaan server yang membatasi rancangan
 
-1. **Deteksi ≠ audit.** `audit_log` menjawab "siapa melakukan apa"; `security_events`
-   menjawab "apa yang dicoba terhadap sistem". Dua tabel, dua retensi, dua pembaca.
-2. **Respons bertingkat, bukan sakelar on/off.** Tindakan paling ringan yang bisa
-   menghentikan kerusakan dipilih lebih dulu. Mematikan seluruh aplikasi sebagai reaksi
-   pertama adalah cara tercepat mengubah kesalahan sendiri menjadi insiden.
-3. **Detektor tidak boleh mematikan aplikasi.** Kegagalan evaluator = *fail-open* (hanya
-   tidak ada peringatan). Sebaliknya penjagaan tetap *fail-closed* seperti `modulMati`.
-   Dua arah yang berbeda ini disengaja: pagar yang salah menutup lebih merugikan daripada
-   peringatan yang terlewat.
-4. **Aksi darurat harus tercatat dan sulit dipakai sebagai senjata.** Akun SUPER_ADMIN
-   yang dibajak tidak boleh bisa memakai "Mode Aman" untuk melumpuhkan kantor tanpa
-   jejak dan tanpa lawan.
-5. **Jangan berpura-pura.** Pesan darurat menyebut apa yang terjadi ("penulisan dibekukan
-   sementara karena pemeriksaan keamanan"), bukan "pemeliharaan rutin". Kebohongan yang
-   dipakai berulang membuat orang berhenti membedakan gangguan biasa dari gangguan serius.
-6. **Yang tidak bisa diukur jangan diklaim.** Aplikasi tidak bisa menahan DDoS
-   volumetrik; itu tugas jaringan. Dokumen ini menutup lapisan aplikasi, bukan jaringan.
+Empat fakta ini yang paling banyak mengubah revisi 1:
 
-## 4. Arsitektur
+1. **Server tidak bisa melihat IP pengguna.** Selama Nginx belum berdiri di depan aplikasi,
+   `TRUST_PROXY_HEADERS` bernilai `false` dan `getClientIp` mengembalikan `'unknown'` untuk
+   semua orang (`lib/security/ratelimit.ts`). Aturan yang dihitung "per sumber" akan melihat
+   seluruh kantor sebagai satu sumber. Karena itu **semua aturan dihitung per akun**; aturan
+   per IP menunggu fase 4.
+2. **Aplikasi berjalan sebagai satu proses** di bawah PM2, di satu komputer Windows yang
+   dimatikan tiap malam. Penghitung di memori cukup (tidak perlu dibagi antar proses), dan
+   alat khas Linux (`fail2ban`) tidak tersedia.
+3. **Repo ini publik.** Angka ambang yang ditulis di sini terbaca siapa pun, dan penyerang
+   tinggal menjaga diri di bawahnya. Karena itu **dokumen ini tidak memuat angka ambang**;
+   angkanya disimpan di `app_config` dan diatur dari panel (§5.3).
+4. **SUPER_ADMIN menembus pembekuan** (`PERAN_TEMBUS_SAKELAR`). Membekukan penyimpanan tidak
+   menghentikan akun SUPER_ADMIN yang dibajak — itu kasus tersendiri (§9).
+
+## 4. Prinsip rancangan
+
+1. **Baca dulu yang sudah tercatat.** Sensor baru di jalur permintaan dipasang hanya untuk
+   kejadian yang memang belum tercatat di mana pun (fase 3).
+2. **Tidak ada tulisan ke database per permintaan.** Yang ditulis hanya insiden — satu baris
+   per dugaan — bukan satu baris per 404. Kalau tidak, banjir permintaan berubah jadi banjir
+   tulisan ke MySQL, satu-satunya database aplikasi.
+3. **Pemantau tidak boleh mematikan aplikasi.** Pemantau yang galat cukup diam (tidak ada
+   kabar). Pagar akses tetap gagal-tertutup seperti sekarang. Dua arah ini sengaja berbeda:
+   pagar yang salah menutup lebih merugikan daripada kabar yang terlewat.
+4. **Mesin mengusulkan, manusia memutuskan.** Tidak ada pembekuan atau pemutusan otomatis
+   untuk seluruh kantor. Satu dugaan keliru di jam sibuk = semua orang berhenti bekerja, dan
+   penyebabnya kode kita sendiri.
+5. **Jujur kepada pengguna.** Pesan menyebut yang sebenarnya ("penyimpanan dihentikan
+   sementara untuk pemeriksaan keamanan"), bukan "pemeliharaan rutin". Alasan palsu yang
+   dipakai berulang membuat orang berhenti membedakan gangguan biasa dari yang serius.
+6. **Jangan mengaku melindungi yang tidak bisa dilindungi.** Aplikasi tidak bisa menahan
+   banjir lalu lintas jaringan; itu urusan jaringan. Dokumen ini menutup lapisan aplikasi.
+
+## 5. Fase 1 — Pantau dari jejak audit
+
+### 5.1 Cara kerja
 
 ```
-    permintaan  ──►  sensor (8 titik di route yang sudah ada)
-                        │  tulis 1 baris
-                        ▼
-                security_events  ──►  evaluator (tiap 30–60 dtk, jendela 5 menit)
-                        │                    │  korelasi + skor
-                        │                    ▼
-                        │            security_incidents ──► notifikasi
-                        │                    │            ├─ lonceng SA (addNotif)
-                        │                    │            └─ SSE / polling admin
-                        │                    ▼
-                        └──────────►  playbook respons (L0–L4)
-                                             ├─ L1 perketat/blokir (reversibel)
-                                             ├─ L2 Mode Aman global (readonly)
-                                             ├─ L3 pemeliharaan per modul
-                                             └─ L4 putus total (manual, 2 orang)
+  audit_log (sudah ada)
+        │  dibaca per jendela waktu, hanya jenis yang digolongkan (§5.2)
+        ▼
+  pemantau  ── dijalankan menumpang permintaan, paling sering sekali per menit
+        │  aturan per akun + ambang dari app_config
+        ▼
+  penjaga_insiden  ──►  lencana di Admin Panel (ikut tanya 30 detik yang sudah ada)
+                   └──►  lonceng SUPER_ADMIN (addNotif), dibatasi per aturan
 ```
 
-Evaluator dijalankan oleh **permintaan yang datang** (piggyback), bukan oleh proses
-terpisah: setiap N permintaan, satu permintaan "membayar" evaluasi. Alasannya praktis —
-PM2 di server kantor hanya menjalankan satu proses Next.js; tidak ada worker. Kalau nanti
-ada cron/MySQL EVENT, evaluator bisa dipindah tanpa mengubah aturan.
+- **Menumpang permintaan:** permintaan pertama sesudah satu menit lewat "membayar" satu putaran
+  pemantauan, di belakang layar (tidak ditunggu jawabannya). Server mati semalam tidak masalah:
+  saat menyala, putaran pertama membaca dari titik terakhir yang tersimpan, bukan dari "sejak
+  menyala".
+- **Titik terakhir** (`id` audit terakhir yang sudah dibaca) disimpan di `app_config`, jadi
+  tidak ada peristiwa yang dibaca dua kali atau terlewat sesudah restart.
+- **Satu putaran sekaligus:** putaran dikunci lewat `acquireBludLock('penjaga', 'pemantau')`;
+  putaran kedua yang datang bersamaan langsung pulang.
 
-## 5. Skema usulan
+### 5.2 Penggolongan jenis peristiwa
+
+Daftar jenis yang dibaca berbentuk `Record<AuditEventType, Golongan | null>`, pola yang sama
+dengan `retensi-audit.ts`. Akibatnya **jenis peristiwa baru wajib digolongkan** — TypeScript
+menolak berkas yang lupa — termasuk unduhan baru di modul mana pun.
+
+Golongan: `LOGIN_GAGAL`, `BERKAS_DITOLAK`, `UNDUHAN`, `WEWENANG`, `SAKELAR`, `PENYALAHGUNAAN`,
+atau `null` (tidak dipantau).
+
+### 5.3 Aturan
+
+Semua dihitung **per akun pelaku** (`audit_log.user_id`/`username`), kecuali A1b yang memang
+menghitung banyak akun. Angka ambang dan panjang jendela **tidak ditulis di sini**; nilai
+awalnya diisi di migrasi, diatur SUPER_ADMIN dari panel, dan disetel ulang sesudah dua minggu
+data nyata.
+
+| Kode | Yang dikenali | Bahan di `audit_log` | Tingkat |
+|---|---|---|---|
+| A1a | Sandi salah berulang pada **satu akun** | `LOGIN_FAILED`, `ACCOUNT_LOCKED`, `LOGIN_BLOCKED` | Sedang |
+| A1b | Sandi salah pada **banyak akun berbeda** dalam satu jendela (tebak sandi beruntun) | sama, dihitung jumlah akun berbeda | Tinggi |
+| A2 | Berulang kali ditolak membuka berkas milik orang lain | `FILE_DOWNLOAD_DENIED` | Tinggi |
+| A3 | Unduhan/ekspor borongan oleh satu akun | golongan `UNDUHAN` (`*_DOWNLOAD`, `*_UNDUH`, `*_EXPORT`, `USULAN_EXPORT`, `PK_VIEW_LIST`, …) | Sedang |
+| A4 | Perubahan wewenang di jam yang tidak biasa, atau berulang pada satu orang sasaran | `ACCESS_GRANT`, `ACCESS_REVOKE`, `ROLE_CHANGE`, `USER_CREATE`, `PASSWORD_RESET`, `PROMOTION_*` (pakai `target_user_id`) | Sedang |
+| A5 | Sakelar dimatikan-dinyalakan berulang | `CONFIG_UPDATE` (kunci `app_status_*`), `PEMELIHARAAN_KELUAR` | Sedang |
+| A6 | Penyalahgunaan yang sudah dikenali modulnya sendiri | `RIMA_QUERY_ABUSE`, `BRUTE_FORCE`, `PROMOTION_BAD_PASSWORD`, `PROMOTION_BAD_SECRET` | Sedang |
+
+Catatan per aturan:
+
+- **A3 bisa sah.** Cetak rekap akhir bulan dan impor 558 baris memang ramai. Karena itu A3
+  hanya memberi kabar, tanpa usulan tindakan, dan punya tombol "abaikan untuk akun ini 7 hari".
+- **A4 "jam tidak biasa"** diatur sebagai rentang jam kerja di panel. Server memang mati di
+  malam hari; perubahan wewenang di luar rentang berarti komputernya menyala dan dipakai di
+  jam yang tidak lazim, dan itu sendiri patut diketahui.
+- **Tingkat** naik satu bila dua aturan berbeda menyala untuk akun yang sama dalam jendela
+  yang sama. Aturannya sengaja sederhana supaya bisa dijelaskan dalam satu kalimat — tingkat
+  yang tidak bisa dijelaskan tidak akan dipercaya.
+
+### 5.4 Satu dugaan, satu baris
+
+- Satu insiden per (kode aturan + akun) selama insidennya masih terbuka. Sinyal berikutnya
+  menambah hitungan dan memperpanjang jendela, tidak membuat baris baru.
+- Insiden yang sudah ditangani/diabaikan tidak dibuka lagi sebelum masa tenang lewat; tanpa
+  itu satu serangan panjang menghasilkan ratusan baris yang akhirnya diabaikan.
+
+### 5.5 Kabar ke SUPER_ADMIN
+
+- **Lencana:** angka insiden BARU bertingkat Tinggi di tab INSIDEN. Ikut pertanyaan 30 detik
+  yang sudah dijalankan `PenjagaPemeliharaan` di tiap tab (hanya untuk SUPER_ADMIN), jadi tidak
+  ada koneksi atau penanya baru. Revisi 1 mengusulkan koneksi siaran (SSE); dibuang, karena
+  jumlah SUPER_ADMIN cuma beberapa orang dan jeda 30 detik sudah cukup.
+- **Lonceng:** `addNotif(NOTIF_SUPER_ADMIN, …)` supaya terlihat walau Admin Panel tidak dibuka.
+  Isinya judul + tiga angka (berapa kali, akun mana, sejak jam berapa).
+- **Batas kebisingan:** paling banyak satu lonceng per aturan dalam selang yang diatur di panel.
+  Kabar yang tumpah ruah adalah kabar yang dimatikan orang.
+
+### 5.6 Tab INSIDEN (Admin Panel, SUPER_ADMIN)
+
+Mengikuti pola `TabPemeriksaan`: daftar dugaan (tingkat, aturan, akun, jendela, status), dan
+saat diklik, **daftar baris `audit_log` yang memicunya** (dibaca langsung dari `audit_log`
+lewat jendela + akun, tidak disalin). Tombol: Periksa, Abaikan (dengan alasan), Selesai, dan
+pintasan ke tindakan yang sudah ada — Putus sesi orang ini, Buka Pusat Akses orang ini.
+
+Pengaturan ambang ada di kartu terpisah di tab yang sama. Setiap perubahan ambang dicatat di
+audit (`PENJAGA_ATURAN_UBAH`, lama → baru), karena menaikkan ambang diam-diam adalah cara
+termudah membutakan pemantau.
+
+### 5.7 DoD fase 1
+
+- Data uji buatan (tahun/akun kotak pasir): login gagal beruntun pada akun uji → satu insiden
+  A1a muncul di tab dalam ≤ 1 menit sesudah permintaan berikutnya; sinyal tambahan tidak
+  membuat baris kedua.
+- Jenis peristiwa baru tanpa golongan → `tsc` gagal.
+- Pemantau yang galat (mis. tabel belum dimigrasi) tidak membuat satu permintaan pun gagal.
+- Tidak ada tulisan ke database di jalur permintaan selain baris insiden dan titik terakhir.
+- `tsc` + ESLint bersih; gate G (sakelar) mengenali route baru.
+
+## 6. Skema usulan
 
 ```sql
--- jejak ancaman; append-only, tidak pernah di-UPDATE
-CREATE TABLE IF NOT EXISTS security_events (
-  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-  event_type  VARCHAR(48)  NOT NULL,          -- LOGIN_FAILED, FORBIDDEN_OWNERSHIP, PATH_PROBE, …
-  severity    ENUM('INFO','LOW','MEDIUM','HIGH','CRITICAL') NOT NULL DEFAULT 'LOW',
-  ip          VARCHAR(45)  NULL,              -- NULL kalau header proxy tidak dipercaya
-  user_id     INT          NULL,
-  username    VARCHAR(100) NULL,
-  route       VARCHAR(160) NULL,
-  method      VARCHAR(8)   NULL,
-  status_code SMALLINT     NULL,
-  ringkasan   VARCHAR(255) NOT NULL,
-  sidik       CHAR(64)     NULL,              -- hash(body/UA) untuk dedup, bukan isi mentah
-  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_se_jenis_waktu (event_type, created_at),
-  INDEX idx_se_ip_waktu    (ip, created_at),
-  INDEX idx_se_user_waktu  (user_id, created_at)
+-- satu baris = satu dugaan; sinyalnya tetap di audit_log
+CREATE TABLE IF NOT EXISTS penjaga_insiden (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  kode           VARCHAR(24)  NOT NULL,          -- A1a, A2, …
+  tingkat        ENUM('RENDAH','SEDANG','TINGGI','KRITIS') NOT NULL,
+  status         ENUM('BARU','DIPERIKSA','SELESAI','DIABAIKAN') NOT NULL DEFAULT 'BARU',
+  user_id        INT          NULL,              -- akun pelaku; NULL untuk A1b (banyak akun)
+  username       VARCHAR(50)  NULL,
+  jumlah         INT          NOT NULL DEFAULT 0,
+  audit_awal     BIGINT       NOT NULL,          -- id audit_log pertama yang memicu
+  audit_akhir    BIGINT       NOT NULL,          -- id audit_log terakhir yang memicu
+  jendela_mulai  DATETIME     NOT NULL,
+  jendela_akhir  DATETIME     NOT NULL,
+  ringkasan      VARCHAR(255) NOT NULL,          -- disusun dari templat, bukan dari isian pengguna
+  catatan        VARCHAR(500) NULL,              -- alasan diabaikan / tindak lanjut
+  ditangani_oleh VARCHAR(50)  NULL,
+  ditangani_pada DATETIME     NULL,
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_pi_status (status, tingkat, created_at),
+  INDEX idx_pi_kode_akun (kode, user_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- satu baris = satu dugaan serangan yang sudah dikorelasikan
-CREATE TABLE IF NOT EXISTS security_incidents (
-  id            INT AUTO_INCREMENT PRIMARY KEY,
-  kode          VARCHAR(24)  NOT NULL,        -- R1_CREDENTIAL_STUFFING, R3_IDOR_PROBE, …
-  judul         VARCHAR(160) NOT NULL,
-  severity      ENUM('LOW','MEDIUM','HIGH','CRITICAL') NOT NULL,
-  status        ENUM('BARU','DIPERIKSA','DITANGANI','SELESAI','ABAI') NOT NULL DEFAULT 'BARU',
-  jumlah_sinyal INT NOT NULL DEFAULT 0,
-  ip_utama      VARCHAR(45) NULL,
-  user_utama    VARCHAR(100) NULL,
-  jendela_mulai DATETIME NOT NULL,
-  jendela_akhir DATETIME NOT NULL,
-  ringkasan     TEXT NULL,
-  ditangani_oleh VARCHAR(100) NULL,
-  ditangani_at  DATETIME NULL,
-  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_si_status (status, severity, created_at),
-  INDEX idx_si_kode   (kode, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- penghubung supaya timeline bisa dibuka lagi kapan saja
-CREATE TABLE IF NOT EXISTS security_incident_events (
-  incident_id INT NOT NULL,
-  event_id    BIGINT NOT NULL,
-  PRIMARY KEY (incident_id, event_id),
-  FOREIGN KEY (incident_id) REFERENCES security_incidents(id) ON DELETE CASCADE,
-  FOREIGN KEY (event_id)    REFERENCES security_events(id)    ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- blokir aplikasi (L1); ip NULL = blokir per user/sesi
-CREATE TABLE IF NOT EXISTS security_blocks (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  ip          VARCHAR(45) NULL,
-  user_id     INT NULL,
-  alasan      VARCHAR(255) NOT NULL,
-  incident_id INT NULL,
-  sampai      DATETIME NOT NULL,              -- wajib: blokir tanpa tenggat = lupa dibuka
-  dibuat_oleh VARCHAR(100) NOT NULL,
-  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_sb_ip (ip, sampai),
-  INDEX idx_sb_user (user_id, sampai)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- pemantau membaca per jenis + waktu; indeks yang ada hanya per kolom tunggal
+CREATE INDEX idx_audit_log_event_waktu ON audit_log (event_type, created_at);
 ```
 
-Catatan yang menentukan:
+Ambang, jam kerja, masa tenang, dan titik terakhir disimpan di `app_config` (satu kunci JSON
+`penjaga_aturan` + satu kunci `penjaga_titik`), divalidasi Zod saat ditulis — pola
+`bba_pengaturan`.
 
-- **`ip` boleh NULL, dan itu keadaan normal** selama `TRUST_PROXY_HEADERS=false`
-  (`lib/security/ratelimit.ts`). Jangan mengisi `'unknown'` ke kolom IP sebagai nilai
-  sungguhan — blokir per `'unknown'` sama dengan memblokir seluruh kantor.
-- **`sidik` = hash**, bukan isi body. Jangan simpan kata sandi yang salah diketik, token,
-  atau potongan dokumen ke tabel ini. PDP: IP adalah data pribadi → retensi pendek
-  (usulan 90 hari untuk `security_events`, 1 tahun untuk insiden), akses hanya SA.
-- Retensi dijalankan lewat jalur yang sudah ada (`retensi-audit.ts` punya pola
-  `Record<…>` dijaga TypeScript), bukan `DELETE` liar di route.
+Catatan:
 
-## 6. Sensor — delapan titik, semuanya di kode yang sudah ada
+- **Tidak ada tabel sinyal tersendiri di fase 1.** Sinyalnya sudah ada di `audit_log`; insiden
+  hanya menunjuk rentang `id`-nya. Revisi 1 mengusulkan `security_events` +
+  `security_incident_events`; ditunda ke fase 3 dan bentuknya berubah (§10).
+- **Retensi:** insiden 1 tahun, dipangkas lewat jalur cron retensi yang sudah ada. Kalau baris
+  audit yang ditunjuk sudah terpangkas, layar menyebut "rincian sudah melewati masa simpan".
+- **Data pribadi:** username di tabel ini sama dengan yang sudah ada di `audit_log`; akses hanya
+  SUPER_ADMIN. Tidak ada IP, isi permintaan, kata sandi, atau token yang disimpan.
 
-| # | Titik | Kejadian yang dicatat |
-|---|---|---|
-| 1 | `app/api/auth/login` | gagal sandi, akun terkunci, percobaan untuk username yang tidak ada (hanya hitungan, tanpa menyebut username ke tabel) |
-| 2 | Semua route: hasil `pkRateLimit`/`bludRateLimit`/`checkRateLimit` = 429 | `RATE_LIMIT_HIT` + kunci remnya |
-| 3 | `forbidden()` / `tolakEdit()` (403) | `FORBIDDEN` + menu + user |
-| 4 | Pemeriksaan kepemilikan (404/403 "Bukan dokumen Anda") | `OWNERSHIP_MISS` — sinyal IDOR |
-| 5 | Tolak Zod berulang pada route yang sama | `INVALID_BODY_BURST` (hanya jenis, bukan isi) |
-| 6 | Unduhan/ekspor (`/download`, `/export`, PDF/rekap) | `EXPORT` + ukuran + jumlah per jendela |
-| 7 | Aksi wewenang (`/api/admin/*`: peran, akses, nonaktif, putus sesi) | `AUTHZ_CHANGE` + target + alasan |
-| 8 | Perubahan `app_config` (sakelar/pesan/tenggat) | `SWITCH_CHANGE` + nilai lama → baru |
+## 7. Fase 2 — Bekukan penyimpanan lewat Pemeliharaan
 
-`proxy.ts` **tidak** menulis DB: ia Edge Runtime dan berjalan sebelum sesi diketahui.
-Yang ia lakukan hanya menandai (pola `x-prima-metode` yang sudah ada) supaya route tahu
-ini permintaan yang mencurigakan. Pencatatan tetap di route, sesudah `getSession()`,
-sehingga `user_id` benar dan tidak ada tulis DB di jalur terpanas.
+Revisi 1 merancang "Mode Aman" dengan layar, hitung mundur, dan penyimpanan draf sendiri.
+Hampir semuanya sudah ada di Pemeliharaan & Keluar Otomatis, jadi tidak dibangun dua kali.
 
-Yang **tidak** dicatat: body permintaan, kata sandi, isi dokumen, cookie/token, parameter
-pencarian penuh. `ringkasan` maksimal 255 karakter dan disusun dari template, bukan dari
-input pengguna.
+- **Satu pilihan baru di tab Pemeliharaan:** di samping "Keluarkan semua", ada **"Bekukan
+  penyimpanan"**. Pesan + jeda + hitung mundur di tiap tab memakai jalur yang sudah ada; saat
+  batasnya lewat, sakelar seluruh aplikasi berpindah ke baca-saja dengan pesan dan tenggat.
+  Membaca, mencetak, dan mengunduh tetap jalan.
+- **Pesan bawaan** ditulis jujur, misalnya: "Penyimpanan dihentikan sementara untuk pemeriksaan
+  keamanan. Anda masih bisa membuka dan mencetak data. Simpan pekerjaan Anda sebelum hitungan
+  selesai."
+- **Penyimpanan draf ke peramban dibuang dari rancangan.** Komputer kantor dipakai bergantian,
+  jadi isian kerja bisa tertinggal di peramban orang lain. Hitung mundur sudah memberi waktu
+  untuk menekan Simpan; itu yang ditawarkan, dan layar tidak menjanjikan lebih.
+- **Pagar:** alasan wajib (≥ 10 huruf), tenggat wajib (pilihan seperti tahan login), kembali
+  normal sendiri saat tenggat lewat. Membuka lebih awal: SUPER_ADMIN, dicatat di audit.
+- **Bisa dipanggil dari insiden:** tombol di tab INSIDEN membuka tab Pemeliharaan dengan pesan
+  terisi. Tetap manusia yang menekan Kirim.
+- **Batasnya disebut di layar:** "Pembekuan tidak berlaku untuk SUPER_ADMIN" (§3 butir 4).
 
-## 7. Aturan deteksi
+DoD: menyimpan saat beku → 503 `MODUL_BACA_SAJA` dengan kalimat yang bisa dibaca; membaca dan
+mencetak tetap 200; tenggat lewat → kembali normal tanpa tindakan; semua aksi muncul di Jejak
+Audit.
 
-Ambang di bawah ini usulan awal, **harus disetel ulang setelah 2 minggu data nyata** — data
-kantor ini punya lonjakan wajar (impor 558 baris, cetak rekap akhir bulan, semua orang
-login jam 07.30). Aturan yang ambangnya terlalu ketat akan membuat SUPER_ADMIN berhenti
-membaca peringatan, dan itu kegagalan yang lebih mahal daripada tidak punya peringatan.
+## 8. Tanggapan bertingkat
 
-| Kode | Sinyal | Jendela | Ambang usulan | Severity | Usulan aksi |
-|---|---|---|---|---|---|
-| R1 | `LOGIN_FAILED` untuk ≥5 username berbeda dari sumber sama | 5 menit | ≥20 | HIGH | L1 (perketat + tawarkan blokir) |
-| R2 | `PATH_PROBE` (404 pada `/.env`, `/wp-admin`, `/api/admin/*` tanpa sesi) | 2 menit | ≥30 | MEDIUM | L1 |
-| R3 | `OWNERSHIP_MISS` dari satu user | 5 menit | ≥10 | HIGH | L1 (putus sesi + tanya) |
-| R4 | `EXPORT` dari satu user | 10 menit | ≥15 unduhan atau >50 MB | HIGH | notif + tanya (bisa sah) |
-| R5 | `AUTHZ_CHANGE` di luar jam kerja (sebelum 06.00 / sesudah 21.00) atau ≥3 perubahan pada satu akun dalam 1 jam | 1 jam | — | MEDIUM | notif |
-| R6 | `SWITCH_CHANGE` pada sakelar oleh selain SA, atau sakelar dimatikan lalu dinyalakan berulang | 10 menit | ≥3 | MEDIUM | notif |
-| R7 | `RATE_LIMIT_HIT` dari satu sumber lintas ≥3 route berbeda | 5 menit | ≥10 | MEDIUM | notif |
-| R8 | Kegagalan tulis DB beruntun pada route yang sama | 5 menit | ≥5 | LOW | notif (bisa jadi gangguan, bukan serangan) |
-
-Korelasi: satu insiden per (kode + sumber) dalam jendela yang sama. Insiden yang sudah
-`DITANGANI`/`ABAI` tidak dibuka lagi sampai **cooldown** 30 menit lewat — tanpa itu, satu
-serangan berkepanjangan menghasilkan ratusan baris dan notifikasi yang diabaikan.
-
-Skor sederhana, bukan model: `severity` = tertinggi di antara sinyal, dinaikkan satu
-tingkat bila ≥3 aturan berbeda menyala bersamaan. Bisa dijelaskan ke manusia dalam satu
-kalimat, dan itu syaratnya — skor yang tidak bisa dijelaskan tidak akan dipercaya.
-
-## 8. Notifikasi realtime
-
-- **Jalur utama:** SSE `GET /api/admin/security/stream` (SA-only, satu koneksi per tab).
-  Server mengirim `event: insiden` tiap ada baris baru; klien `EventSource` menampilkan
-  toast + lencana angka di tab Insiden. Di LAN, satu koneksi menggantung jauh lebih murah
-  daripada polling tiap tab.
-- **Jalur cadangan:** bila koneksi gagal/terputus (proxy memutus idle), klien jatuh ke
-  polling 10 detik `/api/admin/security/insiden?sejak=<id>`. Dua jalur, satu bentuk data.
-- **Lonceng:** `addNotif(NOTIF_SUPER_ADMIN, 'SUPER_ADMIN', 'SECURITY_INCIDENT', …)` supaya
-  peringatan tetap terlihat walau tab Admin Panel tidak dibuka. Isi notifikasi: judul,
-  tiga angka (jumlah sinyal, sumber, jendela waktu), bukan pesan panjang.
-- **Batas kebisingan:** maksimal **1 notifikasi per kode per 15 menit**. Peringatan yang
-  tumpah ruah adalah peringatan yang dimatikan orang.
-
-Jenis audit baru yang wajib digolongkan di `retensi-audit.ts`: `SECURITY_INCIDENT_BUKA`,
-`SECURITY_MODE_AMAN`, `SECURITY_BLOKIR`, `SECURITY_BUKA_BLOKIR`, `SECURITY_LAPORAN_UNDUH`.
-
-## 9. Playbook respons
-
-| Tingkat | Tindakan | Efek pada pengguna | Siapa yang boleh | Pagar |
+| Tingkat | Tindakan | Akibat bagi pengguna | Siapa | Sudah ada? |
 |---|---|---|---|---|
-| **L0** | catat + notifikasi | tidak ada | otomatis | — |
-| **L1** | perketat rate limit untuk sumber itu; putus sesi user; blokir IP/user (`security_blocks`) dengan tenggat | satu orang (atau satu IP kantor) kehilangan sesi | otomatis hanya untuk putus sesi + rate limit; blokir IP **harus** dikonfirmasi | harus ada tenggat; tombol buka blokir selalu tersedia |
-| **L2** | **Mode Aman**: `app_status_global='readonly'` + pesan darurat + broadcast | semua tulis 503 dengan kalimat jelas; baca & cetak jalan | SUPER_ADMIN, dikonfirmasi dengan mengetik `MODE AMAN` + alasan | membuka butuh SUPER_ADMIN **dan** ADMIN (dual-control) |
-| **L3** | pemeliharaan per modul (`app_status_<modul>='maintenance'` + `_pesan` + `_sampai`) | modul itu tertutup, lain jalan | SA/ADMIN sesuai tab App Control | tenggat wajib diisi |
-| **L4** | putus akses aplikasi (matikan semua modul) | semua tertutup | SUPER_ADMIN + ADMIN | hanya untuk serangan dari dalam; audit wajib |
+| 0 | Catat + kabar | tidak ada | otomatis | fase 1 |
+| 1 | Putus sesi satu orang; tahan akun (nonaktifkan) | satu orang keluar | SUPER_ADMIN, dari tab INSIDEN | ya — pintasan ke `TabSessions`/Pusat Akses |
+| 2 | Bekukan penyimpanan seluruh aplikasi | semua tulis berhenti, baca jalan | SUPER_ADMIN | fase 2 |
+| 3 | Tutup satu modul (pemeliharaan per modul) | modul itu tertutup | sesuai tab Kendali Aplikasi | ya |
+| 4 | Keluarkan semua + tahan login | semua keluar | SUPER_ADMIN | ya — Pemeliharaan |
 
-**"Simpan dulu, lalu bekukan"** — yang diminta pemilik, dan cara mencapainya jujur:
+Tidak ada tingkat yang dijalankan mesin tanpa ditekan manusia (§4 butir 4).
 
-1. Mode Aman memakai `readonly`, **bukan** `maintenance`: pengguna masih bisa membuka,
-   membaca, dan mencetak; yang berhenti hanya penulisan.
-2. Sebelum aktif, layar menampilkan hitung mundur **60 detik** ("penyimpanan dibekukan
-   dalam 60 detik — simpan pekerjaan Anda sekarang"). Timer di klien, keputusan tetap di
-   server.
-3. Draf yang belum tersimpan **tidak bisa** diselamatkan server (server tidak pernah
-   menerimanya). Karena itu klien menyimpan ringkasan isian ke `localStorage` saat Mode
-   Aman diumumkan, dan menawarkan "pulihkan isian" ketika Mode Aman dibuka lagi. Ini
-   pengaman tambahan, bukan jaminan — dan harus ditulis begitu di layarnya.
-4. Broadcast otomatis terkirim bersama Mode Aman, isinya: apa yang terjadi, apa yang
-   masih bisa dilakukan, kapan akan ditinjau. Tanpa ini, 100 orang menelpon admin.
+## 9. Kalau akun SUPER_ADMIN yang dibajak
 
-**Pagar aksi darurat** (semua tingkat, wajib):
+Pembekuan tidak menolong, karena SUPER_ADMIN menembusnya. Langkahnya, dari yang tercepat:
 
-- Konfirmasi mengetik nama aksi + alasan minimal 10 karakter; tanpa itu tombol tidak
-  mengirim apa pun.
-- Setiap aksi menulis `audit_log` **dan** `security_events` — dua tempat, karena audit bisa
-  dipangkas retensi sementara insiden harus tetap bisa direkonstruksi.
-- Membuka Mode Aman/L4: dual-control (dua akun berbeda) atau jeda paksa 10 menit sesudah
-  diaktifkan. Aplikasi tidak boleh punya tombol "lumpuhkan semuanya" yang bisa dipakai
-  satu akun yang sudah dibajak.
+1. Dari akun SUPER_ADMIN lain: putus semua sesi akun yang dicurigai (`TabSessions`).
+2. Di komputer server: `node scripts/setel-sandi-superadmin.mjs` untuk akun itu — sandi baru
+   dicetak sekali, semua sesinya ikut dikeluarkan.
+3. Bila perlu menghentikan semua orang: Pemeliharaan → Keluarkan semua + tahan login. Hanya
+   SUPER_ADMIN yang masuk sesudah pesan dikirim yang tetap bisa masuk.
+4. Baca Jejak Audit akun itu sejak dugaan pertama untuk tahu apa yang sudah diubah.
 
-## 10. Layar (Admin Panel)
+Langkah ini ditulis juga di panduan operasi server supaya tersedia walau aplikasi tidak bisa
+dibuka.
 
-Dua tab baru, mengikuti pola `_panels/` yang sudah ada — bukan halaman terpisah:
+## 10. Fase 3 dan 4 — yang menunggu
 
-- **INSIDEN** — daftar insiden (severity, kode, sumber, jendela, status), filter status,
-  dan panel detail berisi timeline `security_incident_events` (jenis, waktu, route,
-  status code, ringkasan). Tombol: Periksa, Abaikan (dengan alasan), Tangani, Ekspor CSV.
-  Lencana angka di tab untuk insiden `BARU` ber-severity HIGH/CRITICAL.
-- **MODE AMAN** — satu kartu: keadaan sekarang, tombol aktifkan (konfirmasi + alasan),
-  hitung mundur, pilihan cakupan (seluruh aplikasi / modul tertentu), pratinjau teks
-  broadcast, dan tombol buka (dual-control). Di sini juga tampil daftar blokir aktif
-  beserta tenggatnya.
+**Fase 3 — kejadian yang belum tercatat di mana pun.** Penolakan 403 dari pagar modul, 404
+pada alamat yang dicari-cari, dan rem laju (429) tidak masuk `audit_log`. Kalau dibutuhkan:
 
-Tab lama tetap: `ATTACK MONITOR` (login) dan `BROADCAST` (manual) tidak dihapus — yang
-pertama menjadi "sumber sinyal login" yang juga dibaca evaluator, yang kedua menjadi jalur
-pesan biasa di luar darurat.
+- Dihitung **di memori** per akun (cukup satu proses, §3 butir 2), dengan jendela bergeser.
+- Database baru ditulis saat ambang terlewati — langsung jadi insiden, bukan baris per
+  kejadian.
+- Permintaan tanpa sesi (pencarian alamat) hanya dihitung secara keseluruhan; tanpa IP tidak
+  ada "sumber" yang bisa dibedakan.
+- Hitungan hilang saat server dimatikan. Itu diterima: yang hilang hanya dugaan yang belum
+  melewati ambang.
 
-## 11. Forensik
+**Fase 4 — sesudah Nginx berdiri di depan dan `TRUST_PROXY_HEADERS=true`.**
 
-Ringkasan satu halaman per insiden: apa yang dicoba, dari mana, berapa lama, apa yang
-berhasil (dari `audit_log` pada jendela yang sama), apa yang dilakukan admin dan kapan.
-Ekspor CSV untuk dibawa ke rapat. Ini yang membedakan "ada peringatan" dari "kami tahu apa
-yang terjadi" — dan satu-satunya bagian yang berguna tiga bulan kemudian.
+- Aturan per IP (tebak sandi dari satu komputer, pencarian alamat dari satu komputer).
+- Blokir IP bertenggat (`penjaga_blokir`), dengan tombol buka yang selalu tersedia.
+- Rem laju di Nginx (`limit_req`), didokumentasikan di panduan instalasi §11.2.
 
-## 12. Yang diputuskan TIDAK dikerjakan
+**Di luar fitur, tapi lebih menentukan akibatnya** (dipertahankan dari revisi 1):
 
-- **WAF/IPS sendiri.** Menulis parser serangan lengkap di dalam Next.js berarti
-  memelihara sesuatu yang sudah ada di Nginx/fail2ban, dengan permukaan bug baru.
-- **Auto-lockdown global otomatis.** Detektor hanya boleh mengusulkan; memutuskan tetap
-  manusia. Satu positif palsu di jam sibuk = seluruh kantor berhenti, dan penyebabnya
-  adalah kode kita sendiri.
-- **Blokir IP otomatis sebelum Nginx terpasang + `TRUST_PROXY_HEADERS=true`.** Tanpa itu
-  semua orang berbagi IP `'unknown'`.
-- **Geo-blocking / reputasi IP cloud.** Aplikasi ini intranet; tidak ada daftar reputasi
-  yang relevan dan tidak ada koneksi keluar yang dijamin.
-- **Menyimpan body permintaan mencurigakan.** Itu justru menambah risiko kebocoran data.
-- **Mengganti `audit_log`.** Audit tetap satu-satunya jejak aksi sah; defender membacanya,
-  tidak menulis ke sana selain lewat `writeAuditLog`.
+- **Uji pulihkan cadangan** terjadwal — cadangan yang belum pernah dipulihkan belum terbukti.
+- **Verifikasi dua langkah (TOTP) untuk SUPER_ADMIN**, menutup sebagian besar §9.
+- Tinjauan Akses berkala (sudah ada alatnya; yang perlu adalah kebiasaannya).
 
-## 13. Risiko & jebakan
+## 11. Yang diputuskan TIDAK dikerjakan
 
-| Risiko | Kenapa berbahaya di PRIMA | Tanganan |
+- **Penyaring serangan sendiri di dalam aplikasi (WAF).** Memelihara pengurai serangan di
+  Next.js menambah permukaan bug; tempatnya di depan aplikasi.
+- **Pembekuan atau pemutusan otomatis untuk seluruh kantor.** Mesin hanya mengusulkan.
+- **Aturan dan blokir per IP sebelum Nginx terpasang.** Semua orang terbaca `'unknown'`.
+- **Menyimpan isi permintaan yang mencurigakan.** Justru menambah risiko kebocoran.
+- **Menulis sinyal ke tabel per permintaan.** Lihat §4 butir 2.
+- **Koneksi siaran (SSE) untuk kabar.** Pertanyaan 30 detik yang sudah ada cukup.
+- **Penyimpanan draf di peramban saat pembekuan.** Lihat §7.
+- **Mengganti `audit_log`.** Penjaga hanya membacanya, dan menulis jejaknya sendiri lewat
+  `writeAuditLog`.
+
+## 12. Risiko & jebakan
+
+| Risiko | Kenapa berbahaya | Tanganan |
 |---|---|---|
-| IP `'unknown'` untuk semua orang | blokir IP = blokir seluruh kantor | L1 blokir IP dimatikan sampai proxy dipercaya; UI menolak mengaktifkannya |
-| Positif palsu akhir bulan (cetak/impor) | notifikasi diabaikan, lalu serangan nyata lewat | ambang R4 dihitung per user + jam kerja; tombol "Abaikan 7 hari untuk aturan ini" |
-| Evaluator memperlambat permintaan | piggyback berarti biaya di jalur panas | evaluasi maksimal 1×/30 detik, query ber-index, batas 200 baris |
-| Tabel ancaman membengkak | MySQL satu server, dipakai juga untuk aplikasi | retensi 90 hari + arsip ringkasan harian |
-| Data pribadi (IP, username) | PDP | akses SA-only, retensi pendek, tidak diekspor mentah ke layar non-admin |
-| Mode Aman dipakai sebagai DoS | akun SA dibajak | dual-control + audit + batas waktu 2 jam lalu kembali `online` otomatis |
-| Notifikasi sebagai satu-satunya kanal | tab ditutup, orang tidak lihat | lonceng + (opsional) email/Telegram webhook di fase 3 |
+| Dugaan keliru akhir bulan (cetak, impor) | kabar diabaikan, lalu yang sungguhan lewat | A3 hanya kabar; "abaikan akun ini 7 hari"; ambang disetel dari data nyata |
+| Ambang dinaikkan diam-diam | pemantau buta tanpa ada yang tahu | perubahan ambang dicatat di audit (lama → baru) |
+| Pemantau memperlambat permintaan | menumpang permintaan | paling sering sekali per menit, tidak ditunggu, kueri berindeks, batas baris per putaran |
+| Server mati semalam, peristiwa menumpuk | putaran pertama pagi berat | titik terakhir + batas baris per putaran; sisanya dibaca putaran berikutnya |
+| Akun SUPER_ADMIN dibajak | menembus pembekuan, bisa mengubah ambang | §9; perubahan ambang terjejak; TOTP di fase 4 |
+| Lonceng satu-satunya kanal | tidak ada yang membuka PRIMA | lencana + lonceng; kanal luar (surel/pesan) dibahas bila diminta |
+| Angka ambang terbaca publik | penyerang menyesuaikan diri | angka di `app_config`, tidak di repo |
 
-## 14. Fase eksekusi & DoD
+## 13. Yang berubah dari revisi 1
 
-| Fase | Isi | DoD |
+| Revisi 1 | Revisi 2 | Sebab |
 |---|---|---|
-| **1. Sensor & insiden** | 4 tabel + migrasi, `lib/security/defender.ts` (catat + evaluator), 8 titik sensor, 4 aturan pertama (R1–R3, R7), tab INSIDEN, notifikasi lonceng, polling 10 dtk | data uji nyata: 25 login gagal → 1 insiden HIGH muncul di tab dalam ≤60 dtk; tidak ada tulis DB di jalur GET biasa; `tsc`/`eslint` bersih; uji aturan memakai data buatan, bukan data kantor |
-| **2. Mode Aman** | tombol L2 memakai `app_status_global`, hitung mundur 60 dtk di shell, draf `localStorage`, broadcast otomatis, audit `SECURITY_MODE_AMAN` | menyimpan saat Mode Aman aktif → 503 `MODUL_BACA_SAJA` dengan kalimat yang bisa dibaca; membaca & mencetak tetap 200; membuka butuh dua akun; semua aksi muncul di Audit Trail |
-| **3. L1 & realtime** | blokir IP/user + tenggat, SSE `/api/admin/security/stream`, R4–R6, ekspor CSV | dua klien: satu memicu insiden, satu menerima dalam ≤5 dtk; blokir kedaluwarsa sendiri; `fail2ban`/`limit_req` Nginx didokumentasikan di PANDUAN §7 |
-| **4. Pengerasan** | 2FA TOTP untuk SA, baseline jam akses, honeypot path, uji restore backup | login SA tanpa TOTP ditolak; jumlah temuan palsu per minggu < 5 |
+| Delapan sensor baru + tabel `security_events` | Fase 1 membaca `audit_log` saja | sinyal utamanya sudah tercatat |
+| Aturan per IP sumber | Per akun | server membaca semua IP sebagai `'unknown'` |
+| Tulis satu baris per kejadian | Tulis satu baris per dugaan | banjir permintaan tidak boleh jadi banjir tulisan |
+| Angka ambang di dokumen | Angka di `app_config`, diatur di panel | repo publik |
+| "Mode Aman" dengan layar & hitung mundur sendiri | Pilihan "Bekukan penyimpanan" di Pemeliharaan | hitung mundur, pesan, tenggat sudah ada |
+| Draf disimpan di peramban | Dibuang | komputer dipakai bergantian |
+| SSE + cadangan polling | Ikut tanya 30 detik yang sudah ada | sedikit SUPER_ADMIN, satu jalur cukup |
+| Mode Aman dianggap menahan akun SA dibajak | Langkah tersendiri (§9) | SUPER_ADMIN menembus pembekuan |
+| `fail2ban` di DoD | Dibuang; `limit_req` Nginx di fase 4 | server Windows |
+| Istilah asing (playbook, dual-control, honeypot) | Kata sehari-hari | dibaca pemilik & pegawai |
 
-## 15. Keputusan yang perlu persetujuan pemilik sebelum fase 1
+## 14. Keputusan yang perlu dari pemilik sebelum fase 1
 
-1. **Ambang R1–R3** di §7 — terlalu ketat/ longgar? Disetel setelah 2 minggu data.
-2. **Retensi**: 90 hari untuk `security_events`, 1 tahun untuk insiden — cukup?
-3. **Siapa boleh membuka Mode Aman** — dual-control SA+ADMIN, atau SA saja dengan jeda 10 menit?
-4. **Batas waktu Mode Aman otomatis** 2 jam (lalu `online` sendiri) — setuju? Ini yang
-   mencegah "lupa dibuka" menjadi pemadaman permanen.
-5. **Kanal notifikasi tambahan** (email/Telegram webhook) — perlu atau cukup lonceng + SSE?
-6. **Apakah L1 blokir IP diaktifkan** — hanya setelah Nginx di depan dan
-   `TRUST_PROXY_HEADERS=true`; kalau belum, fase 3 cukup blokir per user/sesi.
-
-## 16. Pengerasan non-fitur (lebih berdampak daripada dashboard)
-
-Disebut di sini supaya tidak hilang: backup harian MySQL + **uji restore** terjadwal,
-review `app_access` tiap 6 bulan, `fail2ban` + `limit_req` di Nginx, patch dependensi
-(gate B sudah ada di CI), dan 2FA untuk SUPER_ADMIN. Dashboard deteksi membuat serangan
-lebih cepat diketahui; backup dan hak akses minimum yang menentukan seberapa parah
-akibatnya.
+1. **Urutan fase** — fase 1 (pantau dari audit) dulu, fase 2 (bekukan penyimpanan) menyusul?
+2. **Siapa menerima kabar** — semua SUPER_ADMIN, atau juga ADMIN?
+3. **Rentang jam kerja** untuk A4 — misalnya 06.00–18.00 hari kerja? (Disimpan di panel, bukan
+   di repo.)
+4. **Membuka pembekuan lebih awal** — cukup satu SUPER_ADMIN dengan alasan, atau perlu dua
+   orang? Usulan: satu orang + alasan, karena tenggat sudah memaksa kembali normal sendiri.
+5. **Masa simpan insiden** — usulan 1 tahun.
+6. **Kanal luar** (surel atau pesan ke ponsel) — perlu, atau cukup lonceng + lencana?

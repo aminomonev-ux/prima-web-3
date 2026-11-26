@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 300" text-rendering="geometricPrecision" font-family="Inter, system-ui, sans-serif">
+  <rect x="0.5" y="0.5" width="979" height="299" fill="#f4f7fb" stroke="#1f2a3a" stroke-width="1"/>
+  <line x1="0" y1="60" x2="980" y2="60" stroke="#d6deec" stroke-width="1"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#14233a">Batas pagu dari Rencana Aksi 2026</text>
+  <text x="24" y="52" font-size="12" fill="#5b6b86">Jumlah RKO tiap sub kegiatan tidak boleh melebihi pagu perubahan yang tercatat di Rencana Aksi.</text>
+
+  <!-- meter -->
+  <rect x="24" y="92" width="932" height="78" rx="12" fill="#ffffff" stroke="#cdd9ec" stroke-width="1"/>
+  <text x="44" y="116" font-size="11" font-weight="600" letter-spacing="".6" fill="#9aa7bd" text-transform="uppercase">Sisa pagu Rencana Aksi</text>
+  <rect x="44" y="126" width="780" height="22" rx="11" fill="#e6eefb" stroke="#cdd9ec" stroke-width="1"/>
+  <rect x="44" y="126" width="780" height="22" rx="11" fill="#1d9e75" fill-opacity="0.9"/>
+  <text x="58" y="142" font-size="13" font-weight="700" fill="#ffffff" font-family="JetBrains Mono, ui-monospace, monospace">100% · Rp 0 tersisa</text>
+  <text x="700" y="142" font-size="11" font-weight="600" fill="#5b6b86" font-family="JetBrains Mono, ui-monospace, monospace">59.126.735.000 terpakai</text>
+  <rect x="792" y="130" width="30" height="14" rx="7" fill="#1d9e75"/>
+  <text x="807" y="141" font-size="9" font-weight="700" fill="#ffffff">aman</text>
+
+  <!-- one line per sub kegiatan -->
+  <g transform="translate(24, 188)" font-size="11.5">
+    <line x1="0" y1="0" x2="0" y2="0" stroke="#9aa7bd" stroke-width="1"/>
+    <text x="0" y="0" font-weight="700" fill="#14233a">1 . Kasubbag Rumah Tangga</text>
+    <text x="2310" y="0" font-size="11" fill="#5b6b86" dx="8">kegiatan Administrasi Keuangan Perangkat Daerah</text>
+    <text x="24" y="20" font-family="JetBrains Mono, ui-monospace, monospace" font-weight="600" fill="#14233a">Pagu · Rp 8.222.764.700</text>
+    <text x="200" y="20" font-family="JetBrains Mono, ui-monospace, monospace" font-weight="600" fill="#1d9e75">RKO Rp 8.222.764.700</text>
+    <text x="420" y="20" font-family="JetBrains Mono, ui-monospace, monospace" font-weight="700" fill="#14233a">Sisa Rp 0</text>
+  </g>
+
+  <!-- chip per sumber -->
+  <g transform="translate(24, 236)">
+    <rect x="0" y="0" width="168" height="20" rx="6" fill="#042C53" stroke="#1d4f8a" stroke-width="1"/>
+    <text x="10" y="14" font-size="11" color="#cfe0f5" style="spectrum-rgb(76,130,255)">Sumber: APBD</text>
+    <text x="156" y="14" font-size="10.5" fill="#9aa7bd" dx="6">RKO Rp 8.222.764.700</text>
+    <circle cx="168" cy="10" r="4" fill="#9aa7bd"/>
+  </g>
+
+  <text x="24" y="272" font-size="10.5" text-transform="uppercase" letter-spacing="".6" font-weight="700" fill="#9aa7bd">Penyediaan Gaji dan Tunjangan ASN — kegiatan Administrasi Keuangan Perangkat Daerah</text>
+</svg>

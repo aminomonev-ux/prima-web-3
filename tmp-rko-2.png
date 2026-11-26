@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 300" text-rendering="geometricPrecision" font-family="Inter, system-ui, sans-serif">
+  <rect x="0.5" y="0.5" width="979" height="299" fill="#0b1320" stroke="#20314e" stroke-width="1"/>
+
+  <line x1="0" y1="70" x2="980" y2="70" stroke="#1b2a44" stroke-width="1"/>
+  <text x="24" y="42" font-size="15" font-weight="700" fill="#e6f1fb">Batas pagu dari Rencana Aksi 2026</text>
+  <text x="24" y="60" font-size="12" fill="#6f86a8">Jumlah RKO tiap sub kegiatan tidak boleh melebihi pagu perubahan yang tercatat di Rencana Aksi.</text>
+
+  <!-- meter -->
+  <rect x="24" y="92" width="932" height="78" rx="12" fill="#042C53" stroke="#1d4f8a" stroke-width="1"/>
+  <text x="44" y="116" font-size="11" font-weight="600" letter-spacing="1" fill="#6f86a8" text-transform="uppercase">Sisa pagu Rencana Aksi</text>
+  <rect x="44" y="126" width="780" height="22" rx="11" fill="#0a1c38" stroke="#244a7a" stroke-width="1"/>
+  <rect x="44" y="126" width="0" height="22" rx="11" fill="#1d9e75"/>
+  <text x="56" y="142" font-size="13" font-weight="700" fill="#e6f1fb" font-family="JetBrains Mono, ui-monospace, monospace">Sisa Rp 0 · 100% pakai</text>
+  <text x="430" y="142" font-size="11" font-weight="500" fill="#d6e6f7" font-family="JetBrains Mono, ui-monospace, monospace" font-weight="400">terpakai Rp 59.126.735.000</text>
+  <rect x="806" y="130" width="30" height="14" rx="7" fill="#1d9e75"/>
+  <text x="820" y="141" font-size="9" font-weight="700" fill="#ffffff">aman</text>
+
+  <!-- sub kegiatan ringkas tab -->
+  <g transform="translate(24, 186)" font-size="11.5">
+    <rect x="0" y="-2" width="16" height="20" rx="3" fill="#1d9e75"/>
+    <rect x="20" y="0" width="848" height="20" rx="8" fill="#0a1c38" stroke="#1d4f8a" stroke-width="1"/>
+    <text x="24" y="14" font-weight="700" fill="#e6f1fb">Kasubbag Rumah Tangga</text>
+    <text x="362" y="14" font-size="11" fill="#9bb6cf" dx="8">kegiatan Administrasi Keuangan Perangkat Daerah</text>
+    <text x="702" y="14" font-size="11" fill="#9bb6cf" font-family="JetBrains Mono, ui-monospace, monospace" text-anchor="end" dx="-8">lengkapi lebih kolom sumber</text>
+    <text x="812" y="14" font-size="10.5" font-weight="700" fill="#1d9e75" dx="6">→ LIHAT</text>
+  </g>
+
+  <g transform="translate(24, 212)" font-size="11.5">
+    <rect x="0" y="-2" width="16" height="20" rx="3" fill="#ba7517"/>
+    <rect x="20" y="0" width="848" height="20" rx="8" fill="#0a1c38" stroke="#3a3322" stroke-width="1"/>
+    <text x="24" y="14" font-weight="700" fill="#e6f1fb">Kasubbag TU, Hukum & Humas</text>
+    <text x="382" y="14" font-size="11" fill="#9bb6cf" dx="8">kegiatan Hukum & Humas</text>
+    <text x="560" y="14" font-size="11" fill="#e6f1fb" font-family="JetBrains Mono, ui-monospace, monospace">Rp 74.000.000 / Rp 74.000.000</text>
+    <text x="812" y="14" font-size="10.5" font-weight="700" fill="#ba7517" dx="6">revisi</text>
+  </g>
+
+  <g transform="translate(24, 246)">
+    <rect x="0" y="-2" width="16" height="20" rx="3" fill="#7c5cfc"/>
+    <text x="20" y="14" font-size="11.5" color="#e6f1fb">• Kasubbag Organisasi & Kepegawaian • Kasubbag Pendidikan & Pengembangan • gasawan lainnya</text>
+  </g>
+
+  <text x="24" y="280" font-size="10" text-transform="uppercase" letter-spacing="1.4" font-weight="700" fill="#6f86a8">N=2 ditinjau · 7 terlalu banyak</text>
+</svg>
