@@ -56,6 +56,20 @@ export async function listPejabat(tahun: number): Promise<PejabatSpj[]> {
   }))
 }
 
+/** Penanda tangan unduhan Cetak (DPA, Pergeseran, Rekap PJ): DIREKTUR saja — Bendahara/PPK tidak ikut terkirim. */
+export interface DirekturCetak { nama: string; nip: string | null; pangkat: string | null; jabatan_teks: string | null }
+
+export async function getDirekturCetak(tahun: number): Promise<DirekturCetak | null> {
+  const rows = await sql`
+    SELECT nama, nip, pangkat, jabatan_teks
+    FROM blud_pejabat
+    WHERE tahun_anggaran = ${tahun} AND jabatan = 'DIREKTUR'
+    LIMIT 1
+  ` as Record<string, unknown>[]
+  const r = rows[0]
+  const nama = String(r?.nama ?? '').trim()
+  return r && nama ? { nama, nip: teks(r.nip), pangkat: teks(r.pangkat), jabatan_teks: teks(r.jabatan_teks) } : null
+}
 /** Peta siap cetak — dipakai blok tanda tangan di sheet SPJ/pengantar/TUTUP KAS. */
 export async function getPejabatCetak(tahun: number): Promise<Record<string, PejabatSpj>> {
   const peta: Record<string, PejabatSpj> = {}

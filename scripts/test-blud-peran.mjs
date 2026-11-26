@@ -54,7 +54,7 @@ const MATRIKS = {
   'realisasi':        [L, L, L, L, L],   // layar pantau — `realisasi/register` cuma GET
   'tutup-kas':        [E, E, L, E, E],
   'cetak':            [L, L, L, L, L],   // unduh saja
-  'pengaturan':       [E, E, E, E, E],   // hapus versi dijaga terpisah
+  'pengaturan':       [E, E, L, E, L],   // pejabat penanda tangan: Program & Bendahara baca saja (CONCEPT-blud-pejabat-penanda-tangan K4/K5); hapus versi dijaga terpisah
 }
 
 console.log('── Matriks izin peran × menu ──')

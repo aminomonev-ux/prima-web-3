@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { Users, Search, Save, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import { LABEL_PERAN_BLUD, peranPengubah } from '@/lib/blud/peran'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -48,6 +49,9 @@ interface SaranPk {
 
 const kosong = (): Isian => ({ nama: '', nip: '', pangkat: '', jabatan_teks: '', pk_pejabat_id: null })
 
+/** Diturunkan dari tabel peran yang sama dengan pagar server — tidak ditulis tangan (K4/K5). */
+const KALIMAT_PENGUBAH = `Diubah oleh: ${peranPengubah('pengaturan').map(r => LABEL_PERAN_BLUD[r] ?? r).join(', ')}`
+  + ' — atau akun yang diberi hak ubah di Pusat Akses.'
 export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
@@ -200,6 +204,7 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
             Diisi sekali per tahun, dipakai semua lembar SPJ. Nilainya <b>disalin</b> dari Perjanjian
             Kinerja — pergantian pejabat tahun depan tidak mengubah dokumen tahun ini.
           </p>
+          <p className="pj-sub">{KALIMAT_PENGUBAH}</p>
         </div>
         <div style={{ display: 'inline-flex' }}>
           <TahunDropdown value={tahun} items={tahunList} current={CURRENT_YEAR} onChange={setTahun} />

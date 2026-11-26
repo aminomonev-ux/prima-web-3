@@ -62,7 +62,7 @@ const TABEL: Record<string, AturanPeran> = {
     khusus: {
       'master-akun': 'EDIT', 'kode-besar': 'EDIT', 'penanggung-jawab': 'EDIT',
       'dpa': 'EDIT', 'pergeseran': 'EDIT',
-      'pengaturan': 'EDIT', // Pejabat SPJ; hapus versi tetap dijaga canHapusVersi
+      // Pengaturan (pejabat penanda tangan) hanya dibaca — CONCEPT-blud-pejabat-penanda-tangan K5.
     },
   },
 
@@ -70,6 +70,7 @@ const TABEL: Record<string, AturanPeran> = {
   // menutup DAN membuka — sisanya dibaca saja.
   KEUANGAN: {
     bawaan: 'LIHAT',
+    // Pengaturan EDIT: kepala bidang keuangan yang menetapkan penanda tangan (K4).
     khusus: { 'tutup-kas': 'EDIT', 'pengaturan': 'EDIT' },
   },
 
@@ -80,7 +81,8 @@ const TABEL: Record<string, AturanPeran> = {
     bawaan: 'LIHAT',
     khusus: {
       'buku-kas': 'EDIT', 'bukti-setor': 'EDIT', 'realisasi': 'EDIT',
-      'tutup-kas': 'EDIT', 'pengaturan': 'EDIT',
+      'tutup-kas': 'EDIT',
+      // Pengaturan hanya dibaca: bendahara tidak menetapkan PPK yang memeriksanya (pemisahan tugas, K4/K5).
     },
   },
 }
@@ -149,4 +151,18 @@ export function menuTerbuka(role: string, penimpa?: Partial<Record<MenuBlud, Izi
 
 export function isMenuBlud(v: unknown): v is MenuBlud {
   return typeof v === 'string' && (MENU_BLUD as readonly string[]).includes(v)
+}
+
+/** Sebutan peran di kalimat layar (mis. "Diubah oleh: …"). Hanya peran yang ada di `TABEL`. */
+export const LABEL_PERAN_BLUD: Record<string, string> = {
+  SUPER_ADMIN: 'Super Admin',
+  ADMIN: 'Admin',
+  PROGRAM: 'Perencana Program',
+  KEUANGAN: 'Kepala Bidang Keuangan',
+  PERBENDAHARAAN: 'Bendahara',
+}
+
+/** Peran yang bawaannya boleh MENGUBAH menu ini — diturunkan dari `TABEL`, tidak ditulis tangan. */
+export function peranPengubah(menu: MenuBlud): string[] {
+  return Object.keys(TABEL).filter(r => izinMenu(r, menu) === 'EDIT')
 }

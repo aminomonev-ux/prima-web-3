@@ -2,6 +2,7 @@
 // Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.1, keputusan #29.
 //
 // GET  ?tahun=[&sumber=pk]  daftar tersimpan · `sumber=pk` = saran dari master PK
+// GET  ?untuk=cetak&tahun=  Direktur saja, untuk tanda tangan unduhan Cetak
 // POST                      simpan (replace-all per tahun)
 //
 // Saran PK adalah SUMBER ISIAN, bukan sumber kebenaran: yang tersimpan salinan
@@ -11,15 +12,44 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit, TahunSchema } from '@/lib/blud/schemas'
-import { listPejabat, simpanPejabat, sarankanDariPk } from '@/lib/blud/pejabat-data'
+import { listPejabat, simpanPejabat, sarankanDariPk, getDirekturCetak } from '@/lib/blud/pejabat-data'
 import { SimpanPejabatBodySchema } from '@/lib/blud/realisasi-schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit, realisasiMati } from '../realisasi/_guard'
+import { bolehInput, bolehLihat, bolehLihatSalahSatu, forbidden, unauthorized, tolakEdit, realisasiMati } from '../realisasi/_guard'
+import { bludMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * `?untuk=cetak` — Direktur saja, untuk tanda tangan unduhan Cetak/DPA/Pergeseran.
+ * Pagarnya sakelar BLUD (bukan Realisasi) + salah satu menu yang mencetaknya: nama, NIP,
+ * pangkat Direktur memang tercetak di semua dokumen resmi. Bendahara & PPK tetap di balik
+ * menu Pengaturan. CONCEPT-blud-pejabat-penanda-tangan §3.1 (K1–K3).
+ */
+async function getDirekturUntukCetak(req: NextRequest, session: { userId: number; role: string }) {
+  const mati = await bludMati(session.role)
+  if (mati) return mati
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['cetak', 'dpa', 'pergeseran', 'pengaturan']))) return forbidden()
+
+  const limited = await bludRateLimit(session.userId, 'view-pejabat', 60)
+  if (limited) return limited
+
+  const parsed = TahunSchema.safeParse(new URL(req.url).searchParams.get('tahun'))
+  if (!parsed.success) {
+    return NextResponse.json({ ok: false, error: 'Tahun anggaran tidak dikenali. Pilih tahun antara 2000 dan 2100.' }, { status: 400 })
+  }
+  try {
+    return NextResponse.json({ ok: true, data: await getDirekturCetak(parsed.data) })
+  } catch (err) {
+    console.error('[API /blud/pejabat GET untuk=cetak]', err)
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
+  }
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  if (new URL(req.url).searchParams.get('untuk') === 'cetak') return getDirekturUntukCetak(req, session)
 
   const mati = await realisasiMati(session.role)
   if (mati) return mati

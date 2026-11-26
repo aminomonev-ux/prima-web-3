@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DownloadButton from '@/components/ui/DownloadButton'
 import type { DpaBaris, PergeseranBaris } from '@/types'
-import type { PejabatDokumen } from '@/lib/blud/export/dpa-dokumen'
+import { bacaJawabanDirektur, direkturUntukBerkas, kalimatTtdCetak, viewBertandaTangan, type InfoTtdCetak } from '@/lib/blud/ttd-cetak'
 import { catatanVersi, type TutupPergeseran } from '@/lib/blud/tutup-pergeseran'
 import type { MutasiInput } from '@/lib/blud/mutasi'
 import { catatanBabak, keBabak } from '@/lib/blud/perubahan'
@@ -182,6 +182,10 @@ export default function CetakClient() {
   const CURRENT_YEAR = new Date().getFullYear()
   const [tahun, setTahun] = useState<number>(CURRENT_YEAR)
   const [tahunList, setTahunList] = useState<number[]>([])
+  // Penanda tangan Direktur — dimuat SEKALI per tahun; yang tercetak = yang tampil di bawah
+  // tombol unduh (CONCEPT-blud-pejabat-penanda-tangan §3.2).
+  const [ttd, setTtd] = useState<{ tahun: number; info: InfoTtdCetak } | null>(null)
+  const infoTtd = ttd?.tahun === tahun ? ttd.info : null
 
   // Reset view+state saat menu berubah — pakai handler (bukan effect)
   // untuk hindari cascading render (react-hooks/set-state-in-effect).
@@ -199,6 +203,24 @@ export default function CetakClient() {
     setTanggal('')
     setHistoryList([])
   }, [])
+
+  useEffect(() => {
+    const ctrl = new AbortController()
+    ;(async () => {
+      let info: InfoTtdCetak
+      try {
+        const r = await fetch(`/api/blud/pejabat?untuk=cetak&tahun=${tahun}`, { signal: ctrl.signal })
+        let j = null
+        try { j = await r.json() } catch { /* jawaban bukan JSON */ }
+        info = bacaJawabanDirektur(r.status, j)
+      } catch {
+        if (ctrl.signal.aborted) return
+        info = { keadaan: 'gagal', sebab: 'sambungan ke server terputus' }
+      }
+      setTtd({ tahun, info })
+    })()
+    return () => ctrl.abort()
+  }, [tahun])
 
   // Load daftar tahun sekali di mount (union DPA+Pergeseran).
   useEffect(() => {
@@ -366,39 +388,24 @@ export default function CetakClient() {
   }, [menu, view, tanggal, historyVersi, renderedData])
 
   // ── Action: PDF ──
-  /**
-   * Direktur ikut tercetak di blok tanda tangan. Diambil best-effort: endpoint
-   * pejabat dijaga izin menu `pengaturan` + kill-switch realisasi, sedangkan
-   * yang mencetak DPA belum tentu memegang keduanya. Kalau gagal, blok Direktur
-   * ikut dicetak kosong seperti blok Dewan Pengawas — bukan alasan membatalkan
-   * unduhan.
-   */
-  const ambilDirektur = useCallback(async (th: number): Promise<PejabatDokumen | null> => {
-    try {
-      const r = await fetch(`/api/blud/pejabat?tahun=${th}`)
-      if (!r.ok) return null
-      const j = await r.json() as {
-        ok?: boolean
-        data?: Array<{ jabatan: string; nama: string; nip: string | null; pangkat?: string | null; jabatan_teks?: string | null }>
-      }
-      if (!j.ok || !Array.isArray(j.data)) return null
-      const d = j.data.find(p => p.jabatan === 'DIREKTUR')
-      // Semua isian Pengaturan ikut: nama, NIP, pangkat, dan bunyi jabatan yang dicetak.
-      return d?.nama ? { nama: d.nama, nip: d.nip ?? null, pangkat: d.pangkat ?? null, jabatan: d.jabatan_teks ?? null } : null
-    } catch {
-      return null
-    }
-  }, [])
+  // Direktur dari Pengaturan, dimuat di atas. Kosong/gagal → blok Direktur bergaris (diisi
+  // tangan) seperti blok Dewan Pengawas — bukan alasan membatalkan unduhan.
+  const direktur = direkturUntukBerkas(infoTtd)
+  const ttdBelumSiap = useCallback(() => {
+    if (!viewBertandaTangan(view, hanyaBergeser) || infoTtd) return false
+    toast.warning('Penanda tangan masih dimuat — tunggu sebentar, lalu unduh lagi.')
+    return true
+  }, [view, hanyaBergeser, infoTtd])
 
   // DPA, Pergeseran (penuh), dan Rekap PJ turun sebagai DOKUMEN dari baris mentah (pohon,
   // tanda tangan); sisanya lewat eksporter generik (CONCEPT-blud-format-unduhan §7).
   const onPdf = useCallback(async () => {
     if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
+    if (ttdBelumSiap()) return
     const ada = Array.isArray(rawRows) && rawRows.length > 0
     try {
       if (ada && (view === 'dpa' || view === 'penanggungJawab' || (view === 'rekapPergeseran' && !hanyaBergeser))) {
         const pdf = await import('@/lib/blud/export/pdf-dokumen')
-        const direktur = await ambilDirektur(tahun)
         if (view === 'penanggungJawab') {
           await pdf.exportRekapPjPdf({
             tahun, versi: rawVersi, direktur, sumber: menu === 'pergeseran' ? 'pergeseran' : 'dpa',
@@ -423,7 +430,7 @@ export default function CetakClient() {
     } catch (e) {
       toast.error('Berkas PDF gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, rawKonteksPj, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
+  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, rawKonteksPj, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, direktur, ttdBelumSiap])
 
 
   // ── Action: Excel ──
@@ -431,6 +438,7 @@ export default function CetakClient() {
   // lewat penyusunnya sendiri; Master Akun & daftar tersaring lewat eksporter generik.
   const onExcel = useCallback(async () => {
     if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
+    if (ttdBelumSiap()) return
     const dokumenDpa = menu === 'dpa' && view === 'dpa'
     const dokumenPerubahan = menu === 'dpa' && view === 'dpaPerubahan'
     // Saringan aktif → JANGAN lewat eksporter dokumen. Berkas itu membangun
@@ -443,7 +451,6 @@ export default function CetakClient() {
       if ((dokumenDpa || dokumenPerubahan || dokumenPergeseran) && Array.isArray(rawRows) && rawRows.length) {
         const { exportDpaDokumen, exportDpaPerubahanDokumen, exportPergeseranDokumen } =
           await import('@/lib/blud/export/dpa-dokumen')
-        const direktur = await ambilDirektur(tahun)
         if (dokumenDpa) {
           // Ringkas: tata letak DPA murni, kop "DPA PERUBAHAN KE-n" kalau versinya Perubahan.
           await exportDpaDokumen({
@@ -464,7 +471,7 @@ export default function CetakClient() {
       if (view === 'penanggungJawab' && Array.isArray(rawRows) && rawRows.length) {
         const { exportRekapPjDokumen } = await import('@/lib/blud/export/rekap-pj-dokumen')
         await exportRekapPjDokumen({
-          tahun, versi: rawVersi, direktur: await ambilDirektur(tahun),
+          tahun, versi: rawVersi, direktur,
           sumber: menu === 'pergeseran' ? 'pergeseran' : 'dpa', rows: rawRows as DpaBaris[] | PergeseranBaris[],
           konteks: rawKonteksPj,
         })
@@ -480,7 +487,7 @@ export default function CetakClient() {
     } catch (e) {
       toast.error('Berkas Excel gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, rawSimpanan, rawKonteksPj, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
+  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, rawSimpanan, rawKonteksPj, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, direktur, ttdBelumSiap])
 
   const adaBaris = Array.isArray(renderedData) && renderedData.length > 0
 
@@ -528,6 +535,10 @@ export default function CetakClient() {
         [data-theme="light"] input.cetak-select[type="date"] { color-scheme: light; }
 
         .cetak-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+        /* Siapa yang menandatangani unduhan — baris sendiri di bawah tombol (CONCEPT-blud-pejabat-penanda-tangan §3.2). */
+        .cetak-ttd-info { grid-column: 1 / -1; font-size: 11.5px; color: #85B7EB; line-height: 1.5; }
+        .cetak-ttd-info.tp-ingat { font-size: 12px; }
+        [data-theme="light"] .cetak-ttd-info:not(.tp-ingat) { color: #5B7392; }
 
         /* Rendered table area — base color biar h4 title + audit panel strong (color:inherit) kebaca di dark */
         .cetak-render { margin-top: 6px; overflow-x: auto; color: #E6F1FB; }
@@ -680,6 +691,10 @@ export default function CetakClient() {
             <DownloadButton variant="pdf" label="PDF" onClick={onPdf} disabled={!adaBaris} />
             <DownloadButton variant="excel" label="Excel" onClick={onExcel} disabled={!adaBaris} />
           </div>
+          {viewBertandaTangan(view, hanyaBergeser) && (() => {
+            const k = kalimatTtdCetak(infoTtd, tahun)
+            return <div className={`cetak-ttd-info${k.peringatan ? ' tp-ingat' : ''}`} role="status">{k.teks}</div>
+          })()}
         </div>
       </div>
 

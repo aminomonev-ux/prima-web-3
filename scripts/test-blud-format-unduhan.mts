@@ -278,7 +278,9 @@ bab('G. Tanda tangan = isian Pengaturan (nama, NIP, pangkat, bunyi jabatan)')
   const fsx = await import('node:fs')
   const cetak = fsx.readFileSync(new URL('../app/(dashboard)/blud/cetak/cetak-client.tsx', import.meta.url), 'utf8')
   cek('G5 layar Cetak mengambil pangkat & bunyi jabatan dari /api/blud/pejabat',
-    cetak.includes('pangkat: d.pangkat ?? null, jabatan: d.jabatan_teks ?? null'))
+    // Pemetaan jawaban → PejabatTtd pindah ke lib/blud/ttd-cetak.ts (CONCEPT-blud-pejabat-penanda-tangan §3.1).
+    fsx.readFileSync(new URL('../lib/blud/ttd-cetak.ts', import.meta.url), 'utf8').includes('pangkat: d.pangkat ?? null, jabatan: d.jabatan_teks ?? null')
+    && cetak.includes('bacaJawabanDirektur(r.status, j)'))
 }
 
 // ─── F. Sumber gaya satu ─────────────────────────────────────────────────────
