@@ -52,6 +52,8 @@ export type ReferensiIsian = {
   harga: number | null;
   tgl_cek: string | null;
   file_id: string | null;
+  /** Jejak salinan dari Penawaran Rekanan (CONCEPT-bba-revamp-alur §5A.2) — hanya untuk lencana & tautan "lihat surat". */
+  penawaran_item_id?: number | null;
 };
 
 /** Referensi yang ikut dihitung "Ref n/3" dan ringkasan harga: berharga DAN berbukti (tautan atau berkas). */
@@ -139,6 +141,7 @@ export function rapikanReferensi(daftar: readonly ReferensiIsian[]): ReferensiIs
       harga: r.harga != null && r.harga > 0 ? r.harga : null,
       tgl_cek: teks(r.tgl_cek),
       file_id: teks(r.file_id),
+      ...(r.penawaran_item_id ? { penawaran_item_id: r.penawaran_item_id } : {}),
     }))
     .filter((r) => r.nama_penyedia || r.merk_tipe || r.url || r.harga != null || r.tgl_cek || r.file_id);
 }

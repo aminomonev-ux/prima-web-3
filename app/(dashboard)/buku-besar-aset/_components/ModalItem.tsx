@@ -30,6 +30,7 @@ import PilihBarang, { type PilihanBarang } from './PilihBarang';
 import PilihSasaran from './PilihSasaran';
 import KartuBarang from './KartuBarang';
 import GarisTahap from './GarisTahap';
+import AmbilPenawaran from './AmbilPenawaran';
 import { tahapRencana } from '@/lib/bba/tahap';
 
 export type TabItem = 'data' | 'ref' | 'bukti';
@@ -138,6 +139,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   const [muatan, setMuatan] = useState<Muatan | null>(null);
   const [isian, setIsian] = useState<IsianItem>(() => isianKosong(tahun));
   const [refs, setRefs] = useState<ReferensiIsian[]>([]);
+  const [ambilBuka, setAmbilBuka] = useState(false);
   const [bukti, setBukti] = useState<BbaBukti[]>([]);
   const [dasar, setDasar] = useState<Dasar>(() => ({ isian: isianKosong(tahun), refs: [] }));
   const [galatMuat, setGalatMuat] = useState('');
@@ -318,6 +320,11 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   return (
     <div onClick={tutup} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
       <style>{MI_CSS}</style>
+      {ambilBuka && isian.barang && 'id' in isian.barang && (
+        <AmbilPenawaran c={c} barangId={isian.barang.id} barangNama={isian.barang.nama} sisa={MAKS_REFERENSI - refs.length}
+          sudah={new Set(refs.map(r => r.penawaran_item_id).filter((x): x is number => !!x))} onTutup={() => setAmbilBuka(false)}
+          onPakai={baru => { setRefs(rs => [...rs, ...baru].slice(0, MAKS_REFERENSI)); setAmbilBuka(false); toast.success(`${baru.length} penawaran disalin ke referensi — tersimpan saat Simpan.`); }} />
+      )}
       <div onClick={e => e.stopPropagation()} className="bba-mi-kotak" style={{ background: c.card, color: c.text, border: `1px solid ${c.border}` }}>
         {/* Kepala */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: `1px solid ${c.border}` }}>
@@ -500,7 +507,12 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                       {isUsulan && <div style={{ fontSize: 11.5, color: c.sub }}>Harga baris usulan terkunci — referensi di sini menjadi pembanding.</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <PrimaButton variant="purple" size="sm" disabled={refs.length >= MAKS_REFERENSI} data-tooltip={refs.length >= MAKS_REFERENSI ? `Paling banyak ${MAKS_REFERENSI} referensi` : undefined} onClick={() => setRefs(rs => [...rs, refBaru()])}>+ Referensi</PrimaButton>
+                      <PrimaButton variant="purple" size="sm" disabled={refs.length >= MAKS_REFERENSI} data-tooltip={refs.length >= MAKS_REFERENSI ? `Paling banyak ${MAKS_REFERENSI} referensi` : undefined} onClick={() => setRefs(rs => [...rs, refBaru()])}>+ Ketik manual</PrimaButton>
+                      {(() => {
+                        const brg = isian.barang && 'id' in isian.barang ? isian.barang : null;
+                        const sebab = !brg ? 'Pilih barang dulu di tab Data item — penawaran dicari per barang.' : refs.length >= MAKS_REFERENSI ? `Paling banyak ${MAKS_REFERENSI} referensi` : null;
+                        return <PrimaButton variant="purple" size="sm" disabled={!!sebab} data-tooltip={sebab ?? undefined} onClick={() => setAmbilBuka(true)}>Ambil dari penawaran</PrimaButton>;
+                      })()}
                       {!isUsulan && <>
                         <PrimaButton variant="ghost" size="sm" disabled={!ringkas} onClick={() => ringkas && setIsian({ ...isian, harga: ringkas.terendah })}>Pakai terendah</PrimaButton>
                         <PrimaButton variant="ghost" size="sm" disabled={!ringkas} onClick={() => ringkas && setIsian({ ...isian, harga: ringkas.rata })}>Pakai rata-rata</PrimaButton>

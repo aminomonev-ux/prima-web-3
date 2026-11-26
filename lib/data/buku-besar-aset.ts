@@ -57,8 +57,9 @@ export class BbaBarangKembarError extends Error {
 /** Pemakai barang yang disebut di pesan hapus (≤ 5 per jenis) — layar menjadikannya tautan (CONCEPT-bba-revamp-alur §5.3). */
 export type PemakaiBarang = { jenis: 'RENCANA'; kode: string; tahun: number } | { jenis: 'ASET'; kode: string; barang_id: number };
 export class BbaBarangDipakaiError extends Error {
-  constructor(item: number, pendataan = 0, aset = 0, public pemakai: PemakaiBarang[] = []) {
-    const dipakai = [item > 0 ? `${item} item` : '', pendataan > 0 ? `${pendataan} pendataan eksisting lama` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
+  constructor(item: number, pendataan = 0, aset = 0, penawaran = 0, public pemakai: PemakaiBarang[] = []) {
+    const dipakai = [item > 0 ? `${item} item` : '', pendataan > 0 ? `${pendataan} pendataan eksisting lama` : '', aset > 0 ? `${aset} aset di Buku Aset` : '',
+      penawaran > 0 ? `${penawaran} item penawaran rekanan` : ''].filter(Boolean).join(', ');
     super(`Barang ini dipakai ${dipakai}. Gabungkan ke barang lain dulu (tombol Gabungkan), baru barangnya hilang dari daftar.`);
     this.name = 'BbaBarangDipakaiError';
   }
@@ -370,7 +371,7 @@ export interface BbaDetail { item: BbaRow; referensi: ReferensiIsian[]; bukti: B
 
 export async function listReferensi(asetId: number, q: Penanya = sql): Promise<ReferensiIsian[]> {
   const rows = await q`
-    SELECT sumber, nama_penyedia, merk_tipe, url, harga, DATE_FORMAT(tgl_cek, '%Y-%m-%d') AS tgl_cek, file_id
+    SELECT sumber, nama_penyedia, merk_tipe, url, harga, DATE_FORMAT(tgl_cek, '%Y-%m-%d') AS tgl_cek, file_id, penawaran_item_id
     FROM bba_referensi_harga WHERE aset_id = ${asetId} ORDER BY urutan ASC, id ASC
   ` as Record<string, unknown>[];
   return rows.map(r => ({
@@ -381,6 +382,7 @@ export async function listReferensi(asetId: number, q: Penanya = sql): Promise<R
     harga: r.harga == null ? null : Number(r.harga),
     tgl_cek: r.tgl_cek as string | null,
     file_id: r.file_id as string | null,
+    ...(r.penawaran_item_id != null ? { penawaran_item_id: Number(r.penawaran_item_id) } : {}),
   }));
 }
 
@@ -443,11 +445,11 @@ export async function pastikanBerkasBba(q: Penanya, fileIds: (string | null | un
   if (rows.length !== unik.length) throw new BbaBerkasTidakDikenalError();
 }
 
-const KOLOM_REFERENSI = ['aset_id', 'urutan', 'sumber', 'nama_penyedia', 'merk_tipe', 'url', 'harga', 'tgl_cek', 'file_id'] as const;
+const KOLOM_REFERENSI = ['aset_id', 'urutan', 'sumber', 'nama_penyedia', 'merk_tipe', 'url', 'harga', 'tgl_cek', 'file_id', 'penawaran_item_id'] as const;
 
 const isianReferensi = (input: ReferensiInput[]): ReferensiIsian[] => rapikanReferensi(input.map(r => ({
   sumber: r.sumber, nama_penyedia: r.nama_penyedia ?? null, merk_tipe: r.merk_tipe ?? null, url: r.url ?? null,
-  harga: r.harga ?? null, tgl_cek: r.tgl_cek ?? null, file_id: r.file_id ?? null,
+  harga: r.harga ?? null, tgl_cek: r.tgl_cek ?? null, file_id: r.file_id ?? null, penawaran_item_id: r.penawaran_item_id ?? null,
 })));
 
 /** Hapus-lalu-tulis-ulang, di transaksi pemanggil (sesudah CAS item). Larik kosong = mengosongkan dengan sengaja. */
@@ -457,9 +459,13 @@ async function gantiReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: nu
 
 export async function tulisReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: number, daftar: ReferensiIsian[]): Promise<void> {
   await pastikanBerkasBba(q, daftar.map(r => r.file_id));
+  // L68 soft-FK: jejak penawaran yang suratnya sudah dihapus dilepas (referensinya salinan, tetap sah) — bukan ditolak.
+  const jejak = [...new Set(daftar.map(r => r.penawaran_item_id).filter((x): x is number => !!x))];
+  const ada = jejak.length ? new Set((await q`SELECT id FROM bba_penawaran_item WHERE id IN (${jejak})` as Array<{ id: number }>).map(x => Number(x.id))) : new Set<number>();
   await q`DELETE FROM bba_referensi_harga WHERE aset_id = ${asetId}`;
   await bulkInsert('bba_referensi_harga', KOLOM_REFERENSI, daftar.map((r, i) => [
     asetId, i + 1, r.sumber, r.nama_penyedia, r.merk_tipe ?? null, r.url, r.harga, r.tgl_cek, r.file_id,
+    r.penawaran_item_id && ada.has(r.penawaran_item_id) ? r.penawaran_item_id : null,
   ]), conn);
 }
 
@@ -760,8 +766,8 @@ export async function salinTahunLalu(input: SalinTahunLaluInput, userId: number)
     ]), conn);
     const ids = salin.map(r => r.id);
     await tx`
-      INSERT INTO bba_referensi_harga (aset_id, urutan, sumber, nama_penyedia, merk_tipe, url, harga, tgl_cek, file_id)
-      SELECT n.id, r.urutan, r.sumber, r.nama_penyedia, r.merk_tipe, r.url, r.harga, r.tgl_cek, r.file_id
+      INSERT INTO bba_referensi_harga (aset_id, urutan, sumber, nama_penyedia, merk_tipe, url, harga, tgl_cek, file_id, penawaran_item_id)
+      SELECT n.id, r.urutan, r.sumber, r.nama_penyedia, r.merk_tipe, r.url, r.harga, r.tgl_cek, r.file_id, r.penawaran_item_id
       FROM bba_referensi_harga r JOIN buku_besar_aset n ON n.asal_rencana_id = r.aset_id AND n.tahun_anggaran = ${input.tahun}
       WHERE r.aset_id IN (${ids})
     `;
@@ -1046,15 +1052,16 @@ export async function hapusBarang(id: number): Promise<{ nama: string } | null> 
     const dipakai = await tx`
       SELECT (SELECT COUNT(*) FROM buku_besar_aset WHERE barang_id = ${id}) AS item,
              (SELECT COUNT(*) FROM bba_eksisting WHERE barang_id = ${id}) AS pendataan,
-             (SELECT COUNT(*) FROM bba_aset WHERE barang_id = ${id}) AS aset
-    ` as Array<{ item: number; pendataan: number; aset: number }>;
-    const item = Number(dipakai[0]?.item ?? 0), pendataan = Number(dipakai[0]?.pendataan ?? 0), aset = Number(dipakai[0]?.aset ?? 0);
-    if (item > 0 || pendataan > 0 || aset > 0) {
+             (SELECT COUNT(*) FROM bba_aset WHERE barang_id = ${id}) AS aset,
+             (SELECT COUNT(*) FROM bba_penawaran_item WHERE barang_id = ${id}) AS penawaran
+    ` as Array<{ item: number; pendataan: number; aset: number; penawaran: number }>;
+    const item = Number(dipakai[0]?.item ?? 0), pendataan = Number(dipakai[0]?.pendataan ?? 0), aset = Number(dipakai[0]?.aset ?? 0), penawaran = Number(dipakai[0]?.penawaran ?? 0);
+    if (item > 0 || pendataan > 0 || aset > 0 || penawaran > 0) {
       const [ri, ra] = await Promise.all([
         tx`SELECT canonical_id, tahun_anggaran FROM buku_besar_aset WHERE barang_id = ${id} ORDER BY tahun_anggaran DESC, canonical_id LIMIT 5`,
         tx`SELECT register, nama_resmi FROM bba_aset WHERE barang_id = ${id} ORDER BY id LIMIT 5`,
       ]) as [Array<{ canonical_id: string; tahun_anggaran: number }>, Array<{ register: string | null; nama_resmi: string }>];
-      throw new BbaBarangDipakaiError(item, pendataan, aset, [
+      throw new BbaBarangDipakaiError(item, pendataan, aset, penawaran, [
         ...ri.map(x => ({ jenis: 'RENCANA' as const, kode: String(x.canonical_id), tahun: Number(x.tahun_anggaran) })),
         ...ra.map(x => ({ jenis: 'ASET' as const, kode: x.register ? `reg. ${x.register}` : String(x.nama_resmi), barang_id: id })),
       ]);
@@ -1091,6 +1098,8 @@ export async function gabungBarang(dari: number, ke: number, userId: number): Pr
       FROM bba_aset WHERE barang_id = ${dari}
     `;
     await tx`UPDATE bba_aset SET barang_id = ${ke}, version = version + 1, updated_by = ${userId} WHERE barang_id = ${dari}`;
+    // Penawaran rekanan ikut pindah — barangnya juga dirujuk dari sana (CONCEPT-bba-revamp-alur §5A.3, L69).
+    await tx`UPDATE bba_penawaran_item SET barang_id = ${ke} WHERE barang_id = ${dari}`;
     // Asal yang sudah tercatat (gabungan sebelumnya) dipertahankan: menandai berlebih lebih aman daripada lolos.
     const resE = await tx`
       UPDATE bba_eksisting SET barang_id = ${ke}, digabung_dari = COALESCE(digabung_dari, ${nama.get(dari)!}), digabung_pada = NOW()

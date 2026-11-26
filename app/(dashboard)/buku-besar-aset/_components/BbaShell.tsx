@@ -9,8 +9,8 @@ import FloatingDock from '@/components/ui/FloatingDock';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import SpandukLihat from '@/components/ui/SpandukLihat';
 import type { InfoBeku } from '@/lib/security/beku';
-import { LABEL_MENU_BBA, type MenuBba } from '@/lib/bba/peran';
-import BbaNav, { navDockBba, type PetaIzinLayar } from './BbaNav';
+import { LABEL_MENU_BBA } from '@/lib/bba/peran';
+import BbaNav, { navDockBba, bolehUbahPenawaran, type PetaIzinLayar, type HalamanBba } from './BbaNav';
 import type { PindahPita } from './PitaAlur';
 
 export function warnaBba(isLight: boolean) {
@@ -27,7 +27,7 @@ type AksiDock = { icon: ReactNode; label: string; onClick: () => void };
 
 type Props = {
   username: string; role: string; themePreference: 'dark' | 'light';
-  beku: InfoBeku; izin: PetaIzinLayar; aktif: MenuBba;
+  beku: InfoBeku; izin: PetaIzinLayar; aktif: HalamanBba;
   /** Teks kecil di kepala sesudah "Buku Besar Aset /". */
   remah: string;
   aksiDock?: AksiDock[];
@@ -57,7 +57,9 @@ export default function BbaShell({ username, role, themePreference, beku, izin, 
       <div style={{ padding: '24px 28px 100px' }}>
         <BbaNav aktif={aktif} peta={izin} c={c} tahun={tahunPita} segarkan={segarkanPita} pindah={pindahPita} />
         <SpandukBeku {...beku}/>
-        {izin[aktif] === 'LIHAT' && aktif !== 'cetak' && <SpandukLihat label={LABEL_MENU_BBA[aktif]} />}
+        {aktif === 'penawaran'
+          ? !bolehUbahPenawaran(izin) && <SpandukLihat label="Penawaran" />
+          : izin[aktif] === 'LIHAT' && aktif !== 'cetak' && <SpandukLihat label={LABEL_MENU_BBA[aktif]} />}
         {children(c)}
       </div>
       <FloatingDock isLight={isLight} limelight nav={navDockBba(izin, aktif, href => router.push(href))} actions={aksiDock} />

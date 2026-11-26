@@ -76,6 +76,7 @@ export const ReferensiSchema = z.object({
   harga:         z.number().min(0).nullish(),
   tgl_cek:       TanggalSchema.nullish(),
   file_id:       FileIdSchema.nullish(),
+  penawaran_item_id: z.number().int().positive().nullish(),
 }).refine(r => !!(r.nama_penyedia || r.merk_tipe || r.url || r.harga || r.tgl_cek || r.file_id), 'Referensi harga kosong');
 
 // L87: `undefined` = jangan sentuh referensi tersimpan; larik (termasuk kosong) = ganti semua.
