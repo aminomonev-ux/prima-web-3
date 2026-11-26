@@ -78,6 +78,18 @@ export async function uploadBufferToDrive(opts: {
   return { fileId: res.data.id ?? '', name: res.data.name ?? opts.name, size: Number.isFinite(size) ? size : null };
 }
 
+/**
+ * Timpa ISI berkas yang sudah ada (laporan yang diperbarui berkala, CONCEPT-bba-revamp-alur §5B.2) — folder tetap
+ * berisi satu berkas per jenis; Drive menyimpan riwayat revisinya sendiri ("Kelola versi").
+ */
+export async function perbaruiBerkasDrive(opts: { fileId: string; buffer: Buffer; mimeType: string }): Promise<{ fileId: string; size: number | null }> {
+  const stream = new PassThrough();
+  stream.end(opts.buffer);
+  const res = await getDriveClient().files.update({ fileId: opts.fileId, media: { mimeType: opts.mimeType, body: stream }, fields: 'id,size' }, { timeout: BATAS_WAKTU_DRIVE_MS });
+  const size = res.data.size == null ? null : Number(res.data.size);
+  return { fileId: res.data.id ?? opts.fileId, size: Number.isFinite(size) ? size : null };
+}
+
 /** Akun & kuota token yang terpasang. `batas` null = tanpa batas (Workspace). */
 export async function infoKuota(): Promise<{ email: string | null; terpakai: number | null; batas: number | null }> {
   const r = await getDriveClient().about.get({ fields: 'user(emailAddress),storageQuota(limit,usage)' }, { timeout: BATAS_WAKTU_DRIVE_MS });

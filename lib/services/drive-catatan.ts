@@ -9,7 +9,7 @@
 // belum dijalankan) tidak pernah menggagalkan unggahan.
 import { createHash } from 'node:crypto';
 import { sql } from '@/lib/data/db';
-import { jenisGalatDrive, uploadBufferToDrive } from '@/lib/services/drive';
+import { jenisGalatDrive, uploadBufferToDrive, perbaruiBerkasDrive, cariAtauBuatFolder, kodeGalatDrive } from '@/lib/services/drive';
 import { folderUntuk, type DriveTujuan } from '@/lib/services/drive-tujuan';
 
 /** Pesan galat dipotong — kolomnya VARCHAR(255), dan pesan Google bisa memuat isi respons panjang. */
@@ -67,6 +67,36 @@ export async function unggahKeTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; n
       catatKesehatan(tujuan),
     ]);
     return { ...hasil, folderId };
+  } catch (e) {
+    if (!(e instanceof FolderBelumDiaturError)) await catatKesehatan(tujuan, e);
+    throw e;
+  }
+}
+
+/**
+ * Unggah-atau-timpa untuk laporan berkala (CONCEPT-bba-revamp-alur §5B.2): `fileId` lama ditimpa di tempat; hilang/terhapus
+ * (404) → dibuat baru. `subfolder` = folder di dalam folder tujuan (mis. per tahun), dibuat bila belum ada. Berkas BARU
+ * masuk manifest `drive_arsip`; kesehatan dicatat dua-duanya.
+ */
+export async function timpaDiTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; name: string; mimeType: string; fileId?: string | null; subfolder?: string }): Promise<{ fileId: string; baru: boolean }> {
+  try {
+    const akar = await folderUntuk(tujuan);
+    if (!akar) throw new FolderBelumDiaturError(tujuan);
+    const folderId = o.subfolder ? (await cariAtauBuatFolder(akar, o.subfolder)).id : akar;
+    if (o.fileId) {
+      try {
+        const h = await perbaruiBerkasDrive({ fileId: o.fileId, buffer: o.buffer, mimeType: o.mimeType });
+        await catatKesehatan(tujuan);
+        return { fileId: h.fileId, baru: false };
+      } catch (e) { if (kodeGalatDrive(e) !== 404) throw e; }
+    }
+    const h = await uploadBufferToDrive({ buffer: o.buffer, name: o.name, mimeType: o.mimeType, folderId });
+    if (!h.fileId) throw new Error('Drive tidak mengembalikan id berkas.');
+    await Promise.all([
+      catatArsip({ tujuan, fileId: h.fileId, nama: h.name, ukuran: h.size, sha256: createHash('sha256').update(o.buffer).digest('hex'), folderId }),
+      catatKesehatan(tujuan),
+    ]);
+    return { fileId: h.fileId, baru: true };
   } catch (e) {
     if (!(e instanceof FolderBelumDiaturError)) await catatKesehatan(tujuan, e);
     throw e;

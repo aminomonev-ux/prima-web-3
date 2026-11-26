@@ -19,6 +19,7 @@ import type { PetaIzinLayar } from '../_components/BbaNav';
 import ModalItem, { type TabItem } from '../_components/ModalItem';
 import { ModalTandaiDipesan, ModalCatatDatang, langkahMundur } from '../_components/ModalPesan';
 import PanelRiwayat from '../_components/PanelRiwayat';
+import { TombolUnduhBuku } from '../_components/UnduhBuku';
 import GarisTahap from '../_components/GarisTahap';
 import MenuBaris, { type ButirMenu } from '../_components/MenuBaris';
 
@@ -118,6 +119,7 @@ export default function PengadaanClient({ username, role, themePreference, beku,
             <input type="number" aria-label="Tahun anggaran" value={tahun} min={2020} max={2100} onChange={e => setTahun(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void muat(); }} style={{ ...inp, width: 90, fontFamily: MONO }} />
             <PrimaButton variant="ghost" iconLeft={<RefreshCw size={14} />} disabled={memuat} onClick={() => void muat()}>{memuat ? 'Memuat…' : 'Tampilkan'}</PrimaButton>
+            <TombolUnduhBuku tahun={data.tahun} lembar="Pengadaan" />
             <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 360 }}>
               <Search size={14} style={{ position: 'absolute', left: 9, top: 9, color: c.sub }} />
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cari kode, uraian, barang" aria-label="Cari rencana" style={{ ...inp, width: '100%', paddingLeft: 28, boxSizing: 'border-box' }} />

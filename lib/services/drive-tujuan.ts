@@ -13,13 +13,14 @@ import { acquireBludLock } from '@/lib/data/locks';
 import { cariAtauBuatFolder } from '@/lib/services/drive';
 
 /** `salinan_lampiran` = salinan kedua lampiran semua modul, dibuat `scripts/backup-db.js` (konsep §20). */
-export const DRIVE_TUJUAN = ['backup_db', 'lkjip', 'lkjip_arsip', 'blud_json', 'bba', 'usulan', 'salinan_lampiran'] as const;
+/** `bba_laporan` = salinan otomatis laporan BBA (CONCEPT-bba-revamp-alur §5B) — terpisah dari bukti/surat di `bba`. */
+export const DRIVE_TUJUAN = ['backup_db', 'lkjip', 'lkjip_arsip', 'blud_json', 'bba', 'usulan', 'salinan_lampiran', 'bba_laporan'] as const;
 export type DriveTujuan = (typeof DRIVE_TUJUAN)[number];
 
 /** Subfolder di mode induk. `lkjip` & `lkjip_arsip` berbagi satu folder LKJIP. */
 export const FOLDER_TUJUAN = {
   backup_db: 'backup_db', lkjip: 'lkjip', lkjip_arsip: 'lkjip', blud_json: 'blud_json', bba: 'bba', usulan: 'usulan',
-  salinan_lampiran: 'salinan',
+  salinan_lampiran: 'salinan', bba_laporan: 'bba_laporan',
 } as const satisfies Record<DriveTujuan, string>;
 export type KunciFolder = (typeof FOLDER_TUJUAN)[DriveTujuan];
 
@@ -34,6 +35,7 @@ export const NAMA_SUBFOLDER: Record<KunciFolder, string> = {
   bba:       '04 Buku Besar Aset',
   usulan:    '05 Lampiran Usulan',
   salinan:   '06 Salinan Lampiran',
+  bba_laporan: '07 Laporan Buku Besar Aset',
 };
 
 /** `app_config` — ID subfolder yang sudah dibuat, terikat pada induknya. */
@@ -56,6 +58,8 @@ const ENV_TUJUAN: Record<DriveTujuan, { khusus: string | null; cadanganUmum: boo
   bba:         { khusus: 'GOOGLE_DRIVE_FOLDER_ID_BBA',       cadanganUmum: true },
   usulan:      { khusus: null,                               cadanganUmum: true },
   salinan_lampiran: { khusus: 'GOOGLE_DRIVE_FOLDER_ID_SALINAN', cadanganUmum: false },
+  // Hanya lewat folder induk: laporan yang ditimpa di tempat tidak boleh tercampur ke folder umum unggahan.
+  bba_laporan: { khusus: null, cadanganUmum: false },
 };
 
 export function folderIndukDariEnv(env: Env = process.env): string {

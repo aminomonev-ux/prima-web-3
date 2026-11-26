@@ -37,7 +37,7 @@ const envLengkap = {
 }
 const envUmum = { GOOGLE_DRIVE_FOLDER_ID: 'umum' }
 ok('A1 env khusus dipakai per tujuan', T.DRIVE_TUJUAN.every((t) => T.folderDariEnv(t, envLengkap) === ({
-  backup_db: 'backup', lkjip: 'lkjip', lkjip_arsip: 'lkjip', blud_json: 'blud', bba: 'bba', usulan: 'umum', salinan_lampiran: '',
+  backup_db: 'backup', lkjip: 'lkjip', lkjip_arsip: 'lkjip', blud_json: 'blud', bba: 'bba', usulan: 'umum', salinan_lampiran: '', bba_laporan: '',
 } as const)[t]))
 ok('A2 hanya folder umum: unggahan LKJIP/BBA/usulan ikut umum, arsip LKJIP/cadangan BLUD/backup TIDAK',
   T.folderDariEnv('lkjip', envUmum) === 'umum' && T.folderDariEnv('bba', envUmum) === 'umum' && T.folderDariEnv('usulan', envUmum) === 'umum'
@@ -48,7 +48,7 @@ ok('A4 folder induk membuat SEMUA tujuan terkonfigurasi (termasuk yang env-nya k
 ok('A5 tanpa induk & env: arsip LKJIP / cadangan BLUD belum terkonfigurasi', !T.terkonfigurasiDengan('', 'lkjip_arsip', envUmum) && !T.terkonfigurasiDengan('', 'blud_json', {}))
 ok('A6 lkjip & lkjip_arsip berbagi SATU subfolder', T.FOLDER_TUJUAN.lkjip === T.FOLDER_TUJUAN.lkjip_arsip)
 const namaFolder = Object.values(T.NAMA_SUBFOLDER)
-ok('A7 enam subfolder, nama unik & tiap tujuan punya nama', namaFolder.length === 6 && new Set(namaFolder).size === 6
+ok('A7 tujuh subfolder, nama unik & tiap tujuan punya nama', namaFolder.length === 7 && new Set(namaFolder).size === 7
   && T.DRIVE_TUJUAN.every((t) => !!T.NAMA_SUBFOLDER[T.FOLDER_TUJUAN[t]]))
 ok('A8 tujuan unggahan per modul', U.tujuanUnggahan('buku_besar_aset') === 'bba' && U.tujuanUnggahan('lkjip') === 'lkjip'
   && U.tujuanUnggahan('usulan_aset') === 'usulan' && U.tujuanUnggahan(null) === 'usulan')
@@ -114,7 +114,8 @@ const unggah = tanpaKomentar(baca('app/api/upload/route.ts'))
 ok('B3 /api/upload lewat unggahKeTujuan (folder + manifest + kesehatan)', unggah.includes('await unggahKeTujuan(tujuanUnggahan(modulAsal),') && !unggah.includes('uploadBufferToDrive(') && !unggah.includes('googleapis'))
 const unduh = tanpaKomentar(baca('app/api/upload/download/route.ts'))
 ok('B4 /api/upload/download memakai klien bersama', unduh.includes("import { getDriveClient, kodeGalatDrive } from '@/lib/services/drive'") && !unduh.includes('googleapis'))
-const versi = tanpaKomentar(baca('app/api/lkjip/[id]/versi/route.ts'))
+// Unggahan arsip versi pindah dari route ke lib/lkjip/arsip-versi.ts (Simpan Versi + Finalisasi memakai satu fungsi).
+const versi = tanpaKomentar(baca('lib/lkjip/arsip-versi.ts'))
 ok('B5 arsip versi LKJIP: tujuan lkjip_arsip, status tanpa menyentuh Drive', versi.includes("await tujuanTerkonfigurasi('lkjip_arsip')") && versi.includes("await unggahKeTujuan('lkjip_arsip',"))
 ok('B6 impor Word LKJIP: tujuan lkjip (bukan folder umum langsung)', tanpaKomentar(baca('app/api/lkjip/impor/route.ts')).includes("await unggahKeTujuan('lkjip',"))
 const cadangan = tanpaKomentar(baca('lib/blud/cadangan-json.ts'))

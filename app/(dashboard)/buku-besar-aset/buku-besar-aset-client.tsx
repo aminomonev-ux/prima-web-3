@@ -32,6 +32,7 @@ import GarisTahap from './_components/GarisTahap';
 import MenuBaris, { type ButirMenu } from './_components/MenuBaris';
 import LembarKeputusan, { LABEL_KURANG } from './_components/LembarKeputusan';
 import KartuPagu from './_components/KartuPagu';
+import { TombolUnduhBuku } from './_components/UnduhBuku';
 import { JENIS_RENCANA, LABEL_JENIS, LABEL_ANGGARAN, alasanTakBisaUbahAnggaran, type Anggaran } from '@/lib/bba/rencana';
 import {
   tahapRencana, kurangPertama, masukTabRencana, hitungTabRencana, TAB_RENCANA, LABEL_TAB_RENCANA, type TabRencana, type Kurang,
@@ -366,6 +367,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {bolehRencana && <PrimaButton variant="purple" data-rima="bba.tambah-item" onClick={bukaBaru}>+ Tambah rencana</PrimaButton>}
           {bolehRencana && <PrimaButton variant="ghost" data-rima="bba.tarik-usulan" onClick={openImportPreview} disabled={saving}><Download size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Tarik dari Usulan</PrimaButton>}
+          <TombolUnduhBuku tahun={tahun} lembar="Rencana" />
         </div>
       </div>
 

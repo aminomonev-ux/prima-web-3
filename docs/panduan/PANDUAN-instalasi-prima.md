@@ -807,6 +807,7 @@ dicabut, cadangan BLUD berhenti. **Tanpa satu pesan galat pun.**
 | `/api/cron/purge-retention` | menghapus data lewat masa simpan (UU PDP) | harian 08:40 |
 | `/api/cron/akses-kedaluwarsa` | mencabut akses berjangka yang habis + pengingat ≤ 3 hari | harian 08:30 |
 | `/api/cron/blud-cadangan-json` | mencadangkan foto simpanan BLUD ke Drive | harian 17:00 |
+| `/api/cron/bba-drive` | salinan laporan Buku Besar Aset (Rencana s.d. Pengadaan per tahun + KIB) ke folder "07 Laporan Buku Besar Aset"; hanya yang berubah & sudah diam 2 menit | tiap 5 menit |
 
 Backup database **bukan** salah satunya — ia skrip Node tersendiri (§14).
 
@@ -877,6 +878,8 @@ Pasang-CronPrima 'PRIMA - promotion complete' 'promotion-complete' `
   (New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650))
 Pasang-CronPrima 'PRIMA - promotion expire' 'promotion-expire' `
   (New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650))
+Pasang-CronPrima 'PRIMA - laporan BBA ke Drive' 'bba-drive' `
+  (New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650))
 ```
 
 Semua tugas ini tahan terlewat dan aman jalan dua kali (bertanya "mana yang sudah lewat",

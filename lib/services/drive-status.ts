@@ -10,6 +10,7 @@ export const LABEL_TUJUAN: Record<DriveTujuan, string> = {
   bba:         'Buku Besar Aset: bukti & referensi',
   usulan:      'Lampiran usulan',
   salinan_lampiran: 'Salinan kedua lampiran (Drive)',
+  bba_laporan: 'Buku Besar Aset: laporan Excel otomatis',
 };
 
 export type KodeUji = 'quota' | 'permission' | 'notfound' | 'token' | 'jaringan' | 'lain' | 'kosong' | 'lama_tak_terbaca';

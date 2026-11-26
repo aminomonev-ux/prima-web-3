@@ -21,6 +21,7 @@ import { Bingkai } from '../_components/AksiAset';
 import PilihBarang, { type PilihanBarang } from '../_components/PilihBarang';
 import { unggahBerkas, unduhBerkas } from '../_components/ModalItem';
 import MenuBaris from '../_components/MenuBaris';
+import { TombolUnduhBuku } from '../_components/UnduhBuku';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -79,10 +80,11 @@ export default function PenawaranClient({ username, role, themePreference, beku,
               <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Penawaran Rekanan</h1>
               <div style={{ fontSize: 12.5, color: c.sub }}>Gudang harga dari surat penawaran — disalin jadi referensi harga rencana lewat tombol &ldquo;Ambil dari penawaran&rdquo;.</div>
             </div>
-            {bolehUbah && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <PrimaButton variant="purple" onClick={() => setBuka({ surat: null })}>+ Catat surat penawaran</PrimaButton>
-              <PrimaButton variant="ghost" iconLeft={<Upload size={14} />} onClick={() => setImpor(true)}>Impor Excel</PrimaButton>
-            </div>}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {bolehUbah && <PrimaButton variant="purple" onClick={() => setBuka({ surat: null })}>+ Catat surat penawaran</PrimaButton>}
+              {bolehUbah && <PrimaButton variant="ghost" iconLeft={<Upload size={14} />} onClick={() => setImpor(true)}>Impor Excel</PrimaButton>}
+              <TombolUnduhBuku tahun={Number(hariIni.slice(0, 4))} lembar="Penawaran" />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
             <div role="tablist" aria-label="Tampilan penawaran" style={{ display: 'flex', gap: 6 }}>

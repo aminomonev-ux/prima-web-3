@@ -1,0 +1,30 @@
+// POST /api/cron/bba-drive — salinan otomatis laporan Buku Besar Aset ke Google Drive (docs/konsep/bba/CONCEPT-bba-revamp-alur.md §5B.3).
+// Jadwal: tiap 5 menit (crontab / MySQL EVENT kantor — BUKAN vercel.json). Auth: `Authorization: Bearer ${CRON_SECRET}`.
+// Berkas dikirim hanya bila isinya berubah DAN sudah diam 2 menit, jadi memanggilnya lebih sering tidak berakibat apa-apa;
+// laptop server yang mati semalam cukup dikejar oleh panggilan pertama sesudah menyala.
+// SENGAJA tidak memeriksa sakelar maintenance: sakelar menutup pintu PEMAKAI; menyalin laporan tetap diinginkan
+// (alasan yang sama dengan `blud-cadangan-json`).
+import { NextRequest, NextResponse } from 'next/server'
+import { writeAuditLog } from '@/lib/security/auditlog'
+import { verifyCronSecret } from '@/lib/security/cron-auth'
+import { kirimLaporanKeDrive } from '@/lib/data/bba-laporan'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+export async function POST(req: NextRequest) {
+  const auth = verifyCronSecret(req.headers.get('authorization'))
+  if (!auth.ok) return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
+  try {
+    const h = await kirimLaporanKeDrive(false)
+    // Dicatat hanya bila ada yang dikirim/gagal — 288 panggilan sehari yang tidak mengirim apa-apa bukan jejak yang berguna.
+    if (h.status === 'selesai' && (h.dikirim.length || h.gagal.length)) {
+      await writeAuditLog({ req, eventType: 'BBA_DRIVE_KIRIM', username: 'cron',
+        detail: `BBA laporan ke Drive (cron): ${h.dikirim.length} terkirim${h.gagal.length ? `, ${h.gagal.length} gagal — ${h.gagal.join(' · ')}` : ''}`.slice(0, 1000) })
+    }
+    return NextResponse.json({ ok: true, ...h })
+  } catch (e) {
+    console.error('[cron bba-drive]', e)
+    return NextResponse.json({ ok: false, message: 'Gagal mengirim laporan BBA ke Drive' }, { status: 500 })
+  }
+}

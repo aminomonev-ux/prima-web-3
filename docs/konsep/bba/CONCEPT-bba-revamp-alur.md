@@ -1,6 +1,6 @@
 # Konsep FINAL: Revamp alur Buku Besar Aset
 
-Status: **KONSEP FINAL** (2026-11-26), menunggu "eksekusi".
+Status: **DIKERJAKAN** (2026-11-26) — Tahap 1–6 selesai, catatan pelaksanaan di §11.
 Arah tampilan yang dipilih pemilik: **tabel bertahap (A) + lembar keputusan anggaran (D)**, dengan pagu yang bisa diambil dari DPA/Pergeseran BLUD.
 Ditambah menu **Penawaran Rekanan** (§5A) serta **Excel seragam + salinan otomatis ke Google Drive** (§5B). Tahap 1–4 & 6 nol migrasi. Tahap 5 (Penawaran) butuh satu migrasi (2 tabel + 1 kolom).
 
@@ -365,3 +365,34 @@ Arah ini dipertimbangkan tetapi tidak dipilih: B papan alur (kanban), C kotak ke
 
 - Penanda babak "Perubahan ke-n" untuk tahun yang belum punya penanda: diasumsikan berbunyi "murni" lewat `jenisSumberPagu`. Ini dicek di Tahap 2.
 - Pola kode belanja modal `5.2` dicek pada DPA 2026 laptop dev. Formulir DPA tahun lain bisa berkode lain; aturan cadangan "BELANJA MODAL" menutupinya, tetapi belum dicoba pada berkas lain.
+
+## 11. Catatan pelaksanaan (2026-11-26)
+
+| Tahap | Commit | Uji (lulus / mutan tertangkap) |
+|---|---|---|
+| 1 Tahap, pita, lembar keputusan, Menu ke lencana | `feat(bba): tahap rencana, pita alur…` | `test-bba-tahap.mts` 30 / 11 |
+| 2 Kartu pagu | `feat(bba): kartu pagu…` | `test-bba-pagu.mts` 20 / 9 |
+| 3–4 Pengadaan per tahap, Riwayat & batalkan, hapus berantai | `feat(bba): Pengadaan per tahap…` | `test-bba-riwayat.mts` 22 / 10 |
+| 5 Penawaran Rekanan | `feat(bba): Penawaran Rekanan…` | `test-bba-penawaran.mts` 26 / 11 |
+| 6 Unduh Excel + Drive | `feat(bba): unduh Excel seragam…` | `test-bba-laporan.mts` 26 / 9 |
+
+Semua uji memakai MySQL kotak pasir (tahun 2066–2070) dan tampilan diperiksa di peramban (tema terang & gelap, 375 px).
+
+**Yang berbeda dari rancangan, dan kenapa:**
+- **§5B.3 "tanda perlu dikirim"** tidak ditulis di jalur Simpan. Cron membandingkan SIDIK isi workbook (`sidikBahan`) dengan sidik
+  yang terakhir terkirim (`lib/bba/drive-kirim.ts`). BBA punya puluhan route tulis; satu yang lupa menandai = Drive basi tanpa
+  gejala (L69). Sidik juga menangkap penghapusan, yang luput dari `MAX(updated_at)`. Perilaku yang terlihat sama: jeda diam
+  2 menit, gagal Drive tidak menyentuh Simpan, tanda lepas hanya bila unggahan berhasil.
+- **§5.1 "hanya langkah teratas yang hidup"** tidak dipaksa lewat posisi. Tiap tombol memakai aturan lamanya, dan aturan itu sudah
+  menolak bila langkah di atasnya belum dibatalkan — hasilnya sama, tanpa aturan kedua.
+- **Pita alur kotak 4** menghitung unit belum dicatat untuk tahun yang dibuka, sedangkan antrean di Buku Aset memuat semua tahun.
+- **Penawaran** di bilah tab bukan bagian izin tersendiri: lihat = semua pemegang BBA, ubah = EDIT Rencana atau Pengadaan.
+- **Jejak penawaran yang suratnya sudah dihapus** dilepas saat referensi disimpan (bukan ditolak): referensinya salinan dan tetap sah.
+
+**Ikut dibereskan:** uji B5 `test-drive-terpusat.mts` basi sejak unggahan arsip LKJIP pindah ke `lib/lkjip/arsip-versi.ts`.
+
+**Belum dikerjakan / belum terverifikasi:**
+- §4.4 pagu per rekening — data rencana belum berkode rekening.
+- Drive SUNGGUHAN: diuji dengan Drive tiruan (create/update/404/403). Unggahan nyata baru terbukti sesudah folder induk diatur di
+  server kantor dan cron `bba-drive` dipasang (`docs/panduan/PANDUAN-instalasi-prima.md`).
+- §10 tetap berlaku (penanda babak untuk tahun tanpa Perubahan sudah diuji di kotak pasir; pola kode 5.2 baru dicoba pada data uji).

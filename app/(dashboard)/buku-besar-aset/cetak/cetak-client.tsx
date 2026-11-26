@@ -9,6 +9,8 @@ import { GOLONGAN, NAMA_GOLONGAN, JUDUL_KIB, type Golongan } from '@/lib/bba/kib
 import type { InfoBeku } from '@/lib/security/beku';
 import BbaShell, { type WarnaBba } from '../_components/BbaShell';
 import type { PetaIzinLayar } from '../_components/BbaNav';
+import { TombolUnduhBuku, StatusDriveBba } from '../_components/UnduhBuku';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const URL_EXCEL = '/api/buku-besar-aset/aset/excel';
@@ -59,6 +61,15 @@ export default function CetakClient({ username, role, themePreference, beku, izi
           <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 6, lineHeight: 1.6 }}>
             Bentuknya sama dengan ekspor sistem aset provinsi: kop, kepala tabel, nomor kolom, baris Jumlah, dan tanda tangan
             (diatur di Master → Pengaturan; penanggung jawab ruangan di Master → Ruangan). Hanya aset aktif; yang sudah dihapus tidak ikut.
+          </div>
+
+          <StatusDriveBba c={c} bolehKirim={bolehBatalkanFinal(role)} />
+          {judulBagian('RENCANA S.D. PENGADAAN')}
+          <div style={grid}>
+            <Kartu c={c} judul={`BBA ${tahunRencanaSah ? tahunRencana : '…'} — Rencana s.d. Pengadaan`} ket="Ringkasan · Rencana · Pengadaan · Penerimaan · Penawaran — format seragam, sama dengan salinan di Drive">
+              <input value={tahunRencana} onChange={e => setTahunRencana(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" aria-label="Tahun buku rencana" style={{ ...inp, width: 70, fontFamily: MONO }} />
+              {tahunRencanaSah ? <TombolUnduhBuku tahun={Number(tahunRencana)} lembar="Ringkasan" /> : <span style={{ fontSize: 11.5, color: c.sub }}>isi tahun</span>}
+            </Kartu>
           </div>
 
           {judulBagian('KARTU INVENTARIS BARANG')}
