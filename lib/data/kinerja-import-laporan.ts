@@ -15,6 +15,7 @@
 import ExcelJS from 'exceljs';
 import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
+import { adalahBarisHiasan, adalahBarisJudul } from '@/lib/shared/impor-tabel';
 
 export interface LaporanLeaf {
   keterangan: string;
@@ -125,6 +126,7 @@ function bacaSheet(grid: string[][], mentah: unknown[][], sheetName: string, war
   let barisHeader = -1;
   let peta: Peta | null = null;
   for (let r = 0; r < batas; r++) {
+    if (adalahBarisJudul(grid[r] ?? [])) continue;   // kop unduhan PRIMA (sel gabung)
     const p = petaKolomLaporan(grid[r] ?? []);
     if (p) { barisHeader = r; peta = p; break; }
   }
@@ -139,6 +141,7 @@ function bacaSheet(grid: string[][], mentah: unknown[][], sheetName: string, war
     const keterangan = sanitizeImportText(grid[r][peta.keterangan] ?? '').slice(0, MAXLEN_KET);
     if (!keterangan) continue;
     if (petaKolomLaporan(grid[r])) continue;                  // echo baris judul
+    if (adalahBarisHiasan(grid[r])) continue;                 // (1)(2)…, JUMLAH, catatan, tanda tangan
     if (out.length >= MAX_ROWS) break;
 
     const bulan_ke = bulanKeDariTeks(grid[r][peta.bulan] ?? '');

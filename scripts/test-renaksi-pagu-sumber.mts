@@ -101,17 +101,18 @@ console.log('E. PDF & Excel Cetak');
   const f = { ...DEFAULT_CETAK_FILTER, showSumberAnggaran: true };
   const wb = await buatWorkbookGabungan(rows, f);
   const ws = wb.worksheets[0];
-  const kepala = (ws.getRow(1).values as unknown[]).map(v => String(v ?? ''));
+  // Gaya resmi bersama: kop 1–6, kepala baris 7, nomor kolom (1)(2)… baris 8, data mulai 9.
+  const kepala = (ws.getRow(7).values as unknown[]).map(v => String(v ?? ''));
   const iSumber = kepala.indexOf('Sumber Dana');
   const teks: string[] = [];
   ws.eachRow(r => teks.push((r.values as unknown[]).map(v => String(v ?? '')).join('|')));
   ok('E1 Excel: kolom "Sumber Dana" tepat sesudah Anggaran', iSumber === kepala.indexOf('Anggaran (Rp)') + 1, kepala.join('|'));
   ok('E2 Excel: catatan "belum tertaut" di bawah tabel', teks.some(t => t.includes('Catatan: Pagu Rp 7 di bawah Kegiatan "K"')), teks.slice(-2).join(' / '));
   ok('E3 Excel bawaan (tanpa pilihan Sumber Dana) tidak berubah bentuk',
-    !((await buatWorkbookGabungan(rows, DEFAULT_CETAK_FILTER)).worksheets[0].getRow(1).values as unknown[]).includes('Sumber Dana'));
+    !((await buatWorkbookGabungan(rows, DEFAULT_CETAK_FILTER)).worksheets[0].getRow(7).values as unknown[]).includes('Sumber Dana'));
   const pdf = (await buildCombinedPdf(rows, 2099, f)).output();
   // Judul kolom sempit dibungkus autotable jadi dua potong teks.
-  ok('E4 PDF: catatan & kolom Sumber Dana ikut', pdf.includes('Catatan: Pagu Rp 7') && pdf.includes('(Sumber)') && pdf.includes('(BLUD 7)'));
+  ok('E4 PDF: catatan & kolom Sumber Dana ikut', pdf.includes('Catatan: Pagu Rp 7') && (pdf.includes('(Sumber Dana)') || pdf.includes('(Sumber)')) && pdf.includes('(BLUD 7)'));
 }
 
 // ── D. Sumber kode: satu penulis, satu pembaca ────────────────────────────────

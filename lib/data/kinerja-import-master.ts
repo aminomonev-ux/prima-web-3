@@ -10,6 +10,7 @@
 import ExcelJS from 'exceljs';
 import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
+import { adalahBarisHiasan, cariBarisKepala } from '@/lib/shared/impor-tabel';
 import type { EntriMaster } from '@/lib/kinerja/gabung-rekening';
 import type { MasterTipe } from '@/app/(dashboard)/kinerja/_types';
 
@@ -81,12 +82,20 @@ export async function parseMasterImport(buf: Buffer): Promise<ParseMasterResult>
     dibaca.push(`${sanitizeImportText(ws.name)} → ${tipe}`);
 
     const maxR = Math.min(ws.rowCount || 0, MAX_GRID_ROWS);
-    for (let r = 2; r <= maxR; r++) {   // baris 1 = header
+    // Kepala "Nama" di kolom B: baris 1 (berkas polos) atau di bawah kop (unduhan bergaya resmi).
+    const atas: unknown[][] = [];
+    for (let r = 1; r <= Math.min(maxR, 25); r++) {
+      const row = ws.getRow(r);
+      atas.push([1, 2, 3, 4, 5].map(c => nilaiSelExcel(row.getCell(c))));
+    }
+    const kepala = cariBarisKepala(atas, b => b[1]?.toLowerCase() === 'nama');
+    for (let r = (kepala >= 0 ? kepala + 1 : 1) + 1; r <= maxR; r++) {
       if (rows.length >= MAX_ROWS) { warnings.push(`Berkas berisi lebih dari ${MAX_ROWS} entri — sisanya dilewati.`); break; }
       const row = ws.getRow(r);
       const nama = cellStr(nilaiSelExcel(row.getCell(2)), MAXLEN_NAMA);
       if (!nama) continue;
       if (nama.toLowerCase() === 'nama') continue;   // echo header
+      if (adalahBarisHiasan([1, 2, 3, 4, 5].map(c => nilaiSelExcel(row.getCell(c))))) continue;   // kop/(1)(2)…/catatan
       rows.push({
         tipe, nama,
         ...induk(tipe,

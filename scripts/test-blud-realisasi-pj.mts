@@ -195,10 +195,11 @@ console.log('\n── F2. Belanja di luar versi pagu di berkas unduhan ───
       if (!noKepala && (v === 'Penanggung Jawab' || v === 'PJ')) noKepala = no
     })
     const sel = noCat ? ws.getRow(noCat).getCell(1) : null
-    ok(`I3 Excel "${nama}": kalimat utuh di kop, dibungkus & barisnya ditinggikan (sel gabung tak menyesuaikan sendiri)`,
-      !!sel && sel.alignment?.wrapText === true && (ws.getRow(noCat).height ?? 0) > 12.5,
+    ok(`I3 Excel "${nama}": kalimat utuh di bawah tabel, dibungkus & barisnya ditinggikan (sel gabung tak menyesuaikan sendiri)`,
+      !!sel && noCat > noKepala && sel.alignment?.wrapText === true && (ws.getRow(noCat).height ?? 0) > 12.5,
       `baris ${noCat}, tinggi ${noCat ? ws.getRow(noCat).height : '-'}`)
-    ok(`I4 Excel "${nama}": kepala kolom tetap tepat di bawah kop (+1 baris kosong)`, noKepala === cat.length + 4, `kepala di ${noKepala}, catatan ${cat.length}`)
+    // Gaya resmi bersama: kop 1–5, garis 6, kepala SELALU di baris 7 — catatan tidak lagi menggeser kepala.
+    ok(`I4 Excel "${nama}": kepala kolom di baris 7, apa pun panjang catatannya`, noKepala === 7, `kepala di ${noKepala}, catatan ${cat.length}`)
   }
   const wbBersih = await E.buatWorkbookRealisasiPj(arg)
   let adaBelanja = false
@@ -211,7 +212,7 @@ console.log('\n── F2. Belanja di luar versi pagu di berkas unduhan ───
   // Potongan teks PDF `(…) Tj`; baris pertama kalimat diukur dgn huruf yang sama dgn catatannya.
   const teks = [...pdf.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(m => m[1].replace(/\\([()\\])/g, '$1'))
   const awal = teks.find(t => t.startsWith('Belanja Rp 19.000.000'))
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5) // = catatanPdf
   const lebarAwal = awal ? doc.getTextWidth(awal) : Infinity
   ok('I7 PDF: kalimat panjang dibungkus — baris pertamanya muat di antara tepi halaman',
     !!awal && awal.length < kalimat.length && lebarAwal <= doc.internal.pageSize.getWidth() - 20,

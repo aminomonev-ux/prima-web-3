@@ -9,7 +9,8 @@
 
 import ExcelJS from 'exceljs';
 import PizZip from 'pizzip';
-import { sanitizeCell } from '@/lib/shared/excel-export';
+import { tulisTabelExcel } from '@/lib/shared/tabel-dokumen';
+import { periodeTahun } from '@/lib/shared/gaya-dokumen';
 
 export type ExportFormat = 'xlsx' | 'docx';
 
@@ -53,44 +54,20 @@ function baris(r: ExportPejabatRow, i: number): string[] {
 
 async function buatXlsx(rows: ExportPejabatRow[], tahun: string): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Master Pejabat', {
-    pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+  const ws = wb.addWorksheet('Master Pejabat');
+  // Gaya resmi bersama (kop, kepala navy, nomor kolom). Pembaca impor melewati kop &
+  // baris (1)(2)… — lingkaran unduh → impor tetap utuh (test-pk-pejabat-roundtrip).
+  // sanitizeCell (pagar formula-injection) dipasang di dalam `tulisTabelExcel`.
+  const letak = tulisTabelExcel(ws, {
+    kop: { judul: 'MASTER PEJABAT', subjudul: 'PERJANJIAN KINERJA', periode: periodeTahun(tahun), modul: 'PERJANJIAN KINERJA' },
+    kolom: HEADER_PEJABAT.map((judulKolom, i) => ({ judul: judulKolom, jenis: i === 0 ? 'nomor' : 'teks', lebar: LEBAR_KOLOM[i] })),
+    baris: rows.map((r, i) => ({ sel: baris(r, i) })),
+    mendatar: true,
   });
-  LEBAR_KOLOM.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-
-  ws.mergeCells(1, 1, 1, HEADER_PEJABAT.length);
-  const cellJudul = ws.getCell(1, 1);
-  cellJudul.value = judul(tahun);
-  cellJudul.font = { name: 'Calibri', size: 12, bold: true };
-  cellJudul.alignment = { horizontal: 'center', vertical: 'middle' };
-
-  const BARIS_HEADER = 3;
-  HEADER_PEJABAT.forEach((h, i) => {
-    const c = ws.getCell(BARIS_HEADER, i + 1);
-    c.value = h;
-    c.font = { name: 'Calibri', size: 10, bold: true };
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
-    c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    c.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-  });
-
-  rows.forEach((r, idx) => {
-    const nomorBaris = BARIS_HEADER + 1 + idx;
-    baris(r, idx).forEach((teks, i) => {
-      const c = ws.getCell(nomorBaris, i + 1);
-      // sanitizeCell = pagar formula-injection (CWE-1236) yang sama dengan ekspor lain.
-      c.value = sanitizeCell(teks);
-      c.font = { name: 'Calibri', size: 10 };
-      c.alignment = { vertical: 'top', wrapText: true, horizontal: i === 0 ? 'center' : 'left' };
-      c.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-      // NIP 18 digit melewati presisi angka Excel (2^53 ~ 16 digit) — ditulis sebagai
-      // angka, dua digit terakhirnya berubah DIAM-DIAM lalu terimpor balik jadi NIP
-      // palsu. Format teks memaksa Excel membiarkannya apa adanya.
-      if (i === 5) c.numFmt = '@';
-    });
-  });
-
-  ws.views = [{ state: 'frozen', ySplit: BARIS_HEADER }];
+  // NIP 18 digit melewati presisi angka Excel (2^53 ~ 16 digit) — ditulis sebagai
+  // angka, dua digit terakhirnya berubah DIAM-DIAM lalu terimpor balik jadi NIP
+  // palsu. Format teks memaksa Excel membiarkannya apa adanya.
+  for (let r = letak.dataAwal; r < letak.dataAwal + rows.length; r++) ws.getCell(r, 6).numFmt = '@';
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.isBuffer(out) ? out : Buffer.from(out as ArrayBuffer);

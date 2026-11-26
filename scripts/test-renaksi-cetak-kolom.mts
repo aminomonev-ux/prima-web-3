@@ -144,13 +144,14 @@ console.log('\nE. Workbook Excel sungguhan')
 const wb = await buatWorkbookGabungan(semua, DEFAULT_CETAK_FILTER)
 const ws = wb.worksheets[0]
 const judul: string[] = []
-ws.getRow(1).eachCell({ includeEmpty: true }, (c, i) => { judul[i] = String(c.value ?? '') })
+// Gaya resmi bersama: kop 1–6, kepala baris 7, nomor kolom (1)(2)… baris 8, data mulai 9.
+ws.getRow(7).eachCell({ includeEmpty: true }, (c, i) => { judul[i] = String(c.value ?? '') })
 const iAkhir = judul.indexOf('Real Akhir'), iCap = judul.indexOf('Capaian'), iAng = judul.indexOf('Anggaran (Rp)')
 ok('E1 kepala berkas memuat Capaian', iCap > 0, judul.join(' | '))
 ok('E2 urutan kepala = layar (Real Akhir, Capaian, Anggaran)', iAkhir > 0 && iCap === iAkhir + 1 && iAng === iCap + 1)
 const iInd = judul.indexOf('Indikator')
 const barisData = (indikator: string) => {
-  for (let r = 3; r <= ws.rowCount; r++) if (ws.getRow(r).getCell(iInd).value === indikator) return ws.getRow(r)
+  for (let r = 9; r <= ws.rowCount; r++) if (ws.getRow(r).getCell(iInd).value === indikator) return ws.getRow(r)
   return null
 }
 const selSas = barisData('Persentase Layanan')?.getCell(iCap)
@@ -190,9 +191,11 @@ ok('G2 layar memakai capaianTahunan, bukan rumus sendiri',
   tabel.includes('const capaian = capaianTahunan(r)') && !tabel.includes('hitungCapaianPct('))
 ok('G3 layar memakai tulisCapaian, bukan toFixed', tabel.includes('{tulisCapaian(capaian)}') && !/capaian\.toFixed\(/.test(tabel))
 const ekspor = kode('app/(dashboard)/rencana-aksi/_lib/exports.ts')
+// Gaya resmi bersama: sel PDF = teksPdf kolom dokGabungan (tulisSelCetak), dirangkai teksSelPdf.
 ok('G4 PDF gabungan memformat sel lewat tulisSelCetak',
-  badanFungsi(ekspor, 'export async function buildCombinedPdf', 'export async function exportCombinedPdf')
-    .includes('hdr.flat.map(c => tulisSelCetak(c, c.value(h, rollup)))'))
+  badanFungsi(ekspor, 'export function dokGabungan', 'export async function buildCombinedPdf').includes('teksPdf: (v: number) => tulisSelCetak(c, v)')
+  && badanFungsi(ekspor, 'export function dokGabungan', 'export async function buildCombinedPdf').includes('const v = c.value(h, rollup);')
+  && badanFungsi(ekspor, 'export async function buildCombinedPdf', 'export async function exportCombinedPdf').includes('teksSelPdf(k, b.sel[i])'))
 // Capaian setahun/RPJMD/triwulan dihitung di tiga layar + unduhan per indikator. Semuanya wajib
 // lewat penolong yang sama, kalau tidak satu layar tetap berbunyi 200% "Selesai" (L69).
 const dasbor = kode('app/(dashboard)/rencana-aksi/_components/MainDashboard.tsx')
@@ -201,9 +204,10 @@ ok('G5 layar Indikator: kartu akhir tahun, RPJMD, dan triwulan lewat penolong',
     && dasbor.includes('const pct = capaianTriwulan(data, q.id)'))
 ok('G6 layar Indikator: kartu menulis "—" untuk null',
   (dasbor.match(/nilai === null \? '—'/g) ?? []).length === 2 && dasbor.includes("Nilai {pct === null ? '—'"))
+// PDF & Excel per indikator kini satu dokIndikator → capaian triwulan dihitung sekali.
 ok('G7 unduhan per indikator: tak ada hitungCapaianPct tersisa', !ekspor.includes('hitungCapaianPct(')
-  && ekspor.includes('const pctTh = capaianTahunan(row)') && ekspor.includes('const pctRp = capaianRpjmd(row)')
-  && (ekspor.match(/capaianTriwulan\(row, q\.id\)/g) ?? []).length === 2)
+  && ekspor.includes('persenTeks(capaianTahunan(row))') && ekspor.includes('persenTeks(capaianRpjmd(row))')
+  && (ekspor.match(/capaianTriwulan\(row, q\.id\)/g) ?? []).length === 1)
 const entri = kode('app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx')
 ok('G8 dialog ubah jenis lewat capaianTahunan', !entri.includes('hitungCapaianPct(')
   && entri.includes('const sebelum = capaianTahunan(barisAsli)'))
@@ -237,7 +241,7 @@ console.log('\nH. Lebar kolom PDF gabungan (kata tidak patah di tengah)')
   }
   ok('H7 PDF sungguhan: tidak ada kata yang patah di tengah', patah === 0, `${patah} kata patah`)
   ok('H8 lebar kolom lewat lebarKolomPdf + minKata', /lebarKolomPdf\(hdr\.flat, .*, minKata\);/.test(ekspor)
-    && /cellWidth: lebar\[i\]/.test(ekspor))
+    && /lebarKolom: lebar \}/.test(ekspor))
 }
 
 console.log('\nI. Unduhan per indikator & Data Entry (laporan pemakai 2026-11-17: "\'-", capaian 0 di samping "—")')

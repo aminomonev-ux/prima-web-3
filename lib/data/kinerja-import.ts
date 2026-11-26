@@ -10,6 +10,7 @@
 //             export app sendiri); ambil langsung per baris bulan.
 import ExcelJS from 'exceljs';
 import { nilaiSelExcel } from '@/lib/shared/excel-sel';
+import { adalahBarisJudul } from '@/lib/shared/impor-tabel';
 
 export interface ParsedPendMonth {
   bulan_ke:  number;        // 1..12
@@ -128,7 +129,8 @@ function findCol(headers: string[], pred: (h: string) => boolean): number {
 
 // Layout SIMPLE: ≥6 baris yang sel-nya nama bulan + ada kolom realisasi/target.
 function parseSimple(grid: Grid, sheetName: string): ParsedPendMonth[] | null {
-  const headerRow = grid.findIndex(row => row.some(c => /realisasi|penerimaan/i.test(cellStr(c))) && row.some(c => /target|anggaran|bulan/i.test(cellStr(c))));
+  // Kop unduhan PRIMA (sel gabung, mis. "TAHUN ANGGARAN 2026") bukan kepala tabel.
+  const headerRow = grid.findIndex(row => !adalahBarisJudul(row) && row.some(c => /realisasi|penerimaan/i.test(cellStr(c))) && row.some(c => /target|anggaran|bulan/i.test(cellStr(c))));
   const hEnd = headerRow >= 0 ? headerRow + 1 : 1;
   const headers = colHeaders(grid, headerRow >= 0 ? headerRow : 0, hEnd);
   const bulanCol = findCol(headers, h => /bulan|uraian|keterangan/.test(h));

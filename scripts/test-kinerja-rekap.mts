@@ -13,11 +13,33 @@ import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan, laporanYatim,
   targetSampai, type ItemSskAktif } from '../lib/kinerja/rekap';
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '../lib/kinerja/samakan-target';
-import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
+import { dokRekap, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN, gambarRekapPdf, loadPdf } from '../app/(dashboard)/kinerja/_exports';
+import { tulisTabelExcel } from '../lib/shared/tabel-dokumen';
+import { loadExcelJs } from '../lib/shared/excel-export';
+import { BARIS_KEPALA } from '../lib/shared/gaya-dokumen';
 import { tulisPersen } from '../lib/shared/desimal';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
+
+// Gaya resmi bersama (CONCEPT-format-unduhan-seragam): Rekap = SATU `dokRekap` untuk Excel & PDF.
+// `rekapAoa` lama dibaca ulang dari LEMBAR EXCEL SUNGGUHAN (tulisTabelExcel), baris nomor kolom
+// (1)(2)… dilewati supaya letaknya sama: [0] judul · [1] instansi · [2] periode · [3] kosong ·
+// [4] keterangan (versi) · [5] garis · [6] kepala · data tepat di bawahnya · catatan · tanda tangan.
+const ExcelJSUji = await loadExcelJs();
+const REKAP_JUDUL_BARIS = 6;
+function rekapAoa(p: Parameters<typeof dokRekap>[0]): unknown[][] {
+  const ws = new ExcelJSUji.Workbook().addWorksheet('Rekap');
+  const letak = tulisTabelExcel(ws, dokRekap(p));
+  const hasil: unknown[][] = [];
+  for (let r = 1; r < letak.sesudah; r++) {
+    if (r === letak.kepalaAkhir) continue;
+    const v: unknown[] = [];
+    for (let c = 1; c <= 13; c++) v.push(ws.getRow(r).getCell(c).value ?? null);
+    hasil.push(v);
+  }
+  return hasil;
+}
 import { pickVersiAktif, pilihVersiAgregat, versiUntukPilihan, labelVersi,
   ringkasVersiRekap, imbuhanBerkasVersi, namaBerkasRekap,
   sumberTanpaVersi } from '../lib/kinerja/versi';
@@ -304,23 +326,26 @@ ok('P10 layar Detail memakai lib, tidak menjumlah sendiri lagi',
 // diambil dari lib — satu tempat untuk dua berkas.
 ok('P11 baris JUMLAH berkas dari lib yang sama dengan layar',
    /const j = hitungJumlahBulan\(rows\);/.test(exP) &&
-   (exP.match(/barisBulanDetail\(/g) || []).length === 3);
+   (exP.match(/barisBulanDetail\(/g) || []).length === 2);   // definisi + dokDetailBulan (Excel & PDF)
 // CONCEPT-kinerja-versi-cetak §1.4: catatan yatim di BAWAH tabel, dua penulis lewat SATU kalimat.
-eq('P11b catatan yatim dipakai PDF dan Excel',
-   (exP.match(/catatanYatimBulan\(hitungJumlahBulan\(barisBulan\), versi\)/g) || []).length, 2);
+// Gaya resmi bersama: PDF & Excel detail = SATU dokDetailBulan, jadi catatannya ditulis sekali.
+ok('P11b catatan yatim dipakai PDF dan Excel',
+   (exP.match(/catatanYatimBulan\(hitungJumlahBulan\(rows\), versi\)/g) || []).length === 1
+   && (exP.match(/dokDetailBulan\(barisBulan, sumber, b, tahun, versi\)/g) || []).length === 2);
 // Diperiksa pada PEMANGGILANNYA, bukan keberadaan teksnya: melepas panggilan
 // `tandaTangan(...)` tetap meninggalkan fungsinya lengkap dengan kata-katanya,
 // dan nama rumah sakit juga muncul di kop REKAP — dua-duanya lulus tanpa menguji
 // apa pun (L82c).
 ok('P12 halaman detail PDF memanggil kop DAN tanda tangan',
-   /tulisKopPdf\(doc, kopDetail\(sumber, b, tahun, versi\)\)/.test(exP) &&
-   /tandaTangan\(doc, akhir \+ \d+, b, tahun\)/.test(exP));
+   /kop: kopDetail\(sumber, bulan, tahun, versi\)/.test(exP) &&
+   /ttd: ttdKinerja\(CRR_BULAN_LABELS\[bulan - 1\] \?\? '', tahun\)/.test(exP) &&
+   /gambarTabelPdf\(doc, autoTable, dokDetailBulan\(/.test(exP));
 // Teks kopnya hidup di SATU tempat (`kopDetail`) dan dipakai dua penulis —
 // PDF dan Excel. Dulu kop rekap & kop detail dua salinan yang beda perlakuan.
-eq('P12b kopDetail dipakai PDF dan Excel', (exP.match(/kopDetail\(/g) || []).length, 3);
+eq('P12b kopDetail dipakai PDF dan Excel (lewat dokDetailBulan)', (exP.match(/kopDetail\(/g) || []).length, 2);
 const badanKop = exP.slice(exP.indexOf('export function kopDetail'), exP.indexOf('const PENANDA_TANGAN'));
 ok('P12c kop detail memuat identitas lengkap',
-   /RUMAH SAKIT JIWA DAERAH DR\. AMINO GONDOHUTOMO/.test(badanKop) &&
+   /\$\{INSTANSI\} \$\{PROVINSI\}/.test(readFileSync('lib/shared/gaya-dokumen.ts', 'utf8')) &&   // nama RS ditulis kop bersama, tiap dokumen
    /LAPORAN REALISASI KINERJA \$\{sumber\}/.test(badanKop) && /BULAN \$\{/.test(badanKop));
 // Nama jabatan cuma boleh hidup di SATU daftar. Dulu ditulis ulang di JSX
 // CetakTab, jadi mengganti "Kabag Program & Anggaran" jadi "Kabag Renbang" harus
@@ -338,7 +363,7 @@ ok('P13 bundel Excel satu sheet per sumber, bukan ditumpuk',
    /addWorksheet\('Rekap'\)/.test(exP) && /addWorksheet\(bagian\.sumber\)/.test(exP));
 ok('P14 bundel memakai penyusun yang sama dengan unduhan satuan',
    /tulisSheetDetailPerBulan\(wb\.addWorksheet\(bagian\.sumber\)/.test(exP) &&
-   /tulisSheetData\(wb, baris, bagian\.sumber\)/.test(exP));
+   /tulisSheetData\(wb, baris, bagian\.sumber, params\.tahun\)/.test(exP));
 ok('P15 sumber tanpa baris tidak melahirkan sheet kosong',
    (exP.match(/if \(baris\.length === 0\) continue;/g) || []).length === 2);
 // Resep pemuatan Rekap pindah ke lib/kinerja/muat-rekap.ts (2026-10-14) — dipakai layar
@@ -355,38 +380,44 @@ const exQ = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
 
 // Q1: satu penulis kop untuk PDF, satu untuk Excel — bukan kop yang ditulis
 // ulang di tiap tempat. Rekap & detail sama-sama memasoknya lewat KopBaris[].
+// Gaya resmi bersama: kop PDF ditulis kopDokPdf (lib/shared/gaya-dokumen.ts) lewat gambarTabelPdf.
 ok('Q1 kop PDF ditulis satu fungsi untuk rekap DAN detail',
-   (exQ.match(/tulisKopPdf\(doc, kop(Rekap|Detail)\(/g) || []).length === 2);
+   (exQ.match(/gambarTabelPdf\(doc, autoTable, dok(Rekap|DetailBulan)\(/g) || []).length === 2
+   && !/tulisKopPdf/.test(exQ));
 ok('Q2 kop PDF rekap rata tengah, bukan lagi di pojok kiri',
-   /doc\.text\(k\.teks, tengah, y, \{ align: 'center' \}\)/.test(exQ) &&
+   /export function kopDokPdf[\s\S]{0,900}align: 'center'/.test(readFileSync('lib/shared/gaya-dokumen.ts', 'utf8')) &&
    !/doc\.text\('RUMAH SAKIT JIWA DAERAH DR\. AMINO GONDOHUTOMO', 14,/.test(exQ));
 
 // Q3: lebar merge diambil dari jumlah kolom, bukan angka mati yang basi begitu
 // kolom bertambah (dan kolom memang baru bertambah dua di Tahap 7).
 ok('Q3 kop Excel di-merge selebar jumlah kolom',
-   /ws\.mergeCells\(r\.number, 1, r\.number, kolom\)/.test(exQ) &&
-   /const kolom = REKAP_HEADER\.length;/.test(exQ));
+   /const kol = dok\.kolom\.length/.test(readFileSync('lib/shared/tabel-dokumen.ts', 'utf8')) && /kopDokExcel\(ws, kol, dok\.kop, sanitizeCell\)/.test(readFileSync('lib/shared/tabel-dokumen.ts', 'utf8')) &&
+   /kolom: REKAP_HEADER\.map\(/.test(exQ));
 ok('Q3b kop Excel detail juga memakai jumlah kolom, bukan angka mati',
-   /tulisKopExcel\(ws, kopDetail\(sumber, b, tahun, versi\), DETAIL_BULAN_HEADER\.length\)/.test(exQ));
+   /kolom: DETAIL_BULAN_HEADER\.map\(/.test(exQ));
 
 ok('Q4 baris tebal di rekap ikut ditebalkan di Excel',
-   /if \(!b\.tebal\) return;/.test(exQ) && /c\.font = \{ bold: true \}/.test(exQ));
+   /tebal: b\.tebal,/.test(exQ) && /tebal: !!b\.tebal \|\|/.test(readFileSync('lib/shared/tabel-dokumen.ts', 'utf8')));
 
 // Q5-Q7: struktur per bulan.
 ok('Q5 sheet detail Excel satu blok per bulan',
    /export function tulisSheetDetailPerBulan/.test(exQ) &&
    /for \(const b of bulanDipakai\)/.test(exQ));
 ok('Q6 tiap blok punya kop, header, JUMLAH, dan tanda tangan',
-   /tulisKopExcel\(ws, kopDetail/.test(exQ) &&
-   /ws\.addRow\(DETAIL_BULAN_HEADER\)/.test(exQ) &&
-   /tulisTandaTanganExcel\(ws, b, tahun/.test(exQ));
+   /kop: kopDetail\(sumber, bulan, tahun, versi\)/.test(exQ) &&
+   /kolom: DETAIL_BULAN_HEADER\.map\(/.test(exQ) &&
+   /\{ sel, total: true \}/.test(exQ) &&
+   /ttd: ttdKinerja\(/.test(exQ));
 ok('Q7 ada pemisah halaman antar bulan, bukan di bulan pertama',
-   /if \(!pertama\) ws\.getRow\(ws\.rowCount\)\.addPageBreak\(\);/.test(exQ));
+   /if \(mulai > 1\) ws\.getRow\(mulai - 1\)\.addPageBreak\(\);/.test(exQ));
 
 // Q8: sheet Data tetap tabel rata — yang menyelamatkan sort/filter.
-ok('Q8 sheet Data tetap tabel rata tanpa kop/JUMLAH',
+// Kop seragam ikut (dilewati Import Realisasi); yang menjaga sort/filter: tanpa JUMLAH & tanda tangan.
+const badanData = exQ.slice(exQ.indexOf('export function dokDataRealisasi'), exQ.indexOf('export function tulisSheetData'));
+ok('Q8 sheet Data tetap tabel rata tanpa JUMLAH/tanda tangan',
    /export function tulisSheetData/.test(exQ) &&
-   /addSheetFromAoa\(ws, \[DETAIL_HEADER, \.\.\.realisasiAoa\(rows\)\]/.test(exQ));
+   /kolom: DETAIL_HEADER\.map\(/.test(badanData) && /baris: realisasiAoa\(rows\)\.map\(sel => \(\{ sel \}\)\)/.test(badanData) &&
+   !/total: true|ttd:/.test(badanData));
 ok('Q8b sheet Data ikut di unduhan satuan DAN bundel',
    (exQ.match(/tulisSheetData\(/g) || []).length === 3);
 // Nama sheet Excel dibatasi 31 karakter — "Data PEMELIHARAAN" masih muat, tapi
@@ -440,7 +471,7 @@ const exO = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
 ok('O10 layar menulis "—" untuk capaian null, bukan 0%',
    /b\.capaianFisik === null \? '—'/.test(ctO));
 ok('O11 PDF juga menulis "—", tidak memaksa 0 lewat \\?\\?',
-   /b\.capaianFisik === null \? '—'/.test(exO) && !/capaianFisik \?\? 0/.test(exO));
+   /b\.capaianFisik \?\? '—'/.test(exO) && !/capaianFisik \?\? 0/.test(exO));
 
 console.log('\n── J. Pagar simpan: penjagaan berdiri SEBELUM DELETE ────────────');
 
@@ -626,7 +657,7 @@ const aoa = rekapAoa({ baris: hasil.baris, yatim: hasil.yatim,
   pilihanVersi: 'berlaku', tahun: '2026', namaBulan: 'Juli' });
 eq('N1 header berdiri tepat di bawah kop', aoa[REKAP_JUDUL_BARIS][0], 'No');
 eq('N2 jumlah kolom header sama dengan tabel layar', aoa[REKAP_JUDUL_BARIS].length, 13);
-ok('N3 kop menyebut bulan & tahun', String(aoa[3][0]).includes('JULI') && String(aoa[3][0]).includes('2026'));
+ok('N3 kop menyebut bulan & tahun', String(aoa[2][0]).includes('JULI') && String(aoa[2][0]).includes('2026'));
 // Menyebut VERSINYA, bukan aturannya: kalimat lama "mengacu SSK versi aktif
 // tiap sumber" lulus tanpa memuat satu nomor versi pun, dan begitu versinya
 // bisa dipilih di layar Cetak, kalimat seperti itu berubah dari kurang
@@ -644,8 +675,10 @@ eq('N7c bulan ini ikut ke berkas', gt[9], hasil.baris[0].realKeuBulanIni);
 
 // Hierarki dibawa lewat spasi di depan label — Excel tak punya indent baris.
 const barisProgram = hasil.baris.findIndex(b => b.indent === 1);
+// Gaya resmi bersama: takuk lewat `kedalaman` (indent sel Excel / padding PDF), bukan spasi di teks.
 ok('N8 label bertakuk mengikuti kedalaman',
-   String(aoa[REKAP_JUDUL_BARIS + 1 + barisProgram][1]).startsWith('    '));
+   dokRekap({ baris: hasil.baris, yatim: hasil.yatim, tanpaRealisasi: false, sumberDinolkan: [], versiRekap: [],
+     pilihanVersi: 'berlaku', tahun: '2026', namaBulan: 'Juli' }).baris[barisProgram].kedalaman === 1);
 ok('N9 grand total tidak bertakuk', !String(gt[1]).startsWith(' '));
 
 // Yatim dibawa ke dokumen: tanpa ini totalnya tak bisa dijelaskan di luar aplikasi.
@@ -698,28 +731,23 @@ console.log('\n── R. Format angka Excel: notasi ilmiah tidak boleh muncul �
 
   // Panjang larik format WAJIB sama dengan jumlah kolomnya. Kalau bergeser satu,
   // kolom uang dapat format persen dan sebaliknya — tanpa satu galat pun.
-  const panjangFmt = (nama: string): number => {
-    const i = ex.indexOf('const ' + nama + ' = [');
+  // Gaya resmi bersama: format angka mengikuti JENIS kolom (rupiah/persen) di tabel-dokumen.
+  const panjangJenis = (nama: string): number => {
+    const i = ex.indexOf('const ' + nama + ': JenisKolom[] = [');
     if (i < 0) return -1;
     const blok = ex.slice(i, ex.indexOf('];', i));
-    return (blok.match(/FMT_RUPIAH|FMT_PERSEN|null/g) || []).length;
+    return (blok.match(/'(teks|uraian|nomor|kode|rupiah|angka|desimal|persen)'/g) || []).length;
   };
-  eq('R5 REKAP_FMT sejajar 13 kolom REKAP_HEADER',            panjangFmt('REKAP_FMT'), 13);
-  eq('R6 DETAIL_FMT sejajar 16 kolom DETAIL_HEADER',           panjangFmt('DETAIL_FMT'), 16);
-  eq('R7 DETAIL_BULAN_FMT sejajar 15 kolom DETAIL_BULAN_HEADER', panjangFmt('DETAIL_BULAN_FMT'), 15);
+  eq('R5 REKAP_JENIS sejajar 13 kolom REKAP_HEADER',            panjangJenis('REKAP_JENIS'), 13);
+  eq('R6 DETAIL_JENIS sejajar 16 kolom DETAIL_HEADER',           panjangJenis('DETAIL_JENIS'), 16);
+  eq('R7 DETAIL_BULAN_JENIS sejajar 15 kolom DETAIL_BULAN_HEADER', panjangJenis('DETAIL_BULAN_JENIS'), 15);
 
-  // Rekap dipakai DUA kali (satuan + bundel) — dicacah, bukan ditanya "ada?".
-  eq('R8 kedua sheet Rekap memakai REKAP_FMT', (ex.match(/numFmts: REKAP_FMT/g) || []).length, 2);
-  ok('R9 sheet Data memakai DETAIL_FMT', ex.includes('numFmts: DETAIL_FMT'));
-  // Blok per-bulan menambah baris sendiri, di luar addSheetFromAoa.
-  // Dijangkarkan ke AWAL BARIS: kutipan telanjang tetap cocok kalau seseorang
-  // menaruh `if (false)` di depannya, dan asersinya lulus untuk alasan yang salah.
-  ok('R10 blok per-bulan memformat barisnya sendiri',
-     /^\s*DETAIL_BULAN_FMT\.forEach\(\(f, k\) => \{$/m.test(ex));
-
-  // Setiap unduhan yang memuat uang harus kebagian. Pendapatan punya dua bentuk (dengan /
-  // tanpa Target Perubahan), jadi sembilan.
-  eq('R11 sembilan pemanggil memakai numFmts', (ex.match(/numFmts:/g) || []).length, 9);
+  // Rekap dipakai TIGA kali (Excel satuan, PDF, bundel) — dicacah, bukan ditanya "ada?".
+  eq('R8 Excel satuan, PDF, dan bundel memakai dokRekap', (ex.match(/dokRekap\(params\)/g) || []).length, 3);
+  ok('R9 sheet Data memakai DETAIL_JENIS', /kolom\(j, DETAIL_JENIS\[i\]/.test(ex));
+  ok('R10 blok per-bulan memakai DETAIL_BULAN_JENIS', /kolom\(j, DETAIL_BULAN_JENIS\[i\], DETAIL_BULAN_LEBAR\[i\]\)/.test(ex));
+  ok('R11 tak ada lagi penulis lembar lama (addSheetFromAoa/numFmts) — semua lewat tulisTabelExcel',
+     !/addSheetFromAoa\(|numFmts:/.test(ex) && /rupiah: RUPIAH/.test(readFileSync('lib/shared/tabel-dokumen.ts', 'utf8')) && /persen: '0\.00'/.test(readFileSync('lib/shared/tabel-dokumen.ts', 'utf8')));
 }
 
 console.log('\n── S. A2: realisasi yatim keluar dari Laporan & KPI juga ───────');
@@ -1637,7 +1665,8 @@ console.log('\n-- AC. Rekap boleh dicetak sebelum ada realisasi, dengan syarat -
   // -- Statis: layar & PDF ikut, dan catatannya TIDAK dikecualikan dari cetak
   const exAC = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8'));
   eq('AC14 catatannya dipakai Excel DAN PDF',
-     (exAC.match(/catatanTanpaRealisasi\(/g) || []).length, 3);   // 1 definisi + 2 pemakai
+     (exAC.match(/catatanTanpaRealisasi\(/g) || []).length
+     + (exAC.match(/dokRekap\(params\)/g) || []).length, 5);   // 1 definisi + dokRekap, dipakai Excel/PDF/bundel
 
   const ctAC = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
   ok('AC15 pemilih bulan menawarkan Jan-Des tanpa syarat',
@@ -1756,7 +1785,8 @@ console.log('\n-- AD. A9: daftar calon versi lengkap, angkanya yang disaring --'
   // -- Nol yang tidak dijelaskan adalah jebakan berikutnya ------------------
   const exAD = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8'));
   eq('AD23 catatannya dipakai Excel DAN PDF',
-     (exAD.match(/catatanDinolkan\(/g) || []).length, 3);   // 1 definisi + 2 pemakai
+     (exAD.match(/catatanDinolkan\(/g) || []).length
+     + (exAD.match(/dokRekap\(params\)/g) || []).length, 5);   // 1 definisi + dokRekap, dipakai Excel/PDF/bundel
   const aoaNol = rekapAoa({
     baris: hasil.baris, yatim: { jumlahBaris: 0, jumlahItem: 0, nominal: 0, contoh: [] },
     tanpaRealisasi: false, sumberDinolkan: ['GAJI', 'BLUD'], versiRekap: [], pilihanVersi: 'berlaku', tahun: '2040', namaBulan: 'Oktober',
@@ -1958,7 +1988,8 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   ok('AE29b tidak ada lagi templat nama berkas rekap yang ditulis tangan',
      !/`Rekap-SemuaSumber-/.test(exAE));
   eq('AE30 ringkasan versi masuk ke kop Excel DAN PDF',
-     (exAE.match(/ringkasVersiRekap\(versiRekap, pilihanVersi\)/g) || []).length, 2);
+     (exAE.match(/ringkasVersiRekap\(versiRekap, pilihanVersi\)/g) || []).length
+     + (exAE.match(/dokRekap\(params\)/g) || []).length, 4);   // sekali di dokRekap, dipakai Excel/PDF/bundel
   ok('AE31 params versinya WAJIB, bukan opsional bernilai bawaan',
      /versiRekap: VersiSumberRekap\[\];/.test(exAE) && !/versiRekap\?: /.test(exAE));
 
@@ -2056,12 +2087,13 @@ console.log('\n-- AF. Perbaikan hasil audit: label tidak boleh berbohong --');
   ok('AF13 kalimat kop lama tidak bisa kembali sebagai bawaan',
      !/'Pagu & target mengacu SSK versi aktif/.test(exAF));
   ok('AF14 kop Excel diambil dari kopRekap, tidak ditulis ulang',
-     /\.\.\.kopRekap\(namaBulan, tahun, ringkasVersiRekap\(versiRekap, pilihanVersi\)\)\.map/.test(exAF));
+     /kop: kopRekap\(namaBulan, tahun, ringkasVersiRekap\(versiRekap, pilihanVersi\)\)/.test(exAF));
   ok('AF15 gaya sheet tidak lagi memanggil pembuat teks dgn argumen palsu',
-     /GAYA_KOP_REKAP\.forEach/.test(exAF) && !/kopRekap\('', ''\)/.test(exAF));
-  ok('AF16 jumlah baris kop diturunkan, bukan angka tetap',
-     /REKAP_JUDUL_BARIS = GAYA_KOP_REKAP\.length \+ 1/.test(exAF));
-  eq('AF16b dan nilainya tetap 6', REKAP_JUDUL_BARIS, 6);
+     !/kopRekap\('', ''\)/.test(exAF) && !/GAYA_KOP_REKAP/.test(exAF));
+  // Kepala tabel di baris tetap milik gaya bersama — kop sependek/sepanjang apa pun tidak menggesernya.
+  ok('AF16 letak kepala milik gaya bersama, bukan dihitung per modul',
+     /const kepalaAwal = BARIS_KEPALA \+ geser/.test(readFileSync('lib/shared/tabel-dokumen.ts', 'utf8')));
+  eq('AF16b dan kepala Rekap tetap di baris 7', BARIS_KEPALA, 7);
 
   // Keadaan kosong: SSK-nya ada, versinya yang tidak.
   eq('AF17 sumber tanpa versi bisa dikenali',

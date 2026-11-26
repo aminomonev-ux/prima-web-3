@@ -57,8 +57,9 @@ ok('A7 nama bundel ikut pilihan versi Rekap',
   namaBundel('berlaku', 'Maret', '2026', 'xlsx') === 'Laporan-Realisasi-2026-sd-Maret.xlsx'
   && namaBundel('murni', 'Maret', '2026', 'pdf') === 'Laporan-Realisasi-Murni-2026-sd-Maret.pdf')
 const kop = kopDetail('GAJI', 3, '2026', 'MURNI')
-ok('A8 kop detail menyebut versi di baris ke-4, jumlah baris kop tetap 4',
-  kop.length === 4 && kop[3].teks === 'BULAN MARET TAHUN 2026 · SSK MURNI', JSON.stringify(kop[3]))
+// Gaya resmi bersama: periode di baris kop ke-4, versi di baris keterangan (5) — letak kepala tetap.
+ok('A8 kop detail menyebut periode & versinya',
+  kop.periode === 'BULAN MARET TAHUN 2026' && kop.keterangan === 'SSK MURNI', JSON.stringify(kop))
 
 const isi = [
   baris({ keterangan: 'A', pagu_awal: 1_000, target_rp: 100, akum_target_rp: 300, real_keuangan: 50, akum_keuangan: 250, real_fisik: 60, akum_real_fisik: 200 }),
@@ -95,7 +96,7 @@ console.log('\nC. Berkas sungguhan (exceljs & jsPDF di Node)')
     return teks
   }
   const xl = sel(isi)
-  ok('C1 Excel: kop menyebut versinya', xl.includes('BULAN JANUARI TAHUN 2026 · SSK MURNI'))
+  ok('C1 Excel: kop menyebut periode & versinya', xl.includes('BULAN JANUARI TAHUN 2026') && xl.includes('SSK MURNI'))
   ok('C2 Excel: catatan yatim tertulis utuh di bawah tabel', xl.includes(cat), xl.filter(t => t.includes('rekening')).join(' | '))
   ok('C3 Excel: baris yatim bertanda di Uraian', xl.includes(`Lahir di Perubahan (${tandaYatim('MURNI')})`))
   ok('C4 Excel tanpa yatim: tanpa catatan', !sel([isi[0]]).some(t => t.includes('tidak ikut dijumlah')))
@@ -114,10 +115,12 @@ console.log('\nC. Berkas sungguhan (exceljs & jsPDF di Node)')
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('\nB. Bentuk kode — semua pintu memakai satu aturan')
 const ex = tanpaKomentar(sumber('app/(dashboard)/kinerja/_exports.ts'))
+// PDF & Excel detail berbagi SATU dokumen (dokDetailBulan) — kop & catatan ditulis sekali.
 ok('B1 kop detail: kedua penulis (PDF & Excel) mengoper versi',
-  (ex.match(/kopDetail\(sumber, b, tahun, versi\)/g) || []).length === 2)
+  (ex.match(/kopDetail\(sumber, bulan, tahun, versi\)/g) || []).length === 1
+  && (ex.match(/dokDetailBulan\(barisBulan, sumber, b, tahun, versi\)/g) || []).length === 2)
 ok('B2 catatan yatim di bawah tabel PDF DAN Excel',
-  (ex.match(/catatanYatimBulan\(hitungJumlahBulan\(barisBulan\), versi\)/g) || []).length === 2)
+  (ex.match(/catatanYatimBulan\(hitungJumlahBulan\(rows\), versi\)/g) || []).length === 1)
 ok('B3 bundel: versi tiap bagian dari bagian itu sendiri',
   /tulisSheetDetailPerBulan\(wb\.addWorksheet\(bagian\.sumber\), baris, bagian\.sumber, params\.tahun, bagian\.bulan, bagian\.versi\)/.test(ex)
   && /gambarDetailPdf\(doc, autoTable, baris, bagian\.sumber, params\.tahun, bagian\.bulan, true, bagian\.versi\)/.test(ex))

@@ -11,6 +11,7 @@
 //                          berjalan / dipilih user (file satu level).
 
 import { readGrid, sanitize, type Grid, type GridResult } from './grid';
+import { adalahBarisHiasan, adalahBarisJudul, jenisBarisHiasan } from '@/lib/shared/impor-tabel';
 
 export type RaLevel = 'tujuan' | 'sasaran' | 'program' | 'kegiatan' | 'sub-kegiatan';
 export type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
@@ -311,6 +312,7 @@ function resolveColumns(
 
 function findHeader(grid: Grid): { rHead: number; headSpan: number; dataStart: number } | null {
   for (let r = 0; r < Math.min(grid.length, 40); r++) {
+    if (adalahBarisJudul(grid[r] ?? [])) continue;   // kop unduhan PRIMA (sel gabung)
     const line = (grid[r] ?? []).join(' | ').toLowerCase();
     if (!/indikator/.test(line)) continue;
     if (!/(program|kegiatan|sasaran|tujuan)/.test(line)) continue;
@@ -332,6 +334,7 @@ function findHeader(grid: Grid): { rHead: number; headSpan: number; dataStart: n
     // PERTAMA ikut terbuang.
     const angka = (grid[dataStart] ?? []).filter(x => /^\d+$/.test(x)).map(Number);
     if (angka.length >= 5 && angka.every((n, i) => n === angka[0] + i)) dataStart++;
+    else if (jenisBarisHiasan(grid[dataStart] ?? []) === 'nomor') dataStart++;   // "(1) (2) (3)…" unduhan PRIMA
     return { rHead: r, headSpan: span, dataStart };
   }
   return null;
@@ -371,6 +374,7 @@ export async function parseRenaksiFile(
   for (let r = head.dataStart; r < gr.grid.length; r++) {
     const row = gr.grid[r];
     if (!row || !row.some(v => v && v.trim())) continue;
+    if (adalahBarisHiasan(row)) continue;   // catatan, tanda tangan, JUMLAH unduhan PRIMA
     if (gr.kind === 'pdf' && !get(row, cols.target_tahunan) && dataRows.length > 0) {
       const prev = dataRows[dataRows.length - 1].cells;
       row.forEach((v, c) => {

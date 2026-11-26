@@ -105,8 +105,12 @@ const panel = tanpaKomentar(baca('app/(dashboard)/rencana-aksi/_components/Cetak
 cek('C11 layar Cetak memakai teks indikator dari penyusun', panel.includes('{h.indikator ?? r.indikator}'))
 cek('C12 sakelar Penanda matriks ada dan ikut menentukan "bawaan"', panel.includes('setF({ penanda: !filter.penanda })') && panel.includes('!filter.penanda &&'))
 const ekspor = tanpaKomentar(baca('app/(dashboard)/rencana-aksi/_lib/exports.ts'))
-cek('C13 PDF & Excel gabungan lewat penyusun yang sama', (ekspor.match(/buildCetakRows\(allRows, filter\)/g) ?? []).length === 2)
-sama('C14 lima unduhan lain dibersihkan', (ekspor.match(/mentah\.map\(barisBersih\)|barisBersih\(mentah\)/g) ?? []).length, 5)
+// Gaya resmi bersama: PDF & Excel gabungan berbagi SATU dokumen (dokGabungan) → satu panggilan penyusun.
+cek('C13 PDF & Excel gabungan lewat penyusun yang sama', (ekspor.match(/buildCetakRows\(allRows, filter\)/g) ?? []).length === 1
+  && (ekspor.match(/dokGabungan\(allRows, tahun, filter\)/g) ?? []).length === 2)
+// Daftar PDF · daftar Excel · detail indikator (PDF & Excel satu dokIndikator) · Matriks.
+sama('C14 empat penyusun unduhan lain dibersihkan', (ekspor.match(/mentah\.map\(barisBersih\)|barisBersih\(mentah\)/g) ?? []).length, 4)
+cek('C14b detail indikator PDF & Excel lewat dokIndikator yang sama', (ekspor.match(/dokIndikator\(mentah\)/g) ?? []).length === 2)
 cek('C15 tabel LKJIP memakai penyusun yang sama', baca('lib/lkjip/sumber/renaksi-cetak.ts').includes('buildCetakRows(semua, filter)'))
 
 // ── D. Layar kerja: penanda hasil hitungan ───────────────────────────────────

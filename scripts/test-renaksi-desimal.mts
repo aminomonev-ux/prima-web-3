@@ -194,9 +194,11 @@ cek('tabel Cetak: realisasi akhir berkoma', /\{tulisRealisasi\(realAkhir\)\}/.te
 const ekspor = kode(baca(F_EKSPOR))
 // Realisasi lewat tulisRealisasi: belum diisi "—", bukan "0" (tulisDesimal(null) = 0).
 cek('PDF rekap berkoma', /`\$\{tulisRealisasi\(r\.q1_realisasi\)\}\/\$\{tulisDesimal\(r\.q1_target\)\}`/.test(ekspor))
-cek('PDF detail berkoma', /\['Realisasi Akhir Tahun', tulisRealisasi\(realAkhir\)\]/.test(ekspor))
+// Detail indikator (gaya resmi bersama): sel tetap ANGKA, PDF berkoma lewat teksPdf kolom Nilai.
+cek('PDF detail berkoma', /\['Realisasi Akhir', realAkhir \?\? '—'\]/.test(ekspor)
+  && /kol\('Nilai', 'teks', 60\), teksPdf: v => tulisDesimal\(v\)/.test(ekspor))
 cek('Excel TETAP angka, bukan teks',
-  /q1r: r\.q1_realisasi \?\? '—',/.test(ekspor),
+  /q\.realisasi \?\? '—'/.test(ekspor) && /kol\('Realisasi', 'desimal', 14\)/.test(ekspor),
   'sel Excel harus bisa dihitung — "—" hanya untuk yang belum diisi')
 
 // ─── F. Kolom DB tidak berubah ──────────────────────────────────────────────
@@ -331,12 +333,13 @@ console.log('\nG4. Dokumen')
 // Format sel PDF pindah ke `tulisSelCetak` (cetak-filter.ts) bersama kolom Capaian, 2026-10-14.
 const filterCetak = kode(baca('app/(dashboard)/rencana-aksi/_lib/cetak-filter.ts'))
 cek('PDF Cetak gabungan memformat angka non-rupiah',
-  /hdr\.flat\.map\(c => tulisSelCetak\(c, c\.value\(h, rollup\)\)\)/.test(ekspor)
+  /: \{ teksPdf: \(v: number\) => tulisSelCetak\(c, v\) \}/.test(ekspor)
     && /if \(c\.money\) return v\.toLocaleString\('id-ID'\);\s*return tulisDesimal\(v\);/.test(filterCetak)
     && /if \(c\.persen && typeof v !== 'string'\) return tulisCapaian\(v\);/.test(filterCetak),
   'kalau tidak, tabel yang sama berbunyi 7,5 di layar dan 7.5 di PDF')
 cek('Excel Cetak gabungan TETAP angka',
-  /cell\.value = typeof v === 'string' \? sanitizeCell\(v\) : v/.test(ekspor),
+  /if \(\(c\.persen \|\| c\.realisasi\) && v == null\) return tulisSelCetak\(c, v\);\s*return v;/.test(ekspor)
+    && /sel\.value = v == null \? null : typeof v === 'string' \? sanitizeCell\(v\) : v/.test(baca('lib/shared/tabel-dokumen.ts')),
   'selnya harus bisa dihitung')
 cek('kolom target di DB tetap DECIMAL(14,2)',
   /target_rpjmd\s+DECIMAL\(14,2\)/.test(skema) && /target_tahunan\s+DECIMAL\(14,2\)/.test(skema),

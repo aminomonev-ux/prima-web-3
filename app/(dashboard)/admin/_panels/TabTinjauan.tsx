@@ -83,20 +83,22 @@ export function TabTinjauan({ onKeAkses }: { onKeAkses: (userId: number) => void
       // pembacaan ulang. Aturan yang sudah mahal dipelajari di rekap E-Anggaran:
       // dokumen yang diunduh wajib memuat angka yang persis sama dengan yang di layar.
       // Di sini taruhannya lebih besar lagi — berkasnya dilampirkan ke auditor.
-      const [{ loadExcelJs, addSheetFromAoa, downloadWorkbook }] = await Promise.all([
+      const [{ loadExcelJs, downloadWorkbook }, { tulisTabelExcel }] = await Promise.all([
         import('@/lib/shared/excel-export'),
+        import('@/lib/shared/tabel-dokumen'),
       ]);
       const ExcelJS = await loadExcelJs();
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Tinjauan Akses');
-      addSheetFromAoa(ws, tinjauanKeAoa(tampil), {
-        colWidths: [
-          { wch: 18 }, { wch: 24 }, { wch: 16 }, { wch: 11 }, { wch: 13 },
-          ...MODUL_TINJAUAN.map(() => ({ wch: 15 })),
-          { wch: 10 }, { wch: 14 }, { wch: 16 },
-        ],
-      });
+      const [kepala, ...isi] = tinjauanKeAoa(tampil);
+      const lebar = [18, 24, 16, 11, 13, ...MODUL_TINJAUAN.map(() => 15), 10, 14, 16];
       const stempel = tanggalHariIniWIB();
+      // Gaya resmi bersama — daftar kerja, tanpa tanda tangan.
+      tulisTabelExcel(wb.addWorksheet('Tinjauan Akses'), {
+        kop: { judul: 'TINJAUAN AKSES BERKALA', subjudul: 'ADMIN PANEL PRIMA', periode: `PER ${stempel}`, modul: 'ADMIN PANEL' },
+        kolom: kepala.map((j, i) => ({ judul: String(j ?? ''), lebar: lebar[i] })),
+        baris: isi.map(sel => ({ sel })),
+        mendatar: true,
+      });
       await downloadWorkbook(wb, `Tinjauan-Akses-${stempel}.xlsx`);
       toast.success('Berkas tinjauan diunduh.');
     } catch (e) {

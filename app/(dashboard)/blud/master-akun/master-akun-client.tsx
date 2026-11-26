@@ -111,11 +111,14 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
     setImporting(true)
     try {
       // SDL-Audit v1.1 Phase 4: migrate xlsx → exceljs (CVE prototype pollution + ReDoS).
-      const { readXlsxAsAoa } = await import('@/lib/shared/excel-export')
+      const [{ readXlsxAsAoa }, { barisDataImpor, kepalaKodeUraian }] = await Promise.all([
+        import('@/lib/shared/excel-export'), import('@/lib/shared/impor-tabel'),
+      ])
       const raw = await readXlsxAsAoa(file)
       if (raw.length === 0) { showToast('Lembar pertama berkas Excel ini kosong.', false); return }
       const parsed: Row[] = []
-      for (const r of raw) {
+      // Unduhan Cetak berkop: kop, baris (1)(2), catatan dilewati; berkas polos tetap terbaca.
+      for (const r of barisDataImpor(raw, kepalaKodeUraian)) {
         const kode   = String(r[0] ?? '').trim()
         const uraian = String(r[1] ?? '').trim()
         if (!uraian) continue

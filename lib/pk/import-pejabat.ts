@@ -7,6 +7,7 @@
 
 import ExcelJS from 'exceljs';
 import { nilaiSelExcel } from '@/lib/shared/excel-sel';
+import { adalahBarisHiasan, adalahBarisJudul } from '@/lib/shared/impor-tabel';
 import PizZip from 'pizzip';
 
 export type ImportFormat = 'xlsx' | 'csv' | 'docx';
@@ -127,6 +128,7 @@ type ColMap = Partial<Record<PejabatField, number>>;
 function detectHeaderRow(grid: Grid): { row: number; cols: ColMap } | null {
   const scanEnd = Math.min(20, grid.length);
   for (let r = 0; r < scanEnd; r++) {
+    if (adalahBarisJudul(grid[r] ?? [])) continue;   // kop unduhan PRIMA (sel gabung)
     const cols: ColMap = {};
     for (let c = 0; c < (grid[r]?.length ?? 0); c++) {
       const h = normHeader(grid[r][c] ?? '');
@@ -231,6 +233,7 @@ function gridToPejabat(
     const pangkat = get(grid[r], 'pangkat');
     const nip     = get(grid[r], 'nip');
     if (!unitRaw && !nama && !jab) continue;
+    if (adalahBarisHiasan(grid[r])) continue;   // (1)(2)…, catatan, tanda tangan unduhan PRIMA
     // Echo header berulang (file gabungan multi-halaman) di-skip.
     if (HEADER_ALIASES.nama.test(normHeader(nama)) && HEADER_ALIASES.jabatan.test(normHeader(jab))) continue;
     if (rows.length >= MAX_IMPORT_ROWS) { truncated = true; break; }

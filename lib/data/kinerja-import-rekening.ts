@@ -10,6 +10,7 @@
 import ExcelJS from 'exceljs';
 import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
+import { adalahBarisHiasan, adalahBarisJudul } from '@/lib/shared/impor-tabel';
 import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
 import type { SumberSSK } from '@/app/(dashboard)/kinerja/_types';
 
@@ -102,6 +103,7 @@ function barisJudul(row: string[]): boolean {
 function cariHeader(grid: Grid): { row: number; cols: Partial<Record<Kolom, number>> } | null {
   const batas = Math.min(20, grid.length);
   for (let r = 0; r < batas; r++) {
+    if (adalahBarisJudul(grid[r] ?? [])) continue;   // kop unduhan PRIMA (sel gabung)
     const cols: Partial<Record<Kolom, number>> = {};
     for (let c = 0; c < (grid[r]?.length ?? 0); c++) {
       const k = kolomDariJudul(normHeader(grid[r][c] ?? ''));
@@ -157,6 +159,7 @@ function gridKeBaris(grid: Grid, source: string, sumberSheet: SumberSSK | null):
     const ssk    = ambil(grid[r], cols, 'uraian_ssk');
     const prog   = ambil(grid[r], cols, 'program');
     if (!uraian && !ssk && !prog) continue;                       // baris kosong / pemisah
+    if (adalahBarisHiasan(grid[r])) continue;                     // (1)(2)…, JUMLAH, catatan, tanda tangan
     if (!uraian) { warnings.push(`Baris ${r + 1} dilewati — kolom Rekening Belanja kosong.`); continue; }
     // Echo header berulang (berkas gabungan multi-halaman). Diperiksa dari SELURUH
     // baris, bukan dari sel Rekening Belanja saja: hampir setiap rekening memang

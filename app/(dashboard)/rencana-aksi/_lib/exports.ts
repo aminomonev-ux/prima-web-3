@@ -7,6 +7,9 @@ import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, cat
 import { sanitizeCell, loadExcelJs } from '@/lib/shared/excel-export';
 import { tulisDesimal, tulisPersen } from '@/lib/shared/desimal';
 import { polosSelExcel } from '@/lib/shared/excel-sel';
+import { cariBarisKepala } from '@/lib/shared/impor-tabel';
+import { kakiDokPdf, kopDokPdf, periodeTahun, rgb, gayaKepalaExcel, hiasSelData, type KopDok, type DokPdf } from '@/lib/shared/gaya-dokumen';
+import { tulisTabelExcel, gambarTabelPdf, teksSelPdf, type DokTabel, type KolomDok, type JenisKolom, type SelKepala } from '@/lib/shared/tabel-dokumen';
 import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 
 /** Unduhan tidak memuat penanda matriks (bintang, "(1)") yang ikut tersimpan lewat impor. */
@@ -37,46 +40,57 @@ function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 200);
 }
 
+// ─── Gaya dokumen bersama ────────────────────────────────────────────────────
+// Semua tabel lewat lib/shared/tabel-dokumen.ts (kop, kepala navy, nomor kolom, kaki halaman) —
+// konsep docs/konsep/sistem/CONCEPT-format-unduhan-seragam.md. Berkas ini menyusun DATA-nya.
+
+export const MODUL_RENAKSI = 'RENCANA AKSI';
+
+const kopRenaksi = (judul: string, tahun: number | null | undefined, keterangan?: string | null): KopDok =>
+  ({ judul, subjudul: 'RENCANA AKSI & KINERJA', periode: periodeTahun(tahun), keterangan: keterangan ?? null, modul: MODUL_RENAKSI });
+
+const kol = (judul: string, jenis: JenisKolom, lebar?: number): KolomDok => ({ judul, jenis, ...(lebar ? { lebar } : {}) });
+
+function pdfBaru(jsPDF: typeof import('jspdf').jsPDF, mendatar = true) {
+  return new jsPDF({ orientation: mendatar ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+}
+
 // ─── Export tabel list (Data Entry) ─────────────────────────────────────────
 
 export async function exportListPdf(mentah: RaRow[], tahun: number, level: RaRow['level']) {
   (await buatPdfList(mentah, tahun, level)).save(`rencana-aksi-${level}-${tahun}.pdf`);
 }
 
-/** Dipisah dari tombolnya supaya isi berkas bisa diperiksa di Node. */
-export async function buatPdfList(mentah: RaRow[], tahun: number, level: RaRow['level']) {
+/** Dokumen PDF daftar Data Entry (kolom ringkas: TW ditulis R/T). */
+export function dokListPdf(mentah: RaRow[], tahun: number, level: RaRow['level']): DokTabel {
   const rows = mentah.map(barisBersih);
-  const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  doc.setFontSize(13);
-  doc.text(`${LEVEL_LABELS[level]} — Tahun ${tahun}`, 14, 14);
-  doc.setFontSize(9);
-  doc.text(`Total ${rows.length} indikator`, 14, 20);
-
-  autoTable(doc, {
-    startY: 25,
-    head: [['No', 'Program/Sasaran', 'Kegiatan', 'Sub Kegiatan', 'Sasaran (Outcome)', 'Indikator', 'Jenis', 'Satuan', 'RPJMD', 'Tahunan', 'TW1 R/T', 'TW2 R/T', 'TW3 R/T', 'TW4 R/T']],
-    body: rows.map((r, i) => [
-      i + 1,
-      r.program,
-      r.kegiatan ?? '—',
-      r.sub_kegiatan ?? '—',
-      outcomeOf(r) || '—',
-      r.indikator,
-      r.jenis,
-      r.satuan,
-      tulisDesimal(r.target_rpjmd),
-      tulisDesimal(r.target_tahunan),
+  return {
+    kop: kopRenaksi(`DATA ENTRY ${LEVEL_LABELS[level].toUpperCase()}`, tahun, `Total ${rows.length} indikator`),
+    kolom: [
+      kol('No', 'nomor', 6), kol('Program/Sasaran', 'teks', 26), kol('Kegiatan', 'teks', 22), kol('Sub Kegiatan', 'teks', 22),
+      kol('Sasaran (Outcome)', 'teks', 30), kol('Indikator', 'uraian', 34), kol('Jenis', 'teks', 12), kol('Satuan', 'teks', 10),
+      kol('RPJMD', 'desimal', 9), kol('Tahunan', 'desimal', 9),
+      kol('TW1 R/T', 'teks', 10), kol('TW2 R/T', 'teks', 10), kol('TW3 R/T', 'teks', 10), kol('TW4 R/T', 'teks', 10),
+    ],
+    baris: rows.map((r, i) => ({ sel: [
+      i + 1, r.program, r.kegiatan ?? '—', r.sub_kegiatan ?? '—', outcomeOf(r) || '—', r.indikator, r.jenis, r.satuan,
+      r.target_rpjmd, r.target_tahunan,
       // Realisasi belum diisi = "—", bukan kosong (dulu tercetak "/5").
       `${tulisRealisasi(r.q1_realisasi)}/${tulisDesimal(r.q1_target)}`,
       `${tulisRealisasi(r.q2_realisasi)}/${tulisDesimal(r.q2_target)}`,
       `${tulisRealisasi(r.q3_realisasi)}/${tulisDesimal(r.q3_target)}`,
       `${tulisRealisasi(r.q4_realisasi)}/${tulisDesimal(r.q4_target)}`,
-    ]),
-    styles: { fontSize: 7, cellPadding: 1.5 },
-    headStyles: { fillColor: [239, 159, 39], textColor: 255, fontSize: 7 },
-    columnStyles: { 0: { cellWidth: 8 }, 4: { cellWidth: 40 }, 5: { cellWidth: 45 } },
-  });
+    ] })),
+    mendatar: true,
+  };
+}
+
+/** Dipisah dari tombolnya supaya isi berkas bisa diperiksa di Node. */
+export async function buatPdfList(mentah: RaRow[], tahun: number, level: RaRow['level']) {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = pdfBaru(jsPDF);
+  gambarTabelPdf(doc, autoTable, dokListPdf(mentah, tahun, level), { huruf: 7 });
+  kakiDokPdf(doc, MODUL_RENAKSI);
   return doc;
 }
 
@@ -98,62 +112,51 @@ const KOLOM_ENTITAS: Record<RaRow['level'], [string, string][]> = {
   'sub-kegiatan': [['Program', 'e_program'], ['Kegiatan', 'e_kegiatan'], ['Sub Kegiatan', 'e_sub']],
 };
 
-/** Dipisah dari tombolnya supaya isi berkas bisa diuji di Node (bolak-balik dengan Import Renaksi). */
-export async function buatWorkbookList(mentah: RaRow[], level: RaRow['level'], induk: RaRow[] = []) {
+/**
+ * Dokumen Excel daftar Data Entry. Judul kolom dikenali Import Renaksi — unduhan ini
+ * diimpor balik (kop & baris nomor kolom dilewati pembacanya, lib/shared/impor-tabel.ts).
+ */
+export function dokList(mentah: RaRow[], level: RaRow['level'], induk: RaRow[] = []): DokTabel {
   const rows = mentah.map(barisBersih);
-  const ExcelJS = await loadXlsx();
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(LEVEL_LABELS[level]);
   const pakaiInduk = level !== 'tujuan' && induk.length > 0;
   const teksInduk = new Map(induk.map(r => [r.id, rapikanIndikator(r.indikator)]));
-
   // Kolom entitas per tingkat: tingkat itu + induknya, dengan judul yang dikenali Import Renaksi
   // (dulu satu kolom "Program/Sasaran" ambigu → unduhan tidak bisa diimpor balik).
   const entitas = KOLOM_ENTITAS[level];
-  ws.columns = [
-    { header: 'No', key: 'no', width: 5 },
-    ...entitas.map(([header, key]) => ({ header, key, width: 32 })),
-    { header: 'Kode', key: 'kode', width: 16 },
-    { header: 'Sasaran (Outcome)', key: 'outcome', width: 38 },
-    { header: 'Indikator', key: 'indikator', width: 40 },
-    ...(pakaiInduk ? [{ header: 'Indikator Induk', key: 'induk', width: 40 }] : []),
-    { header: 'Jenis', key: 'jenis', width: 14 },
-    { header: 'Satuan', key: 'satuan', width: 10 },
-    { header: 'Target RPJMD', key: 'rpjmd', width: 13 },
-    { header: 'Target Tahunan', key: 'tahunan', width: 14 },
-    { header: 'TW1 Target', key: 'q1t', width: 10 },
-    { header: 'TW1 Realisasi', key: 'q1r', width: 12 },
-    { header: 'TW2 Target', key: 'q2t', width: 10 },
-    { header: 'TW2 Realisasi', key: 'q2r', width: 12 },
-    { header: 'TW3 Target', key: 'q3t', width: 10 },
-    { header: 'TW3 Realisasi', key: 'q3r', width: 12 },
-    { header: 'TW4 Target', key: 'q4t', width: 10 },
-    { header: 'TW4 Realisasi', key: 'q4r', width: 12 },
-    { header: 'Real Akhir', key: 'akhir', width: 12 },
+  const kolom: [KolomDok, (r: RaRow, i: number) => string | number | null][] = [
+    [kol('No', 'nomor', 5), (_, i) => i + 1],
+    ...entitas.map(([judul, key]): [KolomDok, (r: RaRow) => string] => [kol(judul, 'teks', 32), r => ({
+      e_tujuan: rapikanNamaEntitas((level === 'tujuan' ? r.program : r.tujuan) ?? ''),
+      e_sasaran: rapikanNamaEntitas((level === 'sasaran' ? r.program : r.sasaran) ?? ''),
+      e_program: r.program, e_kegiatan: r.kegiatan ?? '', e_sub: r.sub_kegiatan ?? '',
+    } as Record<string, string>)[key]]),
+    [kol('Kode', 'kode', 16), r => r.kode ?? ''],
+    [kol('Sasaran (Outcome)', 'teks', 38), r => outcomeOf(r)],
+    [kol('Indikator', 'uraian', 40), r => r.indikator],
+    ...(pakaiInduk ? [[kol('Indikator Induk', 'teks', 40), (r: RaRow) => (r.induk_indikator_id != null ? (teksInduk.get(r.induk_indikator_id) ?? '') : '')] as [KolomDok, (r: RaRow) => string]] : []),
+    [kol('Jenis', 'teks', 14), r => r.jenis],
+    [kol('Satuan', 'teks', 10), r => r.satuan],
+    [kol('Target RPJMD', 'desimal', 13), r => r.target_rpjmd],
+    [kol('Target Tahunan', 'desimal', 14), r => r.target_tahunan],
+    ...([1, 2, 3, 4] as const).flatMap(q => [
+      [kol(`TW${q} Target`, 'desimal', 10), (r: RaRow) => r[`q${q}_target`]],
+      [kol(`TW${q} Realisasi`, 'desimal', 12), (r: RaRow) => r[`q${q}_realisasi`] ?? '—'],
+    ] as [KolomDok, (r: RaRow) => string | number | null][]),
+    [kol('Real Akhir', 'desimal', 12), r => realisasiAkhirTahun(r) ?? '—'],
   ];
-  ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF9F27' } };
+  return {
+    kop: kopRenaksi(`DATA ENTRY ${LEVEL_LABELS[level].toUpperCase()}`, mentah[0]?.tahun ?? null),
+    kolom: kolom.map(([k]) => k),
+    baris: rows.map((r, i) => ({ sel: kolom.map(([, nilai]) => nilai(r, i)) })),
+    mendatar: true,
+  };
+}
 
-  rows.forEach((r, i) => {
-    ws.addRow({
-      no: i + 1,
-      e_tujuan: sanitizeCell(rapikanNamaEntitas((level === 'tujuan' ? r.program : r.tujuan) ?? '')),
-      e_sasaran: sanitizeCell(rapikanNamaEntitas((level === 'sasaran' ? r.program : r.sasaran) ?? '')),
-      e_program: sanitizeCell(r.program), e_kegiatan: sanitizeCell(r.kegiatan ?? ''), e_sub: sanitizeCell(r.sub_kegiatan ?? ''),
-      kode: sanitizeCell(r.kode ?? ''),
-      outcome: sanitizeCell(outcomeOf(r)),
-      indikator: sanitizeCell(r.indikator),
-      ...(pakaiInduk ? { induk: sanitizeCell(r.induk_indikator_id != null ? (teksInduk.get(r.induk_indikator_id) ?? '') : '') } : {}),
-      jenis: sanitizeCell(r.jenis), satuan: sanitizeCell(r.satuan),
-      rpjmd: r.target_rpjmd, tahunan: r.target_tahunan,
-      q1t: r.q1_target, q1r: r.q1_realisasi ?? '—',
-      q2t: r.q2_target, q2r: r.q2_realisasi ?? '—',
-      q3t: r.q3_target, q3r: r.q3_realisasi ?? '—',
-      q4t: r.q4_target, q4r: r.q4_realisasi ?? '—',
-      akhir: realisasiAkhirTahun(r) ?? '—',
-    });
-  });
-
+/** Dipisah dari tombolnya supaya isi berkas bisa diuji di Node (bolak-balik dengan Import Renaksi). */
+export async function buatWorkbookList(mentah: RaRow[], level: RaRow['level'], induk: RaRow[] = []) {
+  const ExcelJS = await loadXlsx();
+  const wb = new ExcelJS.Workbook();
+  tulisTabelExcel(wb.addWorksheet(LEVEL_LABELS[level]), dokList(mentah, level, induk));
   return wb;
 }
 
@@ -172,74 +175,75 @@ function xlsxColWidth(key: string): number {
   return 10;
 }
 
-export async function buildCombinedPdf(allRows: RaRow[], tahun: number, filter: CetakFilter = DEFAULT_CETAK_FILTER) {
-  const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-  doc.setFontSize(15);
-  doc.text(`Renaksi & Kinerja — Tahun ${tahun}`, 14, 14);
-  doc.setFontSize(9);
-  // Pemisah pakai » (WinAnsi 0xBB), BUKAN → (U+2192). Font bawaan jsPDF cuma
-  // paham WinAnsi; begitu ada satu karakter di luar itu, SELURUH baris ditulis
-  // ulang dalam pengkodean dua-byte dan tercetak jadi sampah — bukan cuma
-  // karakternya. Dijaga scripts/check-pdf-glyphs.mjs (Gate F).
-  doc.text('Tujuan » Sasaran » Program » Kegiatan » Sub Kegiatan', 14, 20);
-
+/**
+ * Dokumen Cetak gabungan — SATU susunan untuk Excel DAN PDF. Angka tetap ANGKA di Excel
+ * (persen 85,5 disimpan 0,855 berformat 0.00%); teks PDF = `tulisSelCetak` (= layar).
+ */
+export function dokGabungan(allRows: RaRow[], tahun: number | null, filter: CetakFilter = DEFAULT_CETAK_FILTER): DokTabel {
   const hier = buildCetakRows(allRows, filter);
-  if (!hier.length) {
-    doc.setFontSize(10);
-    doc.setTextColor(140);
-    doc.text('— Belum ada data —', 14, 34);
-    return doc;
-  }
   const rollup = cetakRollupBase(allRows, filter);
   const hdr = cetakHeader(filter);
-
-  const head = hdr.twQuarters.length
+  const kepala: SelKepala[][] = hdr.twQuarters.length
     ? [
         [
-          ...hdr.lead.map(c => ({ content: c.header, rowSpan: 2 })),
-          ...hdr.twQuarters.map(t => ({ content: `TW${t.q}`, colSpan: t.sub.length })),
-          ...hdr.tail.map(c => ({ content: c.header, rowSpan: 2 })),
+          ...hdr.lead.map(c => ({ teks: c.header, rowSpan: 2 })),
+          // 1 sub (Target ATAU Realisasi saja) → label gabung "TWn T/R", rentang tegak.
+          ...hdr.twQuarters.map(t => (t.sub.length === 1 ? { teks: `TW${t.q} ${t.sub[0].header}`, rowSpan: 2 } : { teks: `TW${t.q}`, colSpan: t.sub.length })),
+          ...hdr.tail.map(c => ({ teks: c.header, rowSpan: 2 })),
         ],
-        hdr.twQuarters.flatMap(t => t.sub.map(s => s.header)),
+        hdr.twQuarters.flatMap(t => (t.sub.length === 1 ? [] : t.sub.map(s => ({ teks: s.header })))),
       ]
-    : [[...hdr.lead, ...hdr.tail].map(c => c.header)];
+    : [[...hdr.lead, ...hdr.tail].map(c => ({ teks: c.header }))];
+  return {
+    // Pemisah pakai » (WinAnsi 0xBB), BUKAN → (U+2192): font bawaan jsPDF cuma paham WinAnsi
+    // (Gate F, scripts/check-pdf-glyphs.mjs).
+    kop: kopRenaksi('RENCANA AKSI & KINERJA', tahun, 'Tujuan » Sasaran » Program » Kegiatan » Sub Kegiatan'),
+    kepala,
+    kolom: hdr.flat.map(c => ({
+      judul: c.header,
+      jenis: c.key === 'no' ? 'nomor' : c.key === 'indikator' ? 'uraian' : c.money ? 'rupiah' : c.persen ? 'persen' : c.align === 'right' ? 'desimal' : 'teks',
+      lebar: xlsxColWidth(c.key),
+      ...(c.persen ? { numFmt: '0.00%', teksPdf: (v: number) => tulisSelCetak(c, v * 100) } : { teksPdf: (v: number) => tulisSelCetak(c, v) }),
+    })),
+    baris: hier.map(h => ({ sel: hdr.flat.map(c => {
+      const v = c.value(h, rollup);
+      // Persen tetap ANGKA supaya bisa dihitung di Excel: 85,5 disimpan 0,855 berformat 0.00%.
+      if (c.persen && typeof v === 'number') return v / 100;
+      if ((c.persen || c.realisasi) && v == null) return tulisSelCetak(c, v);
+      return v;
+    }) })),
+    catatan: catatanPaguCetak(rollup, filter).map(c => `Catatan: ${c}`),
+    mendatar: true,
+  };
+}
+
+export async function buildCombinedPdf(allRows: RaRow[], tahun: number, filter: CetakFilter = DEFAULT_CETAK_FILTER) {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = pdfBaru(jsPDF);
+  const dok = dokGabungan(allRows, tahun, filter);
+  if (!dok.baris.length) {
+    const y = kopDokPdf(doc as unknown as DokPdf, dok.kop);
+    doc.setFontSize(10);
+    doc.setTextColor(140);
+    doc.text('— Belum ada data —', 14, y + 6);
+    doc.setTextColor(0);
+    kakiDokPdf(doc as unknown as DokPdf, MODUL_RENAKSI);
+    return doc;
+  }
 
   const tepi = 10;
   const huruf = 6;
   const padding = 1.2;
-  const body = hier.map(h => hdr.flat.map(c => tulisSelCetak(c, c.value(h, rollup))));
+  const hdr = cetakHeader(filter);
+  const body = dok.baris.map(b => dok.kolom.map((k, i) => teksSelPdf(k, b.sel[i])));
   // Kata terpanjang tiap kolom (isi + judul) di ukuran huruf tabel → batas bawah lebar kolom teks.
   doc.setFontSize(huruf);
   const kataTerpanjang = (s: string) => s.split(/\s+/).reduce((m, w) => Math.max(m, w ? doc.getTextWidth(w) : 0), 0);
   const minKata = hdr.flat.map((c, i) =>
     Math.max(kataTerpanjang(c.header) * 1.1, ...body.map(r => kataTerpanjang(r[i]))) + 2 * padding + 0.6);
   const lebar = lebarKolomPdf(hdr.flat, doc.internal.pageSize.getWidth() - 2 * tepi, minKata);
-  autoTable(doc, {
-    startY: 26,
-    margin: { left: tepi, right: tepi },
-    tableWidth: lebar.reduce((s, v) => s + v, 0),
-    head,
-    body,
-    styles: { fontSize: huruf, cellPadding: padding, overflow: 'linebreak', valign: 'top' },
-    headStyles: { fillColor: [124, 92, 252], textColor: 255, fontSize: huruf, halign: 'center', valign: 'middle' },
-    columnStyles: Object.fromEntries(hdr.flat.map((c, i) => [i, { cellWidth: lebar[i], halign: c.align }])),
-  });
-
-  const catatan = catatanPaguCetak(rollup, filter);
-  if (catatan.length) {
-    let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
-    doc.setFontSize(7.5);
-    doc.setTextColor(133, 79, 11);
-    for (const c of catatan) {
-      const baris = doc.splitTextToSize(`Catatan: ${c}`, doc.internal.pageSize.getWidth() - 28) as string[];
-      if (y + baris.length * 3.5 > doc.internal.pageSize.getHeight() - 10) { doc.addPage(); y = 14; }
-      doc.text(baris, 14, y);
-      y += baris.length * 3.5 + 1.5;
-    }
-  }
-
+  gambarTabelPdf(doc, autoTable, dok, { huruf, lebarKolom: lebar });
+  kakiDokPdf(doc as unknown as DokPdf, MODUL_RENAKSI);
   return doc;
 }
 
@@ -249,85 +253,16 @@ export async function exportCombinedPdf(allRows: RaRow[], tahun: number, filter:
 }
 
 export async function exportCombinedXlsx(allRows: RaRow[], tahun: number, filter: CetakFilter = DEFAULT_CETAK_FILTER) {
-  const wb = await buatWorkbookGabungan(allRows, filter);
+  const wb = await buatWorkbookGabungan(allRows, filter, tahun);
   const buf = await wb.xlsx.writeBuffer();
   saveBlob(new Blob([buf]), `rencana-aksi-${tahun}-gabungan.xlsx`);
 }
 
 /** Dipisah dari unduhannya supaya isi berkasnya bisa diperiksa uji regresi. */
-export async function buatWorkbookGabungan(allRows: RaRow[], filter: CetakFilter = DEFAULT_CETAK_FILTER) {
+export async function buatWorkbookGabungan(allRows: RaRow[], filter: CetakFilter = DEFAULT_CETAK_FILTER, tahun: number | null = allRows[0]?.tahun ?? null) {
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Renaksi & Kinerja');
-
-  const hier = buildCetakRows(allRows, filter);
-  const rollup = cetakRollupBase(allRows, filter);
-  const hdr = cetakHeader(filter);
-  const flat = hdr.flat;
-
-  // Kolom (key + lebar) tanpa header — header 2 baris di-set manual + merge.
-  ws.columns = flat.map(c => ({ key: c.key, width: xlsxColWidth(c.key) }));
-
-  const r1 = ws.getRow(1), r2 = ws.getRow(2);
-  let col = 1;
-  for (const c of hdr.lead) { r1.getCell(col).value = c.header; ws.mergeCells(1, col, 2, col); col++; }
-  for (const t of hdr.twQuarters) {
-    if (t.sub.length === 1) {
-      // 1 sub (Target ATAU Realisasi saja) → label gabung "TWn T/R", merge vertikal.
-      r1.getCell(col).value = `TW${t.q} ${t.sub[0].header}`;
-      ws.mergeCells(1, col, 2, col);
-      col++;
-    } else {
-      r1.getCell(col).value = `TW${t.q}`;
-      ws.mergeCells(1, col, 1, col + t.sub.length - 1);
-      t.sub.forEach((s, i) => { r2.getCell(col + i).value = s.header; });
-      col += t.sub.length;
-    }
-  }
-  for (const c of hdr.tail) { r1.getCell(col).value = c.header; ws.mergeCells(1, col, 2, col); col++; }
-
-  for (let cc = 1; cc <= flat.length; cc++) {
-    for (const rr of [r1, r2]) {
-      const cell = rr.getCell(cc);
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C5CFC' } };
-    }
-  }
-
-  // Data mulai baris 3 (baris 1-2 = header bergrup).
-  let dataIdx = 3;
-  for (const h of hier) {
-    const row = ws.getRow(dataIdx++);
-    for (const c of flat) {
-      const v = c.value(h, rollup);
-      const cell = row.getCell(c.key);
-      // Persen tetap ANGKA supaya bisa dihitung di Excel: 85,5 disimpan 0,855 berformat 0.00%.
-      if (c.persen && typeof v === 'number') {
-        cell.value = v / 100;
-        cell.numFmt = '0.00%';
-      } else if ((c.persen || c.realisasi) && v == null) {
-        cell.value = tulisSelCetak(c, v);
-      } else {
-        cell.value = typeof v === 'string' ? sanitizeCell(v) : v;
-      }
-    }
-  }
-
-  const catatan = catatanPaguCetak(rollup, filter);
-  if (catatan.length) {
-    dataIdx++;
-    for (const c of catatan) {
-      const cell = ws.getRow(dataIdx).getCell(1);
-      cell.value = sanitizeCell(`Catatan: ${c}`);
-      cell.font = { italic: true, color: { argb: 'FF854F0B' } };
-      ws.mergeCells(dataIdx, 1, dataIdx, Math.max(1, flat.length));
-      cell.alignment = { wrapText: true, vertical: 'top' };
-      ws.getRow(dataIdx).height = 30;
-      dataIdx++;
-    }
-  }
-
+  tulisTabelExcel(wb.addWorksheet('Renaksi & Kinerja'), dokGabungan(allRows, tahun, filter));
   return wb;
 }
 
@@ -337,51 +272,72 @@ export async function exportIndikatorPdf(mentah: RaRow) {
   (await buatPdfIndikator(mentah)).save(`rencana-aksi-${mentah.level}-${mentah.tahun}-detail.pdf`);
 }
 
-export async function buatPdfIndikator(mentah: RaRow) {
+const persenTeks = (p: number | null) => (p === null ? '—' : tulisPersen(p));
+
+/** Dua dokumen satu indikator: ringkasan (Uraian · Nilai) dan tabel triwulan. */
+export function dokIndikator(mentah: RaRow): { ringkasan: DokTabel; triwulan: DokTabel } {
   const row = barisBersih(mentah);
-  const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const realAkhir = realisasiAkhirTahun(row);
-  const pctTh = capaianTahunan(row);
-  const pctRp = capaianRpjmd(row);
-  const persen = (p: number | null) => p === null ? '—' : tulisPersen(p);
+  const kop = kopRenaksi(`${LEVEL_LABELS[row.level].toUpperCase()} — DETAIL INDIKATOR`, row.tahun, row.indikator);
+  return {
+    ringkasan: {
+      kop,
+      // Angka tetap ANGKA di Excel; PDF berkoma (7,5, bukan 7.5) lewat tulisDesimal.
+      kolom: [kol('Uraian', 'teks', 28), { ...kol('Nilai', 'teks', 60), teksPdf: v => tulisDesimal(v) }],
+      baris: ([
+        ['Tahun', String(row.tahun)],
+        ['Level', LEVEL_LABELS[row.level]],
+        ['Program/Sasaran', row.program],
+        ['Kegiatan', row.kegiatan ?? '—'],
+        ['Sub Kegiatan', row.sub_kegiatan ?? '—'],
+        ['Sasaran (Outcome)', outcomeOf(row) || '—'],
+        ['Indikator', row.indikator],
+        ['Jenis', row.jenis],
+        ['Satuan', row.satuan],
+        ['Target RPJMD', row.target_rpjmd],
+        ['Target Tahunan', row.target_tahunan],
+        ['Realisasi Akhir', realAkhir ?? '—'],
+        ['Capaian Tahunan (%)', persenTeks(capaianTahunan(row))],
+        ['Capaian RPJMD (%)', persenTeks(capaianRpjmd(row))],
+      ] as [string, string | number][]).map(sel => ({ sel })),
+      tanpaNomorKolom: true,
+      mendatar: false,
+    },
+    triwulan: {
+      kop,
+      kolom: [kol('Triwulan', 'teks', 18), kol('Target', 'desimal', 14), kol('Realisasi', 'desimal', 14), kol('Capaian %', 'desimal', 14)],
+      baris: quartersOf(row).map(q => {
+        // Satu aturan dengan layar: target 0 / belum bisa dihitung = "—".
+        const pct = capaianTriwulan(row, q.id);
+        return { sel: [`TW ${q.id}`, q.target, q.realisasi ?? '—', pct == null ? '—' : Math.round(pct * 100) / 100] };
+      }),
+      mendatar: false,
+    },
+  };
+}
 
-  doc.setFontSize(13);
-  doc.text(`${LEVEL_LABELS[row.level]} — Tahun ${row.tahun}`, 14, 14);
-  doc.setFontSize(10);
-  doc.text(row.indikator, 14, 22, { maxWidth: 180 });
-
+export async function buatPdfIndikator(mentah: RaRow) {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = pdfBaru(jsPDF, false);
+  const { ringkasan, triwulan } = dokIndikator(mentah);
+  const y = gambarTabelPdf(doc, autoTable, ringkasan, { huruf: 9 });
   autoTable(doc, {
-    startY: 35,
-    body: [
-      ['Program/Sasaran', row.program],
-      ['Kegiatan', row.kegiatan ?? '—'],
-      ['Sub Kegiatan', row.sub_kegiatan ?? '—'],
-      ['Sasaran (Outcome)', outcomeOf(row) || '—'],
-      ['Jenis', row.jenis],
-      ['Satuan', row.satuan],
-      ['Target RPJMD', tulisDesimal(row.target_rpjmd)],
-      ['Target Tahunan', tulisDesimal(row.target_tahunan)],
-      ['Realisasi Akhir Tahun', tulisRealisasi(realAkhir)],
-      ['Capaian Tahunan (%)', persen(pctTh)],
-      ['Capaian RPJMD (%)', persen(pctRp)],
-    ],
-    styles: { fontSize: 9, cellPadding: 2 },
-    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    ...{ theme: 'grid' },
+    startY: y + 4,
+    margin: { left: 10, right: 10, bottom: 14 },
+    head: [triwulan.kolom.map(k => k.judul), triwulan.kolom.map((_, i) => `(${i + 1})`)],
+    body: triwulan.baris.map(b => triwulan.kolom.map((k, i) => (typeof b.sel[i] === 'number' && k.judul === 'Capaian %' ? persenTeks(b.sel[i] as number) : teksSelPdf(k, b.sel[i])))),
+    styles: { fontSize: 9, cellPadding: 1.6, lineColor: rgb('garisTegak'), lineWidth: 0.1, textColor: rgb('teks') },
+    headStyles: { fillColor: rgb('navy'), textColor: 255, fontStyle: 'bold', halign: 'center' },
+    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+    didParseCell: (d) => {
+      if (d.section === 'head' && d.row.index === 1) {
+        d.cell.styles.fillColor = rgb('biru1'); d.cell.styles.textColor = rgb('navy');
+        d.cell.styles.fontStyle = 'italic'; d.cell.styles.fontSize = 7;
+      }
+    },
   });
-
-  const qStart = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
-  autoTable(doc, {
-    startY: qStart,
-    head: [['Triwulan', 'Target', 'Realisasi', 'Capaian (%)']],
-    body: quartersOf(row).map(q => {
-      // Satu aturan dengan Excel & layar: target 0 / belum bisa dihitung = "—".
-      const pct = capaianTriwulan(row, q.id);
-      return [`TW ${q.id}`, tulisDesimal(q.target), tulisRealisasi(q.realisasi), persen(pct)];
-    }),
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [239, 159, 39] },
-  });
+  kakiDokPdf(doc as unknown as DokPdf, MODUL_RENAKSI);
   return doc;
 }
 
@@ -391,45 +347,26 @@ export async function exportIndikatorXlsx(mentah: RaRow) {
 }
 
 export async function buatWorkbookIndikator(mentah: RaRow) {
-  const row = barisBersih(mentah);
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Detail Indikator');
-
-  const realAkhir = realisasiAkhirTahun(row);
-  const meta: [string, string | number][] = [
-    ['Tahun', row.tahun],
-    ['Level', LEVEL_LABELS[row.level]],
-    ['Program/Sasaran', row.program],
-    ['Kegiatan', row.kegiatan ?? '—'],
-    ['Sub Kegiatan', row.sub_kegiatan ?? '—'],
-    ['Sasaran (Outcome)', outcomeOf(row) || '—'],
-    ['Indikator', row.indikator],
-    ['Jenis', row.jenis],
-    ['Satuan', row.satuan],
-    ['Target RPJMD', row.target_rpjmd],
-    ['Target Tahunan', row.target_tahunan],
-    ['Realisasi Akhir', realAkhir ?? '—'],
-  ];
-  meta.forEach(([k, v]) => {
-    const r = ws.addRow([k, sanitizeCell(v)]);
-    r.getCell(1).font = { bold: true };
+  const { ringkasan, triwulan } = dokIndikator(mentah);
+  const letak = tulisTabelExcel(ws, ringkasan);
+  // Tabel triwulan di bawah ringkasan, kepala navy sama (tanpa kop kedua).
+  const mulai = letak.sesudah + 1;
+  const kepala = ws.getRow(mulai);
+  triwulan.kolom.forEach((k, i) => { kepala.getCell(i + 1).value = k.judul; gayaKepalaExcel(kepala.getCell(i + 1)); });
+  triwulan.baris.forEach((b, j) => {
+    const r = ws.getRow(mulai + 1 + j);
+    b.sel.forEach((v, i) => {
+      const c = r.getCell(i + 1);
+      c.value = typeof v === 'string' ? sanitizeCell(v) : v ?? null;
+      hiasSelData(c, { angka: i > 0, volume: true });
+      // "—" teks dirata kanan seperti angka di kolomnya.
+      if (i > 0) c.alignment = { horizontal: 'right', vertical: 'top' };
+    });
+    r.getCell(4).numFmt = '0.00';
   });
-  ws.addRow([]);
-  const head = ws.addRow(['Triwulan', 'Target', 'Realisasi', 'Capaian %']);
-  head.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF9F27' } };
-  quartersOf(row).forEach(q => {
-    const pct = capaianTriwulan(row, q.id);
-    const baris = ws.addRow([`TW ${q.id}`, q.target, q.realisasi ?? '—', pct == null ? '—' : Math.round(pct * 100) / 100]);
-    // "—" teks dirata kanan seperti angka di kolomnya (dulu menempel kiri).
-    [2, 3, 4].forEach(c => { baris.getCell(c).alignment = { horizontal: 'right' }; });
-    baris.getCell(4).numFmt = '0.00';
-  });
-  ws.getColumn(1).width = 25;
-  ws.getColumn(2).width = 18;
-  ws.getColumn(3).width = 14;
-  ws.getColumn(4).width = 14;
   return wb;
 }
 
@@ -451,24 +388,16 @@ export async function buatWorkbookMatriks(mentah: RaRow[], tahun: number) {
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(`Realisasi Bulanan ${tahun}`);
-  const head = ws.addRow(MATRIX_HEAD);
-  head.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C5CFC' } };
-  for (const r of rows) {
-    const months = Array.isArray(r.bulan_realisasi) && r.bulan_realisasi.length === 12
-      ? r.bulan_realisasi : Array(12).fill(null);
-    ws.addRow([
-      r.id, sanitizeCell(r.program), sanitizeCell(r.kegiatan ?? ''), sanitizeCell(r.sub_kegiatan ?? ''),
-      sanitizeCell(r.indikator), sanitizeCell(r.satuan),
+  tulisTabelExcel(ws, {
+    kop: kopRenaksi('MATRIKS REALISASI BULANAN', tahun, 'Kolom ID jangan diubah — dipakai untuk mencocokkan baris saat diimpor balik.'),
+    kolom: MATRIX_HEAD.map((judul, i) => kol(judul, i === 0 ? 'kode' : i === 4 ? 'uraian' : i >= 6 ? 'desimal' : 'teks', i === 0 ? 8 : i === 4 ? 45 : i === 5 ? 10 : i >= 6 ? 8 : 28)),
+    baris: rows.map(r => {
+      const months = Array.isArray(r.bulan_realisasi) && r.bulan_realisasi.length === 12 ? r.bulan_realisasi : Array(12).fill(null);
       // R3: sel kosong = belum diisi, 0 = nol nyata
-      ...months.map(m => (m == null ? null : m)),
-    ]);
-  }
-  ws.getColumn(1).width = 8;
-  [2, 3, 4].forEach(c => { ws.getColumn(c).width = 28; });
-  ws.getColumn(5).width = 45;
-  ws.getColumn(6).width = 10;
-  for (let c = 7; c <= 18; c++) ws.getColumn(c).width = 8;
+      return { sel: [r.id, r.program, r.kegiatan ?? '', r.sub_kegiatan ?? '', r.indikator, r.satuan, ...months.map(m => (m == null ? null : m))] };
+    }),
+    mendatar: true,
+  });
   return wb;
 }
 
@@ -485,14 +414,17 @@ export async function parseMatrixBulananXlsx(file: File): Promise<Map<number, (n
   if (wb.worksheets.length > 10) throw new Error('File tidak valid (terlalu banyak sheet)');
   const ws = wb.worksheets[0];
   if (!ws) throw new Error('Sheet pertama tidak ditemukan');
-  const h = ws.getRow(1);
-  if (String(polosSelExcel(h.getCell(1)) ?? '').trim().toUpperCase() !== 'ID'
-    || String(polosSelExcel(h.getCell(7)) ?? '').trim() !== 'Jan') {
+  // Kepala ID … Jan: baris 1 (unduhan lama, polos) atau di bawah kop (unduhan bergaya resmi).
+  const kepala = cariBarisKepala(
+    Array.from({ length: Math.min(ws.rowCount, 25) }, (_, i) => Array.from({ length: 7 }, (_, c) => polosSelExcel(ws.getRow(i + 1).getCell(c + 1)))),
+    b => b[0]?.toUpperCase() === 'ID' && b[6] === 'Jan',
+  );
+  if (kepala < 0) {
     throw new Error('Format tidak dikenali — pakai file hasil "Unduh Excel" dari matriks ini');
   }
   const out = new Map<number, (number | null)[]>();
-  const maxRow = Math.min(ws.rowCount, 1001);
-  for (let i = 2; i <= maxRow; i++) {
+  const maxRow = Math.min(ws.rowCount, kepala + 1001);
+  for (let i = kepala + 2; i <= maxRow; i++) {
     const row = ws.getRow(i);
     const id = Number(polosSelExcel(row.getCell(1)));
     if (!Number.isInteger(id) || id <= 0) continue;

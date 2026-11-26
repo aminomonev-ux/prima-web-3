@@ -8,7 +8,9 @@
 
 import { readFileSync } from 'node:fs';
 import { buatWorkbookLaporan, barisLaporanPdf, ringkasLaporanPdf, barisSskPdf } from '../app/(dashboard)/kinerja/_exports';
-import { FMT_PERSEN, FMT_RUPIAH } from '../lib/shared/excel-export';
+import { FMT_PERSEN } from '../lib/shared/excel-export';
+// Rupiah unduhan bergaya resmi bersama (negatif berkurung, nol = "-").
+import { RUPIAH as FMT_RUPIAH } from '../lib/shared/gaya-dokumen';
 import { tulisPersen, tulisTetap } from '../lib/shared/desimal';
 import type { LaporanSumber, SskRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
@@ -73,7 +75,8 @@ console.log('\n── B. Laporan Excel: persen tetap ANGKA ───────
   ok('B4 nama bulan tetap teks', baris('Bulan Terakhir Data')?.v === 'Februari');
 
   const trend = wb.getWorksheet('Trend Bulanan')!;
-  const r2 = trend.getRow(3);
+  // Gaya resmi bersama: kepala baris 7, nomor kolom 8, Januari 9, Februari 10.
+  const r2 = trend.getRow(10);
   const PERSEN = [3, 5, 7], RUPIAH = [2, 4, 6];
   ok('B5 Trend: kolom persen ANGKA ber-FMT_PERSEN',
      PERSEN.every(c => typeof r2.getCell(c).value === 'number' && r2.getCell(c).numFmt === FMT_PERSEN),

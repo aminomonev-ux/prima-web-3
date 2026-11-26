@@ -4,6 +4,7 @@
 // berkas ekspor sistem aset provinsi; penulisnya `tulisLembar` (kib-excel.ts) supaya kop, kepala,
 // baris Jumlah, dan tanda tangan satu aturan.
 import type ExcelJS from 'exceljs'
+import { tulisTabelExcel, type JenisKolom } from '@/lib/shared/tabel-dokumen'
 import { TEKS_KONDISI_KIB, type Golongan, type KolomKib } from './kib'
 import type { AsetRingan } from './aset'
 import { namaTampil } from './aset'
@@ -219,19 +220,28 @@ const KOLOM_KERJA: [judul: string, lebar: number, nilai: (a: AsetKerja, batas: s
   ['Status', 9, a => a.status],
 ]
 
-/** Lembar datar untuk disaring/diolah sendiri — bukan dokumen resmi, jadi tanpa kop & tanda tangan. */
+/** Jenis kolom format kerja (perataan & huruf angka) — sejajar `KOLOM_KERJA`. */
+const JENIS_KERJA = (i: number): JenisKolom => (i === 1 ? 'kode' : i === 3 ? 'uraian' : i === 11 ? 'rupiah' : 'teks')
+
+/**
+ * Lembar datar untuk disaring/diolah sendiri — bukan dokumen resmi: gaya PRIMA bersama
+ * (kop, kepala navy) tanpa tanda tangan dan tanpa baris (1)(2)…, supaya saringan otomatis
+ * di baris kepala langsung mengenai datanya.
+ */
 export function tulisLembarKerja(wb: ExcelJS.Workbook, rows: readonly AsetKerja[], batas: string): ExcelJS.Worksheet {
-  const ws = wb.addWorksheet('Buku Aset PRIMA', { views: [{ state: 'frozen', ySplit: 1 }] })
-  ws.columns = KOLOM_KERJA.map(([header, width]) => ({ header, width }))
-  const kepala = ws.getRow(1)
-  kepala.font = { bold: true }
-  kepala.alignment = { vertical: 'middle', wrapText: true }
-  for (const a of urutCetak(rows)) {
-    const r = ws.addRow(KOLOM_KERJA.map(([, , nilai]) => nilai(a, batas)))
-    KOLOM_KERJA.forEach(([, , , fmt], c) => { if (fmt) r.getCell(c + 1).numFmt = fmt })
-    r.getCell(7).numFmt = '0'
+  const ws = wb.addWorksheet('Buku Aset PRIMA')
+  const urut = urutCetak(rows)
+  const letak = tulisTabelExcel(ws, {
+    kop: { judul: 'BUKU ASET — FORMAT KERJA', subjudul: 'BUKU BESAR ASET PRIMA', keterangan: `Status cek dihitung per ${fmtTanggal(batas)}`, modul: 'BUKU BESAR ASET' },
+    kolom: KOLOM_KERJA.map(([judul, lebar, , fmt], i) => ({ judul, lebar, jenis: JENIS_KERJA(i), ...(fmt ? { numFmt: fmt } : {}) })),
+    baris: urut.map(a => ({ sel: KOLOM_KERJA.map(([, , nilai]) => nilai(a, batas) as string | number | null) })),
+    tanpaNomorKolom: true,
+    mendatar: true,
+  })
+  for (let r = letak.dataAwal; r < letak.dataAwal + urut.length; r++) {
+    ws.getCell(r, 7).numFmt = '0'
+    ws.getCell(r, 3).numFmt = '@'
   }
-  ws.getColumn(3).numFmt = '@'
-  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: KOLOM_KERJA.length } }
+  ws.autoFilter = { from: { row: letak.kepalaAkhir, column: 1 }, to: { row: letak.kepalaAkhir, column: KOLOM_KERJA.length } }
   return ws
 }

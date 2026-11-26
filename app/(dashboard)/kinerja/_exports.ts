@@ -1,12 +1,17 @@
-// ─── PRIMA E-Anggaran — XLSX & PDF Export Functions ────────────────────────────
-// O2 + PERF-C3: 8 export fn (Excel via exceljs + PDF via jspdf+autotable).
-// SDL-Audit v1.1 Phase 4: migrate xlsx-js-style → exceljs (CVE prototype pollution + ReDoS).
-// Dynamic import: library hanya di-load saat user pertama kali klik tombol export, lalu cached.
-// Bundle initial /kinerja TIDAK termasuk library ini.
+// ─── PRIMA E-Anggaran — unduhan Excel & PDF ─────────────────────────────────
+// Semua tabel lewat gaya resmi bersama (lib/shared/tabel-dokumen.ts — konsep
+// docs/konsep/sistem/CONCEPT-format-unduhan-seragam.md): berkas ini menyusun DATA-nya
+// (`dok*`), penulisnya yang menggambar kop, kepala, JUMLAH, catatan, tanda tangan.
+// PERF-C3: exceljs/jspdf dimuat dinamis saat tombol diklik, lalu disimpan.
 
 import { fmtRp, fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import { tulisPersen } from '@/lib/shared/desimal';
-import { loadExcelJs, addSheetFromAoa, downloadWorkbook, FMT_RUPIAH, FMT_PERSEN } from '@/lib/shared/excel-export';
+import { loadExcelJs, downloadWorkbook, FMT_PERSEN } from '@/lib/shared/excel-export';
+import { kakiDokPdf, periodeTahun, type KopDok, type BlokTtd, type Tingkat } from '@/lib/shared/gaya-dokumen';
+import {
+  tulisTabelExcel, gambarTabelPdf, teksSelPdf,
+  type DokTabel, type KolomDok, type BarisDok, type JenisKolom,
+} from '@/lib/shared/tabel-dokumen';
 import type {
   SumberSSK, SskRow, RekeningRow, RealRow, CrrRow, PendRow, LaporanSumber,
   MasterOpts, MasterRow, MasterTipe,
@@ -18,6 +23,9 @@ import { ringkasVersiRekap, namaBerkasRekap, imbuhanBerkasVersi, imbuhanBerkasVe
 import { hitungJumlahBulan, bulanBerdata, tandaYatim, catatanYatimBulan } from '@/lib/kinerja/cetak-detail';
 import { adaTargetPerubahan, targetBerlaku, capaianPendapatan } from '@/lib/kinerja/pendapatan-perubahan';
 
+/** Teks kaki halaman tiap berkas ("PRIMA - E-ANGGARAN"). */
+export const MODUL_KINERJA = 'E-ANGGARAN';
+
 let _pdfPromise:  Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
 
 export function loadPdf() {
@@ -26,75 +34,83 @@ export function loadPdf() {
   return _pdfPromise;
 }
 
-// ─── SSK ──────────────────────────────────────────────────────────────────────
+type Dok = import('jspdf').jsPDF;
+type AutoTable = typeof import('jspdf-autotable').default;
+
+const kop = (judul: string, periode: string | null, keterangan?: string | null): KopDok =>
+  ({ judul, periode, keterangan: keterangan ?? null, modul: MODUL_KINERJA });
+
+const kolom = (judul: string, jenis: JenisKolom, lebar?: number): KolomDok => ({ judul, jenis, ...(lebar ? { lebar } : {}) });
+
+/** Satu dokumen → satu lembar → unduh. */
+async function unduhSatuLembar(dok: DokTabel, namaLembar: string, berkas: string) {
+  const ExcelJSLib = await loadExcelJs();
+  const wb = new ExcelJSLib.Workbook();
+  tulisTabelExcel(wb.addWorksheet(namaLembar.slice(0, 31)), dok);
+  await downloadWorkbook(wb, berkas);
+}
+
+/** Satu dokumen → PDF A4 (A3 bila `lebar`) → unduh. */
+async function unduhPdf(dok: DokTabel, berkas: string, format: 'a4' | 'a3' = 'a4') {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format });
+  gambarTabelPdf(doc, autoTable, dok, { huruf: format === 'a3' ? 7 : 7.5 });
+  kakiDokPdf(doc, MODUL_KINERJA);
+  doc.save(berkas);
+}
+
+/** Teks PDF tiap baris dokumen — yang tercetak, sel per sel. */
+export const teksBarisPdf = (dok: DokTabel): string[][] => dok.baris.map(b => dok.kolom.map((k, i) => teksSelPdf(k, b.sel[i])));
+
+// ─── SSK (RKO) ────────────────────────────────────────────────────────────────
+// Judul kolom TIDAK diubah: Import RKO (lib/data/kinerja-import-rko.ts) mengenalinya.
+
+export function dokSsk(rows: SskRow[], sumber: SumberSSK, tahun: string): DokTabel {
+  const jumlah = (f: (r: SskRow) => number) => rows.reduce((t, r) => t + (Number(f(r)) || 0), 0);
+  const paguTotal = jumlah(r => r.pagu);
+  const persenDari = (rp: number) => (paguTotal ? Math.round((rp / paguTotal) * 10000) / 100 : 0);
+  return {
+    kop: kop(`RKO ${sumber}`, periodeTahun(tahun)),
+    kolom: [
+      kolom('No', 'nomor'), kolom('Uraian SSK', 'teks', 22), kolom('Uraian', 'uraian', 34), kolom('Pagu (Rp)', 'rupiah', 16),
+      ...MONTHS_KEYS.flatMap((_, i) => [kolom(`Target ${MONTH_SHORT[i]}`, 'rupiah', 14), kolom(`% ${MONTH_SHORT[i]}`, 'persen', 8)]),
+      kolom('Total (Rp)', 'rupiah', 16), kolom('Total %', 'persen', 9),
+    ],
+    baris: [
+      ...rows.map((r, i): BarisDok => ({ sel: [
+        i + 1, r.uraian_ssk, r.uraian, r.pagu,
+        ...MONTHS_KEYS.flatMap(m => [r.months[m] || 0, r.months_pct[m] || 0]),
+        r.total, r.total_pct,
+      ] })),
+      ...(rows.length ? [{ total: true, sel: [
+        '', '', 'JUMLAH', paguTotal,
+        ...MONTHS_KEYS.flatMap(m => { const v = jumlah(r => r.months[m]); return [v, persenDari(v)]; }),
+        jumlah(r => r.total), persenDari(jumlah(r => r.total)),
+      ] } satisfies BarisDok] : []),
+    ],
+    mendatar: true,
+  };
+}
 
 export async function exportSskExcel(params: { rows: SskRow[]; sumber: SumberSSK; tahun: string }) {
   const { rows, sumber, tahun } = params;
-  const ExcelJSLib = await loadExcelJs();
-  const wb = new ExcelJSLib.Workbook();
-  const ws = wb.addWorksheet(`SSK ${sumber}`);
-  const header = [
-    'No','Uraian SSK','Uraian','Pagu (Rp)',
-    ...MONTHS_KEYS.flatMap((_, i) => [`Target ${MONTH_SHORT[i]}`, `% ${MONTH_SHORT[i]}`]),
-    'Total (Rp)','Total %',
-  ];
-  const data = rows.map((r, i) => [
-    i+1, r.uraian_ssk, r.uraian, r.pagu,
-    ...MONTHS_KEYS.flatMap(m => [r.months[m] || 0, r.months_pct[m] || 0]),
-    r.total, r.total_pct,
-  ]);
-  addSheetFromAoa(ws, [header, ...data], {
-    colWidths: [{ wch: 5 }, { wch: 20 }, { wch: 30 }, { wch: 16 }, ...MONTHS_KEYS.flatMap(() => [{ wch: 14 }, { wch: 8 }]), { wch: 16 }, { wch: 10 }],
-    numFmts:   [null, null, null, FMT_RUPIAH, ...MONTHS_KEYS.flatMap(() => [FMT_RUPIAH, FMT_PERSEN]), FMT_RUPIAH, FMT_PERSEN],
-  });
-  await downloadWorkbook(wb, `SSK-${sumber}-${tahun}.xlsx`);
+  await unduhSatuLembar(dokSsk(rows, sumber, tahun), `SSK ${sumber}`, `SSK-${sumber}-${tahun}.xlsx`);
 }
 
+/** Teks PDF baris RKO (tanpa JUMLAH) — sel persen berkoma, rupiah bertitik. */
 export function barisSskPdf(rows: SskRow[]): string[][] {
-  return rows.map((r, i) => [
-    String(i+1), r.uraian_ssk, r.uraian, fmtNum(r.pagu),
-    ...MONTHS_KEYS.flatMap(m => [fmtNum(r.months[m]||0), tulisPersen(r.months_pct[m]||0)]),
-    fmtNum(r.total), tulisPersen(r.total_pct),
-  ]);
+  return teksBarisPdf(dokSsk(rows, 'GAJI', '')).slice(0, rows.length);
 }
 
 export async function exportSskPdf(params: { rows: SskRow[]; sumber: SumberSSK; tahun: string }) {
   const { rows, sumber, tahun } = params;
-  const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
-  doc.setFontSize(13);
-  doc.text(`SSK ${sumber} — Tahun ${tahun}`, 14, 14);
-  doc.setFontSize(9);
-  doc.text('RSJD dr. Amino Gondohutomo', 14, 20);
-  const head = [['No','Uraian SSK','Uraian','Pagu (Rp)', ...MONTH_SHORT.flatMap(m => [`${m} Fisik`,`${m} %`]),'Total (Rp)','Total %']];
-  autoTable(doc, { head, body: barisSskPdf(rows), startY: 24, styles: { fontSize: 7, cellPadding: 1 }, headStyles: { fillColor: [51,65,85] } });
-  doc.save(`SSK-${sumber}-${tahun}.pdf`);
+  await unduhPdf(dokSsk(rows, sumber, tahun), `SSK-${sumber}-${tahun}.pdf`, 'a3');
 }
 
-// ─── Kop dokumen: SATU bentuk untuk PDF dan Excel ─────────────────────────────
+// ─── Kop dokumen ──────────────────────────────────────────────────────────────
 //
-// Isi kopnya beda antara Rekap dan Detail, tapi bentuknya sama: beberapa baris
-// rata tengah dengan ukuran & ketebalan bertingkat. Dipisah jadi deskripsi
-// (`KopBaris[]`) + dua penulis, supaya tidak ada dua versi kop yang bisa
-// berbeda — dulu kop PDF rekap rata kiri sementara kop PDF detail rata tengah,
-// jadi dalam satu berkas bundel halaman 1 tidak sebentuk dengan halaman 2.
-
-export interface KopBaris { teks: string; ukuran: number; tebal: boolean }
-
-/**
- * Ukuran & ketebalan tiap baris kop rekap — SATU sumber untuk tiga hal yang
- * dulu memeliharanya masing-masing: teksnya (`kopRekap`), gaya sel Excel
- * (`rapikanSheetRekap`, yang dulu memanggil `kopRekap('', '')` cuma untuk
- * menghitung baris), dan jumlah barisnya (`REKAP_JUDUL_BARIS`, dulu angka 6
- * yang ditulis tangan).
- */
-const GAYA_KOP_REKAP = [
-  { ukuran: 12, tebal: true  },
-  { ukuran: 9,  tebal: false },
-  { ukuran: 11, tebal: true  },
-  { ukuran: 9,  tebal: false },
-  { ukuran: 8,  tebal: false },
-] as const;
+// Isi kop Rekap & Detail beda, bentuknya sama (`KopDok`, digambar `kopDokExcel` /
+// `kopDokPdf`) — jadi dalam satu berkas bundel halaman rekap sebentuk dgn halaman detail.
 
 /**
  * `ringkasVersi` WAJIB, tanpa nilai bawaan: bawaan `''` dulu memulangkan
@@ -104,29 +120,25 @@ const GAYA_KOP_REKAP = [
  * informatif, ia menyesatkan — dan nilai bawaan membuatnya bisa kembali diam-
  * diam lewat pemanggil yang lupa.
  */
-export function kopRekap(namaBulan: string, tahun: string, ringkasVersi: string): KopBaris[] {
-  const teks = [
-    'RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO',
-    'PROVINSI JAWA TENGAH',
+export function kopRekap(namaBulan: string, tahun: string, ringkasVersi: string): KopDok {
+  return kop(
     'LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP',
     `S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`,
     ringkasVersi,
-  ];
-  return GAYA_KOP_REKAP.map((g, i) => ({ teks: teks[i], ukuran: g.ukuran, tebal: g.tebal }));
+  );
 }
 
 /**
  * `versi` WAJIB: unduhan MURNI dan PERUBAHAN-1 pagunya beda, dan kop tanpa versi
- * membuat keduanya identik. Ditempel di baris ke-4, bukan baris baru — jumlah baris
- * kop tetap, letak kepala tabel tidak bergeser. CONCEPT-kinerja-versi-cetak §1.3.
+ * membuat keduanya identik. Ditulis di baris keterangan kop (baris 5) — letak kepala
+ * tabel tidak bergeser. CONCEPT-kinerja-versi-cetak §1.3.
  */
-export function kopDetail(sumber: SumberSSK, bulan: number, tahun: string, versi: string): KopBaris[] {
-  return [
-    { teks: 'RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO', ukuran: 12, tebal: true },
-    { teks: 'PROVINSI JAWA TENGAH', ukuran: 9, tebal: false },
-    { teks: `LAPORAN REALISASI KINERJA ${sumber}`, ukuran: 11, tebal: true },
-    { teks: `BULAN ${(CRR_BULAN_LABELS[bulan - 1] ?? '').toUpperCase()} TAHUN ${tahun} · SSK ${versi}`, ukuran: 9, tebal: false },
-  ];
+export function kopDetail(sumber: SumberSSK, bulan: number, tahun: string, versi: string): KopDok {
+  return kop(
+    `LAPORAN REALISASI KINERJA ${sumber}`,
+    `BULAN ${(CRR_BULAN_LABELS[bulan - 1] ?? '').toUpperCase()} TAHUN ${tahun}`,
+    `SSK ${versi}`,
+  );
 }
 
 /**
@@ -140,6 +152,13 @@ export const PENANDA_TANGAN = [
   { peran: 'Mengetahui,',   jabatan: 'Kabag Renbang' },
   { peran: 'Yang membuat,', jabatan: 'Kasubag Program' },
 ];
+
+/** Blok tanda tangan berkas = layar: tempat & tanggal, peran, ruang tanda tangan, jabatan. */
+export function ttdKinerja(namaBulan: string, tahun: string): BlokTtd[] {
+  return PENANDA_TANGAN.map(p => ({
+    tempat: `Semarang, ${namaBulan} ${tahun}`, peran: p.peran, jabatan: p.jabatan, jabatanDiBawah: true,
+  }));
+}
 
 // ─── Rekap (Cetak → Rekap) ────────────────────────────────────────────────────
 //
@@ -157,8 +176,19 @@ export const REKAP_HEADER = [
   'Realisasi Keu s/d Bln Ini (%)', 'Deviasi Keu (%)',
 ];
 
-/** Hierarki dipertahankan lewat spasi di depan label — Excel & PDF tidak punya indent baris. */
-const labelIndent = (b: BarisRekap) => `${'    '.repeat(b.indent)}${b.label}`;
+/** Jenis tiap kolom Rekap — WAJIB sejajar `REKAP_HEADER` (uang vs persen). */
+const REKAP_JENIS: JenisKolom[] = [
+  'nomor', 'uraian', 'rupiah', 'persen',
+  'rupiah', 'persen', 'persen',
+  'persen',
+  'rupiah', 'rupiah', 'rupiah',
+  'persen', 'persen',
+];
+const REKAP_LEBAR = [5, 48, 18, 12, 20, 12, 12, 14, 20, 18, 20, 12, 12];
+
+/** Tingkat pohon Rekap → latar dokumen: grand total navy, program & kegiatan biru. */
+const tingkatRekap = (indent: number): Tingkat =>
+  indent === 0 ? 'akar' : indent === 1 ? 'induk1' : indent === 2 ? 'induk2' : 'biasa';
 
 export interface RekapExportParams {
   baris:    BarisRekap[];
@@ -221,153 +251,88 @@ export function catatanDinolkan(sumberDinolkan: string[]): string | null {
     + 'Rp 0 dan TIDAK ikut menyumbang ke total di atas. Itu disengaja, bukan data yang belum diisi.';
 }
 
-/**
- * Baris kop di atas header — indeksnya juga yang dipakai `headerRowIndex`.
- * DITURUNKAN dari kopnya (+1 untuk baris kosong pemisah), bukan angka tetap:
- * menambah baris kop tanpa menggeser angka ini membuat header tabel ter-style
- * sebagai kop dan sebaliknya.
- */
-export const REKAP_JUDUL_BARIS = GAYA_KOP_REKAP.length + 1;
-
-/** Dipisah dari pengunduhannya supaya bisa diuji tanpa DOM. */
-export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan,
-  versiRekap, pilihanVersi }: RekapExportParams): (string | number | null)[][] {
-  // Kopnya DIAMBIL dari `kopRekap`, tidak ditulis ulang di sini: dua salinan
-  // kalimat yang sama pasti berbeda bunyi begitu satu disunting — dan keduanya
-  // memang sudah mulai berbeda soal kasus kosongnya.
-  const judul: (string | number | null)[][] = [
-    ...kopRekap(namaBulan, tahun, ringkasVersiRekap(versiRekap, pilihanVersi)).map(k => [k.teks]),
-    [],
-  ];
-  const data = baris.map(b => [
-    b.no, labelIndent(b), b.pagu, b.targetPct,
-    b.realFisik, b.pctFisik, b.devFisik, b.capaianFisik,
-    b.targetRp, b.realKeuBulanIni, b.realKeu, b.pctKeu, b.devKeu,
-  ]);
-  const catatan = [
-    catatanDinolkan(sumberDinolkan),
-    catatanTanpaRealisasi(tanpaRealisasi, namaBulan, tahun),
-    catatanYatim(yatim),
-  ].filter((c): c is string => c !== null);
-  return [...judul, REKAP_HEADER, ...data, ...(catatan.length ? [[], ...catatan.map(c => [c])] : [])];
-}
-
-const REKAP_LEBAR = [{ wch:5 },{ wch:48 },{ wch:18 },{ wch:12 },{ wch:20 },{ wch:12 },{ wch:12 },{ wch:14 },{ wch:20 },{ wch:18 },{ wch:20 },{ wch:12 },{ wch:12 }];
-
-/** Urutannya WAJIB sejajar `REKAP_HEADER` — kolom uang vs kolom persen. */
-const REKAP_FMT = [
-  null, null, FMT_RUPIAH, FMT_PERSEN,
-  FMT_RUPIAH, FMT_PERSEN, FMT_PERSEN,
-  FMT_PERSEN,
-  FMT_RUPIAH, FMT_RUPIAH, FMT_RUPIAH,
-  FMT_PERSEN, FMT_PERSEN,
-];
-
-/**
- * Rapikan sheet Rekap supaya sebentuk dengan layar: kop di-merge selebar tabel
- * dan dirata-tengah (dulu menggantung di kolom A dan meluber ke kanan), lalu
- * baris grand total & program ditebalkan seperti di layar — `BarisRekap.tebal`
- * sudah membawa informasinya, tinggal dipakai.
- */
-export function rapikanSheetRekap(ws: import('exceljs').Worksheet, baris: BarisRekap[]) {
-  const kolom = REKAP_HEADER.length;
-  // Gayanya dari `GAYA_KOP_REKAP`, bukan dari `kopRekap('', '')`: memanggil
-  // pembuat teks dengan argumen palsu cuma untuk menghitung baris adalah cara
-  // kalimat kop yang salah bisa lolos ke berkas.
-  GAYA_KOP_REKAP.forEach((g, i) => {
-    const r = ws.getRow(i + 1);
-    ws.mergeCells(r.number, 1, r.number, kolom);
-    r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-    r.getCell(1).font = { bold: g.tebal, size: g.ukuran };
-  });
-  baris.forEach((b, i) => {
-    if (!b.tebal) return;
-    ws.getRow(REKAP_JUDUL_BARIS + 2 + i).eachCell(c => { c.font = { bold: true }; });
-  });
+/** Dokumen Rekap — SATU susunan untuk Excel DAN PDF (dipisah supaya bisa diuji tanpa DOM). */
+export function dokRekap({ baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan,
+  versiRekap, pilihanVersi }: RekapExportParams): DokTabel {
+  return {
+    kop: kopRekap(namaBulan, tahun, ringkasVersiRekap(versiRekap, pilihanVersi)),
+    kolom: REKAP_HEADER.map((j, i) => kolom(j, REKAP_JENIS[i], REKAP_LEBAR[i])),
+    baris: baris.map(b => ({
+      tingkat: tingkatRekap(b.indent), kedalaman: b.indent, tebal: b.tebal,
+      sel: [
+        b.no, b.label, b.pagu, b.targetPct,
+        b.realFisik, b.pctFisik, b.devFisik, b.capaianFisik ?? '—',
+        b.targetRp, b.realKeuBulanIni, b.realKeu, b.pctKeu, b.devKeu,
+      ],
+    })),
+    catatan: [
+      catatanDinolkan(sumberDinolkan),
+      catatanTanpaRealisasi(tanpaRealisasi, namaBulan, tahun),
+      catatanYatim(yatim),
+    ].filter((c): c is string => c !== null),
+    ttd: ttdKinerja(namaBulan, tahun),
+    mendatar: true,
+  };
 }
 
 export async function exportRekapExcel(params: RekapExportParams) {
-  const ExcelJSLib = await loadExcelJs();
-  const wb = new ExcelJSLib.Workbook();
-  const ws = wb.addWorksheet('Rekap');
-  addSheetFromAoa(ws, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR, numFmts: REKAP_FMT });
-  rapikanSheetRekap(ws, params.baris);
-  await downloadWorkbook(wb, namaBerkasRekap(params.pilihanVersi, params.namaBulan, params.tahun, 'xlsx'));
+  await unduhSatuLembar(dokRekap(params), 'Rekap', namaBerkasRekap(params.pilihanVersi, params.namaBulan, params.tahun, 'xlsx'));
 }
 
 /** Halaman rekap di PDF — dipakai unduhan satuan DAN bundel. */
-export function gambarRekapPdf(
-  doc: import('jspdf').jsPDF,
-  autoTable: typeof import('jspdf-autotable').default,
-  { baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan,
-    versiRekap, pilihanVersi }: RekapExportParams,
-) {
-  // Rata tengah lewat penulis yang SAMA dengan halaman detail. Dulu kop rekap
-  // ditulis di x=14 (pojok kiri) sementara kop detail rata tengah, jadi dalam
-  // satu berkas bundel halaman 1 tidak sebentuk dengan halaman 2.
-  const yTabel = tulisKopPdf(doc, kopRekap(namaBulan, tahun, ringkasVersiRekap(versiRekap, pilihanVersi)), 13);
-
-  const body = baris.map(b => [
-    String(b.no), labelIndent(b), fmtNum(b.pagu), tulisPersen(b.targetPct),
-    fmtNum(b.realFisik), tulisPersen(b.pctFisik), tulisPersen(b.devFisik),
-    b.capaianFisik === null ? '—' : tulisPersen(b.capaianFisik),
-    fmtNum(b.targetRp), fmtNum(b.realKeuBulanIni), fmtNum(b.realKeu),
-    tulisPersen(b.pctKeu), tulisPersen(b.devKeu),
-  ]);
-  autoTable(doc, {
-    head: [REKAP_HEADER], body, startY: yTabel,
-    styles: { fontSize: 7, cellPadding: 1 },
-    headStyles: { fillColor: [51,65,85] },
-    // Baris grand total & program ditebalkan supaya pohonnya tetap terbaca di kertas.
-    didParseCell: (d) => { if (d.section === 'body' && baris[d.row.index]?.tebal) d.cell.styles.fontStyle = 'bold'; },
-  });
-  const catatan = [
-    catatanDinolkan(sumberDinolkan),
-    catatanTanpaRealisasi(tanpaRealisasi, namaBulan, tahun),
-    catatanYatim(yatim),
-  ].filter((c): c is string => c !== null);
-  if (catatan.length) {
-    const y = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? yTabel;
-    doc.setFontSize(8);
-    doc.text(doc.splitTextToSize(catatan.join('\n'), 380), 14, y + 8);
-  }
+export function gambarRekapPdf(doc: Dok, autoTable: AutoTable, params: RekapExportParams) {
+  gambarTabelPdf(doc, autoTable, dokRekap(params), { huruf: 7 });
 }
 
 export async function exportRekapPdf(params: RekapExportParams) {
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
   gambarRekapPdf(doc, autoTable, params);
+  kakiDokPdf(doc, MODUL_KINERJA);
   doc.save(namaBerkasRekap(params.pilihanVersi, params.namaBulan, params.tahun, 'pdf'));
 }
 
 // ─── Rekening ─────────────────────────────────────────────────────────────────
+// Daftar kerja (tanpa tanda tangan). Judul kolom dikenali Import Rekening — jangan diubah.
+
+export function dokRekening(rows: RekeningRow[], sumber: SumberSSK, tahun: string): DokTabel {
+  return {
+    kop: kop(`DAFTAR REKENING ${sumber}`, periodeTahun(tahun)),
+    kolom: [
+      kolom('No', 'nomor'), kolom('Program', 'teks', 40), kolom('Kegiatan', 'teks', 26), kolom('Sub Kegiatan', 'teks', 28),
+      kolom('Uraian SSK', 'teks', 28), kolom('Rekening Belanja', 'teks', 30), kolom('Sumber Anggaran', 'teks', 18),
+    ],
+    baris: rows.map((r, i) => ({ sel: [i + 1, r.program ?? '', r.kegiatan ?? '', r.subkegiatan ?? '', r.uraian_ssk ?? '', r.uraian, r.sumber_anggaran ?? ''] })),
+    mendatar: true,
+  };
+}
 
 export async function exportRekeningExcel(params: { rows: RekeningRow[]; sumber: SumberSSK; tahun: string }) {
   const { rows, sumber, tahun } = params;
-  const ExcelJSLib = await loadExcelJs();
-  const wb = new ExcelJSLib.Workbook();
-  const ws = wb.addWorksheet(`Rekening ${sumber}`);
-  const header = ['No','Program','Kegiatan','Sub Kegiatan','Uraian SSK','Rekening Belanja','Sumber Anggaran'];
-  const data   = rows.map((r,i) => [i+1, r.program??'', r.kegiatan??'', r.subkegiatan??'', r.uraian_ssk??'', r.uraian, r.sumber_anggaran??'']);
-  addSheetFromAoa(ws, [header, ...data], {
-    colWidths: [{ wch:5 },{ wch:40 },{ wch:20 },{ wch:25 },{ wch:25 },{ wch:25 },{ wch:18 }],
-  });
-  await downloadWorkbook(wb, `Rekening-${sumber}-${tahun}.xlsx`);
+  await unduhSatuLembar(dokRekening(rows, sumber, tahun), `Rekening ${sumber}`, `Rekening-${sumber}-${tahun}.xlsx`);
 }
 
 // ─── Realisasi ────────────────────────────────────────────────────────────────
 
 // ─── Detail per sumber: susunan bersama layar / Excel / PDF ───────────────────
 //
-// Dipisah dari pengunduhnya (pola `rekapAoa`) supaya unduhan per-sumber DAN
-// bundel gabungan memakai satu definisi. Dua definisi tabel detail cepat atau
-// lambat berbeda pendapat.
+// Dipisah dari pengunduhnya supaya unduhan per-sumber DAN bundel gabungan memakai
+// satu definisi. Dua definisi tabel detail cepat atau lambat berbeda pendapat.
 
 export const DETAIL_HEADER = [
   'No', 'Bulan', 'Keterangan', 'Pagu', 'Target Fisik', 'Real Fisik', '% Fisik',
   'Akum Target Fisik', 'Akum Real Fisik', 'Akum % Fisik',
   'Real Keuangan', '% Real Keu', 'Akum Keuangan', 'Akum % Keuangan',
   'Deviasi Fisik %', 'Deviasi Keuangan %',
+];
+
+/** Sejajar `DETAIL_HEADER` (16 kolom). */
+const DETAIL_JENIS: JenisKolom[] = [
+  'nomor', 'teks', 'uraian',
+  'rupiah', 'persen', 'rupiah', 'persen',
+  'persen', 'rupiah', 'persen',
+  'rupiah', 'persen', 'rupiah', 'persen',
+  'persen', 'persen',
 ];
 
 export function realisasiAoa(rows: RealRow[]): (string | number | null)[][] {
@@ -380,65 +345,6 @@ export function realisasiAoa(rows: RealRow[]): (string | number | null)[][] {
   ]);
 }
 
-const DETAIL_LEBAR = [{ wch: 4 }, { wch: 14 }, { wch: 30 }, ...Array(13).fill({ wch: 14 })];
-
-/** Sejajar `DETAIL_HEADER` (16 kolom). */
-const DETAIL_FMT = [
-  null, null, null,
-  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
-  FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
-  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
-  FMT_PERSEN, FMT_PERSEN,
-];
-
-/** Sejajar `DETAIL_BULAN_HEADER` (15 kolom — tanpa Bulan, bulannya di kop). */
-export const DETAIL_BULAN_FMT = [
-  null, null,
-  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
-  FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
-  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
-  FMT_PERSEN, FMT_PERSEN,
-];
-
-
-// ─── Halaman detail di PDF: kop + tabel + JUMLAH + tanda tangan ───────────────
-//
-// Bentuknya meniru LAYAR, bukan tabel rata seperti versi lama — supaya berkasnya
-// benar-benar bisa ditandatangani dan dikirim, bukan cuma tumpukan angka.
-// Dipakai bersama oleh unduhan per-sumber dan bundel gabungan.
-
-type Dok = import('jspdf').jsPDF;
-type AutoTable = typeof import('jspdf-autotable').default;
-
-const LEBAR_A3 = 420;
-
-/** Kop rata tengah di PDF. Balikkan `y` setelah kop supaya tabelnya menyusul. */
-function tulisKopPdf(doc: Dok, kop: KopBaris[], yAwal = 14): number {
-  const tengah = LEBAR_A3 / 2;
-  let y = yAwal;
-  for (const k of kop) {
-    doc.setFontSize(k.ukuran);
-    doc.setFont('helvetica', k.tebal ? 'bold' : 'normal');
-    doc.text(k.teks, tengah, y, { align: 'center' });
-    y += k.ukuran >= 11 ? 6 : 5;
-  }
-  doc.setFont('helvetica', 'normal');
-  return y + 2;
-}
-
-function tandaTangan(doc: Dok, y: number, bulan: number, tahun: string) {
-  doc.setFontSize(8);
-  PENANDA_TANGAN.forEach((p, i) => {
-    const x = LEBAR_A3 - (i === 0 ? 190 : 90);
-    doc.text(`Semarang, ${CRR_BULAN_LABELS[bulan - 1] ?? ''} ${tahun}`, x, y, { align: 'center' });
-    doc.text(p.peran, x, y + 4, { align: 'center' });
-    doc.setFont('helvetica', 'bold');
-    doc.text(p.jabatan, x, y + 22, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.line(x - 32, y + 18, x + 32, y + 18);
-  });
-}
-
 /** Header 15 kolom — SAMA dengan tabel di layar (tanpa kolom Bulan; bulannya di kop). */
 export const DETAIL_BULAN_HEADER = [
   'No', 'Uraian Kegiatan', 'Pagu (Rp)', 'Target Fisik', 'Real Fisik', '% Fisik',
@@ -446,6 +352,16 @@ export const DETAIL_BULAN_HEADER = [
   'Real Keuangan (Rp)', '% Real Keu', 'Akum. Keuangan (Rp)', 'Akum. % Keuangan',
   'Deviasi Fisik %', 'Deviasi Keuangan %',
 ];
+
+/** Sejajar `DETAIL_BULAN_HEADER` (15 kolom). */
+const DETAIL_BULAN_JENIS: JenisKolom[] = [
+  'nomor', 'uraian',
+  'rupiah', 'persen', 'rupiah', 'persen',
+  'persen', 'rupiah', 'persen',
+  'rupiah', 'persen', 'rupiah', 'persen',
+  'persen', 'persen',
+];
+const DETAIL_BULAN_LEBAR = [5, 42, ...Array(13).fill(15)];
 
 /**
  * Baris satu bulan, urutan kolom persis tabel layar. `angka: true` memulangkan
@@ -473,6 +389,23 @@ export function barisBulanDetail(rows: RealRow[], angka: boolean, versi: string)
   return isi;
 }
 
+/**
+ * Dokumen satu bulan: kop + tabel + JUMLAH + catatan yatim + tanda tangan. Bentuknya
+ * meniru LAYAR supaya berkasnya bisa ditandatangani dan dikirim. Dipakai Excel DAN PDF,
+ * unduhan per-sumber DAN bundel.
+ */
+export function dokDetailBulan(rows: RealRow[], sumber: SumberSSK, bulan: number, tahun: string, versi: string): DokTabel {
+  const isi = barisBulanDetail(rows, true, versi);
+  return {
+    kop: kopDetail(sumber, bulan, tahun, versi),
+    kolom: DETAIL_BULAN_HEADER.map((j, i) => kolom(j, DETAIL_BULAN_JENIS[i], DETAIL_BULAN_LEBAR[i])),
+    baris: isi.map((sel, i) => (i === isi.length - 1 ? { sel, total: true } : { sel })),
+    catatan: [catatanYatimBulan(hitungJumlahBulan(rows), versi)].filter((c): c is string => c !== null),
+    ttd: ttdKinerja(CRR_BULAN_LABELS[bulan - 1] ?? '', tahun),
+    mendatar: true,
+  };
+}
+
 /** Satu halaman per bulan. `halamanBaru` false untuk halaman pertama dokumen. */
 export function gambarDetailPdf(
   doc: Dok, autoTable: AutoTable,
@@ -483,62 +416,14 @@ export function gambarDetailPdf(
   for (const b of bulanDipakai) {
     const barisBulan = rows.filter(r => r.bulan === b);
     if (barisBulan.length === 0) continue;
-    if (perluHalaman) doc.addPage();
+    gambarTabelPdf(doc, autoTable, dokDetailBulan(barisBulan, sumber, b, tahun, versi), { halamanBaru: perluHalaman, huruf: 7 });
     perluHalaman = true;
-
-    const y = tulisKopPdf(doc, kopDetail(sumber, b, tahun, versi));
-    const body = barisBulanDetail(barisBulan, false, versi) as string[][];
-    autoTable(doc, {
-      head: [DETAIL_BULAN_HEADER], body, startY: y,
-      styles: { fontSize: 7, cellPadding: 1 },
-      headStyles: { fillColor: [51, 65, 85] },
-      didParseCell: (d) => { if (d.section === 'body' && d.row.index === body.length - 1) d.cell.styles.fontStyle = 'bold'; },
-    });
-    let akhir = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
-    const catatan = catatanYatimBulan(hitungJumlahBulan(barisBulan), versi);
-    if (catatan) {
-      doc.setFontSize(8);
-      const baris = doc.splitTextToSize(catatan, LEBAR_A3 - 28) as string[];
-      doc.text(baris, 14, akhir + 6);
-      akhir += 4 * baris.length + 2;
-    }
-    tandaTangan(doc, akhir + 14, b, tahun);
   }
 }
 
 // ─── Excel: blok per bulan, meniru layar ──────────────────────────────────────
 
 type Sheet = import('exceljs').Worksheet;
-
-function tulisKopExcel(ws: Sheet, kop: KopBaris[], jumlahKolom: number) {
-  for (const k of kop) {
-    const r = ws.addRow([k.teks]);
-    ws.mergeCells(r.number, 1, r.number, jumlahKolom);
-    r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-    r.getCell(1).font = { bold: k.tebal, size: k.ukuran };
-  }
-}
-
-function tulisTandaTanganExcel(ws: Sheet, bulan: number, tahun: string, jumlahKolom: number) {
-  // Ditempatkan di dua kolom terakhir supaya sejajar kanan seperti di layar.
-  const kiri = Math.max(1, jumlahKolom - 5);
-  const kanan = Math.max(2, jumlahKolom - 2);
-  const tanggal = `Semarang, ${CRR_BULAN_LABELS[bulan - 1] ?? ''} ${tahun}`;
-  const tulis = (a: string, b: string, tebal: boolean) => {
-    const r = ws.addRow([]);
-    for (const [kol, teks] of [[kiri, a], [kanan, b]] as [number, string][]) {
-      r.getCell(kol).value = teks;
-      r.getCell(kol).alignment = { horizontal: 'center' };
-      r.getCell(kol).font = { bold: tebal, size: 9 };
-    }
-  };
-  tulis(tanggal, tanggal, false);
-  tulis(PENANDA_TANGAN[0].peran, PENANDA_TANGAN[1].peran, false);
-  ws.addRow([]); ws.addRow([]); ws.addRow([]);
-  tulis(PENANDA_TANGAN[0].jabatan, PENANDA_TANGAN[1].jabatan, true);
-}
-
-const DETAIL_BULAN_LEBAR = [{ wch: 5 }, { wch: 42 }, ...Array(13).fill({ wch: 15 })];
 
 /**
  * Satu sheet, satu blok per bulan, dipisah page-break — BUKAN satu sheet per
@@ -548,50 +433,12 @@ const DETAIL_BULAN_LEBAR = [{ wch: 5 }, { wch: 42 }, ...Array(13).fill({ wch: 15
 export function tulisSheetDetailPerBulan(
   ws: Sheet, rows: RealRow[], sumber: SumberSSK, tahun: string, bulanDipakai: number[], versi: string,
 ) {
-  DETAIL_BULAN_LEBAR.forEach((w, i) => { ws.getColumn(i + 1).width = w.wch; });
-  let pertama = true;
+  let mulai = 1;
   for (const b of bulanDipakai) {
     const barisBulan = rows.filter(r => r.bulan === b);
     if (barisBulan.length === 0) continue;
-    if (!pertama) ws.getRow(ws.rowCount).addPageBreak();
-    pertama = false;
-
-    tulisKopExcel(ws, kopDetail(sumber, b, tahun, versi), DETAIL_BULAN_HEADER.length);
-    ws.addRow([]);
-
-    const rh = ws.addRow(DETAIL_BULAN_HEADER);
-    rh.eachCell(c => {
-      c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
-      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    });
-
-    const isi = barisBulanDetail(barisBulan, true, versi);
-    isi.forEach((baris, i) => {
-      const r = ws.addRow(baris);
-      // Blok ini menambah baris sendiri, tidak lewat addSheetFromAoa, jadi
-      // formatnya harus dipasang di sini juga — kalau tidak, kolom uang di sheet
-      // per-bulan kembali jadi notasi ilmiah begitu angkanya 12 digit.
-      DETAIL_BULAN_FMT.forEach((f, k) => {
-        if (!f) return;
-        const c = r.getCell(k + 1);
-        if (typeof c.value === 'number') c.numFmt = f;
-      });
-      // Baris terakhir = JUMLAH.
-      if (i === isi.length - 1) r.eachCell(c => { c.font = { bold: true }; });
-    });
-
-    const catatan = catatanYatimBulan(hitungJumlahBulan(barisBulan), versi);
-    if (catatan) {
-      const rc = ws.addRow([catatan]);
-      ws.mergeCells(rc.number, 1, rc.number, DETAIL_BULAN_HEADER.length);
-      rc.getCell(1).alignment = { wrapText: true, vertical: 'top' };
-      rc.getCell(1).font = { italic: true, size: 9 };
-      rc.height = 30;
-    }
-    ws.addRow([]);
-    tulisTandaTanganExcel(ws, b, tahun, DETAIL_BULAN_HEADER.length);
-    ws.addRow([]);
+    if (mulai > 1) ws.getRow(mulai - 1).addPageBreak();
+    mulai = tulisTabelExcel(ws, dokDetailBulan(barisBulan, sumber, b, tahun, versi), { mulai }).sesudah + 1;
   }
 }
 
@@ -624,21 +471,28 @@ export async function exportRealisasiExcel(params: RealisasiExportParams) {
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
   tulisSheetDetailPerBulan(wb.addWorksheet(sumber), baris, sumber, tahun, dipakai, versi.label);
-  tulisSheetData(wb, baris, sumber);
+  tulisSheetData(wb, baris, sumber, tahun);
   await downloadWorkbook(wb, namaBerkasRealisasi(sumber, tahun, dipakai, 'xlsx', versi));
 }
 
 /**
- * Sheet "Data": tabel rata tanpa kop/JUMLAH/tanda tangan.
+ * Sheet "Data": satu tabel rata semua bulan (tanpa JUMLAH/tanda tangan).
  *
- * Begitu sheet utama dipecah per bulan, ia berhenti jadi tabel — sort, filter,
- * dan pivot tidak bisa dipakai karena ada kop & baris JUMLAH menyelip di
- * tengah-tengah. Sheet ini mengembalikan kemampuan itu tanpa mengorbankan apa pun;
- * penyusunnya (`realisasiAoa`) memang sudah ada.
+ * Begitu sheet utama dipecah per bulan, ia berhenti jadi satu tabel — sort, filter,
+ * dan pivot tidak bisa dipakai karena kop & baris JUMLAH menyelip di tengah-tengah.
+ * Sheet ini mengembalikan kemampuan itu; ia juga yang dibaca Import Realisasi.
  */
-export function tulisSheetData(wb: import('exceljs').Workbook, rows: RealRow[], sumber: SumberSSK) {
-  const ws = wb.addWorksheet(`Data ${sumber}`.slice(0, 31));
-  addSheetFromAoa(ws, [DETAIL_HEADER, ...realisasiAoa(rows)], { colWidths: DETAIL_LEBAR, numFmts: DETAIL_FMT });
+export function dokDataRealisasi(rows: RealRow[], sumber: SumberSSK, tahun: string): DokTabel {
+  return {
+    kop: kop(`DATA REALISASI KINERJA ${sumber}`, periodeTahun(tahun)),
+    kolom: DETAIL_HEADER.map((j, i) => kolom(j, DETAIL_JENIS[i], i === 2 ? 30 : i === 1 ? 12 : i === 0 ? 5 : 14)),
+    baris: realisasiAoa(rows).map(sel => ({ sel })),
+    mendatar: true,
+  };
+}
+
+export function tulisSheetData(wb: import('exceljs').Workbook, rows: RealRow[], sumber: SumberSSK, tahun: string) {
+  tulisTabelExcel(wb.addWorksheet(`Data ${sumber}`.slice(0, 31)), dokDataRealisasi(rows, sumber, tahun));
 }
 
 export async function exportRealisasiPdf(params: RealisasiExportParams) {
@@ -647,103 +501,126 @@ export async function exportRealisasiPdf(params: RealisasiExportParams) {
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
   gambarDetailPdf(doc, autoTable, baris, sumber, tahun, dipakai, false, versi.label);
+  kakiDokPdf(doc, MODUL_KINERJA);
   doc.save(namaBerkasRealisasi(sumber, tahun, dipakai, 'pdf', versi));
 }
 
 // ─── CRR ──────────────────────────────────────────────────────────────────────
 
+export function dokCrr(rows: CrrRow[], tahun: string): DokTabel {
+  return {
+    kop: kop('COST RECOVERY RATE (CRR)', periodeTahun(tahun)),
+    kolom: [
+      kolom('No', 'nomor'), kolom('Bulan', 'teks', 14),
+      kolom('Pendapatan', 'rupiah', 16), kolom('Belanja BLUD', 'rupiah', 16), kolom('Belanja Daerah', 'rupiah', 16),
+      kolom('Pend. s/d', 'rupiah', 16), kolom('Belanja BLUD s/d', 'rupiah', 16), kolom('Belanja Daerah s/d', 'rupiah', 16),
+      kolom('CRR Parsial %', 'persen', 12), kolom('CRR Total %', 'persen', 12),
+    ],
+    baris: rows.map((r, i) => ({ sel: [i + 1, r.bulan, r.pendapatan, r.belanja_blud, r.belanja_daerah, r.pendapatan_sd, r.belanja_blud_sd, r.belanja_daerah_sd, r.crr_parsial_pct, r.crr_total_pct] })),
+    mendatar: true,
+  };
+}
+
 export async function exportCrrExcel(params: { rows: CrrRow[]; tahun: string }) {
   const { rows, tahun } = params;
-  const ExcelJSLib = await loadExcelJs();
-  const wb = new ExcelJSLib.Workbook();
-  const ws = wb.addWorksheet(`CRR ${tahun}`);
-  const header = ['No','Bulan','Pendapatan','Belanja BLUD','Belanja Daerah','Pend. s/d','Belanja BLUD s/d','Belanja Daerah s/d','CRR Parsial %','CRR Total %'];
-  const data = rows.map((r,i) => [i+1, r.bulan, r.pendapatan, r.belanja_blud, r.belanja_daerah, r.pendapatan_sd, r.belanja_blud_sd, r.belanja_daerah_sd, r.crr_parsial_pct, r.crr_total_pct]);
-  addSheetFromAoa(ws, [header, ...data], {
-    colWidths: [{ wch:4 },{ wch:14 },...Array(8).fill({ wch:16 })],
-    numFmts:   [null, null, ...Array(6).fill(FMT_RUPIAH), FMT_PERSEN, FMT_PERSEN],
-  });
-  await downloadWorkbook(wb, `CRR-${tahun}.xlsx`);
+  await unduhSatuLembar(dokCrr(rows, tahun), `CRR ${tahun}`, `CRR-${tahun}.xlsx`);
 }
 
 // ─── Pendapatan ───────────────────────────────────────────────────────────────
+// Import Pendapatan membaca berkas ini (kolom Keterangan berisi nama bulan) — judul tetap.
+
+export function dokPendapatan(rows: PendRow[], tahun: string): DokTabel {
+  const jumlah = (f: (r: PendRow) => number) => rows.reduce((t, r) => t + (Number(f(r)) || 0), 0);
+  const capaian = (real: number, target: number) => (target ? Math.round((real / target) * 10000) / 100 : 0);
+  // Ada Target Perubahan → kedua kolom ditulis berdampingan; capaian dari target berlaku.
+  const perubahan = adaTargetPerubahan(rows);
+  const tgt = jumlah(r => (perubahan ? targetBerlaku(r) : r.target));
+  const real = jumlah(r => r.realisasi);
+  return {
+    kop: kop('LAPORAN PENDAPATAN', periodeTahun(tahun)),
+    kolom: perubahan
+      ? [kolom('No', 'nomor'), kolom('Keterangan', 'uraian', 40), kolom('Target Murni', 'rupiah', 17), kolom('Target Perubahan', 'rupiah', 17), kolom('Realisasi', 'rupiah', 17), kolom('Capaian %', 'persen', 12)]
+      : [kolom('No', 'nomor'), kolom('Keterangan', 'uraian', 40), kolom('Target', 'rupiah', 17), kolom('Realisasi', 'rupiah', 17), kolom('Capaian %', 'persen', 12)],
+    baris: [
+      ...rows.map((r, i): BarisDok => ({ sel: perubahan
+        ? [i + 1, r.keterangan, r.target, targetBerlaku(r), r.realisasi, capaianPendapatan(r)]
+        : [i + 1, r.keterangan, r.target, r.realisasi, r.capaian_pct] })),
+      ...(rows.length ? [{ total: true, sel: perubahan
+        ? ['', 'JUMLAH', jumlah(r => r.target), tgt, real, capaian(real, tgt)]
+        : ['', 'JUMLAH', tgt, real, capaian(real, tgt)] } satisfies BarisDok] : []),
+    ],
+    mendatar: false,
+  };
+}
 
 export async function exportPendapatanExcel(params: { rows: PendRow[]; tahun: string }) {
   const { rows, tahun } = params;
-  const ExcelJSLib = await loadExcelJs();
-  const wb = new ExcelJSLib.Workbook();
-  const ws = wb.addWorksheet(`Pendapatan ${tahun}`);
-  // Ada Target Perubahan → kedua kolom ditulis berdampingan; capaian dari target berlaku.
-  if (adaTargetPerubahan(rows)) {
-    const header = ['No','Keterangan','Target Murni','Target Perubahan','Realisasi','Capaian %'];
-    const data = rows.map((r,i) => [i+1, r.keterangan, r.target, targetBerlaku(r), r.realisasi, capaianPendapatan(r)]);
-    addSheetFromAoa(ws, [header, ...data], {
-      colWidths: [{ wch:4 },{ wch:40 },{ wch:16 },{ wch:16 },{ wch:16 },{ wch:12 }],
-      numFmts:   [null, null, FMT_RUPIAH, FMT_RUPIAH, FMT_RUPIAH, FMT_PERSEN],
-    });
-  } else {
-    const header = ['No','Keterangan','Target','Realisasi','Capaian %'];
-    const data = rows.map((r,i) => [i+1, r.keterangan, r.target, r.realisasi, r.capaian_pct]);
-    addSheetFromAoa(ws, [header, ...data], {
-      colWidths: [{ wch:4 },{ wch:40 },{ wch:16 },{ wch:16 },{ wch:12 }],
-      numFmts:   [null, null, FMT_RUPIAH, FMT_RUPIAH, FMT_PERSEN],
-    });
-  }
-  await downloadWorkbook(wb, `Pendapatan-${tahun}.xlsx`);
+  await unduhSatuLembar(dokPendapatan(rows, tahun), `Pendapatan ${tahun}`, `Pendapatan-${tahun}.xlsx`);
 }
 
 // ─── Laporan Konsolidasi (2 sheets: Ringkasan + Trend Bulanan) ────────────────
 
 export async function exportLaporanExcel(params: { data: LaporanSumber; tahun: string }) {
-  await downloadWorkbook(await buatWorkbookLaporan(params.data), `Laporan-${params.data.sumber}-${params.tahun}.xlsx`);
+  await downloadWorkbook(await buatWorkbookLaporan(params.data, params.tahun), `Laporan-${params.data.sumber}-${params.tahun}.xlsx`);
+}
+
+const kopLaporan = (data: LaporanSumber, tahun: string, judul: string) =>
+  kop(`${judul} — ${data.sumber}`, periodeTahun(tahun), `Data s/d bulan ${CRR_BULAN_LABELS[data.bulan_terakhir - 1] ?? '-'}`);
+
+export function dokRingkasanLaporan(data: LaporanSumber, tahun: string): DokTabel {
+  return {
+    kop: kopLaporan(data, tahun, 'LAPORAN KONSOLIDASI'),
+    kolom: [kolom('Keterangan', 'teks', 30), kolom('Nilai', 'rupiah', 24)],
+    baris: [
+      ['Sumber Anggaran', data.sumber],
+      ['Total Pagu', data.total_pagu],
+      ['Total Target Fisik', data.total_target_fisik],
+      ['Total Realisasi Keuangan', data.total_real_keuangan],
+      ['Total Realisasi Fisik', data.total_real_fisik],
+      ['% Serapan Keuangan', data.pct_serapan],
+      ['% Capaian Fisik', data.pct_fisik],
+      ['Bulan Terakhir Data', CRR_BULAN_LABELS[data.bulan_terakhir - 1] ?? '-'],
+    ].map(sel => ({ sel })),
+    tanpaNomorKolom: true,
+    mendatar: false,
+  };
+}
+
+const TREND_HEADER = ['Bulan', 'Real Keuangan (Rp)', '% Real Keu', 'Akum Keuangan (Rp)', 'Akum % Keuangan', 'Real Fisik (Rp)', 'Akum % Fisik'];
+const TREND_JENIS: JenisKolom[] = ['teks', 'rupiah', 'persen', 'rupiah', 'persen', 'rupiah', 'persen'];
+
+export function dokTrendLaporan(data: LaporanSumber, tahun: string): DokTabel {
+  return {
+    kop: { ...kopLaporan(data, tahun, 'TREND BULANAN'), keterangan: ringkasLaporanPdf(data) },
+    kolom: TREND_HEADER.map((j, i) => kolom(j, TREND_JENIS[i], i === 0 ? 14 : 16)),
+    baris: data.trend.map(t => ({ sel: [
+      CRR_BULAN_LABELS[t.bulan - 1] ?? t.bulan,
+      t.real_keuangan, t.pct_keuangan, t.akum_keuangan, t.akum_pct_keuangan, t.real_fisik, t.akum_pct_fisik,
+    ] })),
+    ttd: ttdKinerja(CRR_BULAN_LABELS[data.bulan_terakhir - 1] ?? '', tahun),
+    mendatar: true,
+  };
 }
 
 /** Dipisah dari tombol unduh supaya isi selnya bisa diuji di Node. */
-export async function buatWorkbookLaporan(data: LaporanSumber) {
+export async function buatWorkbookLaporan(data: LaporanSumber, tahun = '') {
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
 
-  // Sheet 1: Ringkasan
   const wsSum = wb.addWorksheet('Ringkasan');
-  const sumHeader = ['Keterangan','Nilai'];
-  const sumData = [
-    ['Sumber Anggaran', data.sumber],
-    ['Total Pagu', data.total_pagu],
-    ['Total Target Fisik', data.total_target_fisik],
-    ['Total Realisasi Keuangan', data.total_real_keuangan],
-    ['Total Realisasi Fisik', data.total_real_fisik],
-    ['% Serapan Keuangan', data.pct_serapan],
-    ['% Capaian Fisik', data.pct_fisik],
-    ['Bulan Terakhir Data', CRR_BULAN_LABELS[data.bulan_terakhir-1] ?? '-'],
-  ];
-  addSheetFromAoa(wsSum, [sumHeader, ...sumData], {
-    colWidths: [{ wch: 24 }, { wch: 30 }],
-    // Kolom Nilai campur rupiah, persen, dan nama bulan: format per kolom untuk
-    // rupiah, baris persen ditimpa per sel di bawah (tetap ANGKA, bisa dihitung).
-    numFmts:   [null, FMT_RUPIAH],
-  });
-  sumData.forEach((r, i) => { if (String(r[0]).startsWith('%')) wsSum.getRow(i + 2).getCell(2).numFmt = FMT_PERSEN; });
+  const letak = tulisTabelExcel(wsSum, dokRingkasanLaporan(data, tahun));
+  // Kolom Nilai campur rupiah, persen, dan nama bulan: baris persen ditimpa per sel
+  // (tetap ANGKA, bisa dihitung).
+  for (let r = letak.dataAwal; r < letak.dataAwal + 8; r++) {
+    if (String(wsSum.getRow(r).getCell(1).value ?? '').startsWith('%')) wsSum.getRow(r).getCell(2).numFmt = FMT_PERSEN;
+  }
 
-  // Sheet 2: Trend Bulanan
-  const wsTrend = wb.addWorksheet('Trend Bulanan');
-  const trendHeader = ['Bulan','Real Keuangan','% Real Keu','Akum Keuangan','Akum % Keuangan','Real Fisik','Akum % Fisik'];
-  const trendData = data.trend.map(t => [
-    CRR_BULAN_LABELS[t.bulan-1] ?? t.bulan,
-    t.real_keuangan, t.pct_keuangan, t.akum_keuangan, t.akum_pct_keuangan, t.real_fisik, t.akum_pct_fisik,
-  ]);
-  addSheetFromAoa(wsTrend, [trendHeader, ...trendData], {
-    colWidths: [{ wch:14 },{ wch:16 },{ wch:14 },{ wch:16 },{ wch:16 },{ wch:16 },{ wch:14 }],
-    numFmts:   [null, FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN],
-  });
+  tulisTabelExcel(wb.addWorksheet('Trend Bulanan'), dokTrendLaporan(data, tahun));
   return wb;
 }
 
 export function barisLaporanPdf(data: LaporanSumber): string[][] {
-  return data.trend.map(t => [
-    CRR_BULAN_LABELS[t.bulan-1] ?? String(t.bulan),
-    fmtNum(t.real_keuangan), tulisPersen(t.pct_keuangan), fmtNum(t.akum_keuangan), tulisPersen(t.akum_pct_keuangan),
-    fmtNum(t.real_fisik), tulisPersen(t.akum_pct_fisik),
-  ]);
+  return teksBarisPdf(dokTrendLaporan(data, ''));
 }
 
 export function ringkasLaporanPdf(data: LaporanSumber): string {
@@ -752,15 +629,7 @@ export function ringkasLaporanPdf(data: LaporanSumber): string {
 
 export async function exportLaporanPdf(params: { data: LaporanSumber; tahun: string }) {
   const { data, tahun } = params;
-  const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
-  doc.setFontSize(13); doc.text(`Laporan Konsolidasi ${data.sumber} — Tahun ${tahun}`, 14, 14);
-  doc.setFontSize(9);  doc.text('RSJD dr. Amino Gondohutomo', 14, 20);
-  doc.setFontSize(10);
-  doc.text(ringkasLaporanPdf(data), 14, 27);
-  const head = [['Bulan','Real Keuangan (Rp)','% Real Keu','Akum Keuangan (Rp)','Akum % Keuangan','Real Fisik (Rp)','Akum % Fisik']];
-  autoTable(doc, { head, body: barisLaporanPdf(data), startY:32, styles:{ fontSize:8, cellPadding:2 }, headStyles:{ fillColor:[51,65,85] } });
-  doc.save(`Laporan-${data.sumber}-${tahun}.pdf`);
+  await unduhPdf(dokTrendLaporan(data, tahun), `Laporan-${data.sumber}-${tahun}.pdf`);
 }
 
 // ─── Master ───────────────────────────────────────────────────────────────────
@@ -800,30 +669,34 @@ export function masterAoa(opts: MasterOpts, tipe: MasterTipe): (string | number)
   }
 }
 
+export function dokMaster(opts: MasterOpts, tipe: MasterTipe, sheet: string, tahun: string): DokTabel {
+  return {
+    kop: kop(`MASTER ${sheet.toUpperCase()}`, periodeTahun(tahun)),
+    kolom: [kolom('No', 'nomor'), kolom('Nama', 'uraian', 55), kolom('Program', 'teks', 40), kolom('Kegiatan', 'teks', 35), kolom('Sub Kegiatan', 'teks', 35)],
+    baris: masterAoa(opts, tipe).map(sel => ({ sel })),
+    mendatar: true,
+  };
+}
+
 /** Satu workbook berisi KELIMA tipe — supaya sekali unduh bisa diimpor balik utuh. */
 export async function exportMasterExcel(params: { opts: MasterOpts; tahun: string }) {
   const { opts, tahun } = params;
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
-  for (const { tipe, sheet } of MASTER_SHEET) {
-    const ws = wb.addWorksheet(sheet);
-    addSheetFromAoa(ws, [MASTER_HEADER, ...masterAoa(opts, tipe)], {
-      colWidths: [{ wch: 5 }, { wch: 55 }, { wch: 40 }, { wch: 35 }, { wch: 35 }],
-    });
-  }
+  for (const { tipe, sheet } of MASTER_SHEET) tulisTabelExcel(wb.addWorksheet(sheet), dokMaster(opts, tipe, sheet, tahun));
   await downloadWorkbook(wb, `Master-E-Anggaran-${tahun}.xlsx`);
 }
 
 // ─── Bundel: Rekap + Detail per sumber dalam SATU berkas ──────────────────────
 //
-// Excel = satu SHEET per bagian, bukan ditumpuk. Rekap 13 kolom, Detail 16 —
+// Excel = satu SHEET per bagian, bukan ditumpuk. Rekap 13 kolom, Detail 15 —
 // menumpuknya di satu lembar membuat kolom tidak segaris, dan berkasnya jadi
 // tidak bisa disortir/disaring/dirumuskan. Sheet memang untuk itu.
 // PDF = bertumpuk, karena kertas memang bertumpuk: halaman rekap, lalu halaman
 // tiap sumber lengkap dengan kop & tanda tangan.
 //
-// Keduanya memakai penyusun yang SAMA dengan unduhan satuan (`rekapAoa`,
-// `realisasiAoa`, `gambarDetailPdf`) — yang diunduh wajib memuat angka yang
+// Keduanya memakai penyusun yang SAMA dengan unduhan satuan (`dokRekap`,
+// `dokDetailBulan`, `dokDataRealisasi`) — yang diunduh wajib memuat angka yang
 // persis sama dengan yang dilihat di layar.
 
 export interface BagianDetail {
@@ -848,15 +721,13 @@ export async function exportBundelExcel(params: BundelParams) {
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
 
-  const wsRekap = wb.addWorksheet('Rekap');
-  addSheetFromAoa(wsRekap, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR, numFmts: REKAP_FMT });
-  rapikanSheetRekap(wsRekap, params.baris);
+  tulisTabelExcel(wb.addWorksheet('Rekap'), dokRekap(params));
 
   for (const bagian of params.detail) {
     const baris = bagian.rows.filter(r => bagian.bulan.includes(r.bulan));
     if (baris.length === 0) continue;
     tulisSheetDetailPerBulan(wb.addWorksheet(bagian.sumber), baris, bagian.sumber, params.tahun, bagian.bulan, bagian.versi);
-    tulisSheetData(wb, baris, bagian.sumber);
+    tulisSheetData(wb, baris, bagian.sumber, params.tahun);
   }
 
   await downloadWorkbook(wb, namaBundel(params.pilihanVersi, params.namaBulan, params.tahun, 'xlsx'));
@@ -875,5 +746,6 @@ export async function exportBundelPdf(params: BundelParams) {
     gambarDetailPdf(doc, autoTable, baris, bagian.sumber, params.tahun, bagian.bulan, true, bagian.versi);
   }
 
+  kakiDokPdf(doc, MODUL_KINERJA);
   doc.save(namaBundel(params.pilihanVersi, params.namaBulan, params.tahun, 'pdf'));
 }

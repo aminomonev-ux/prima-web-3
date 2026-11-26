@@ -5,13 +5,16 @@
 // = dua sumber kebenaran untuk satu tabel. exceljs/jspdf dimuat saat tombol ditekan
 // (PERF-C3) — berkas ini tanpa impor tingkat-atas pustaka berat.
 
-import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-export'
+import { loadExcelJs, downloadWorkbook } from '@/lib/shared/excel-export'
 import type ExcelJS from 'exceljs'
 import {
   kolomRekapPj, kolomRincianPj, tabelRekapPj, tabelRincianPj, LABEL_TANPA_PJ,
   type BarisPj, type HasilRekapPj, type SelEkspor,
 } from '@/lib/blud/realisasi-pj'
 import { kalimatDiLuarPagu, type DiLuarPagu } from '@/lib/blud/di-luar-pagu'
+import { kakiDokPdf, type KopDok } from '@/lib/shared/gaya-dokumen'
+import { tulisTabelExcel, gambarTabelPdf, type DokTabel, type BarisDok, type JenisKolom } from '@/lib/shared/tabel-dokumen'
+import { MODUL_BLUD } from '@/lib/blud/export/gaya-dokumen'
 
 export interface ArgEksporPj {
   tahun:     number
@@ -26,8 +29,11 @@ export interface ArgEksporPj {
 
 const NAMA_BERKAS = (a: ArgEksporPj, ext: string) => `Realisasi-per-PJ-${a.namaBulan}-${a.tahun}.${ext}`
 
-function judul(a: ArgEksporPj): string {
-  return `REALISASI ANGGARAN BLUD PER PENANGGUNG JAWAB — S.D. ${a.namaBulan.toUpperCase()} ${a.tahun}`
+function kop(a: ArgEksporPj, judul: string): KopDok {
+  return {
+    judul, subjudul: 'BADAN LAYANAN UMUM DAERAH',
+    periode: `S.D. ${a.namaBulan.toUpperCase()} ${a.tahun}`, keterangan: a.sumber, modul: MODUL_BLUD,
+  }
 }
 
 /** Catatan yang wajib ikut ke berkas — angka yang dibawa ke rapat tidak boleh kehilangan sebabnya. */
@@ -48,60 +54,48 @@ export function catatanEksporPj(a: ArgEksporPj): string[] {
 
 const tebal = (sel: SelEkspor) => typeof sel === 'string' && (sel === 'JUMLAH' || sel.startsWith('Jumlah '))
 
-// ─── Excel ───────────────────────────────────────────────────────────────────
+/** Baris berkas: JUMLAH = baris total amber, "Jumlah <PJ>" = subtotal bertingkat. */
+const barisDok = (isi: SelEkspor[][]): BarisDok[] =>
+  isi.map(sel => (sel[0] === 'JUMLAH' ? { sel, total: true } : tebal(sel[0]) ? { sel, tingkat: 'induk2' } : { sel }))
 
-function lembar(
-  wb: ExcelJS.Workbook, nama: string, a: ArgEksporPj,
-  kolom: string[], isi: SelEkspor[][], angkaMulai: number, lebar: number[],
-) {
-  const ws = wb.addWorksheet(nama)
-  const kop = [judul(a), `${a.sumber} · dicetak dari PRIMA BLUD`, ...catatanEksporPj(a)]
-  // Sel gabungan tidak menyesuaikan tinggi barisnya sendiri — kalimat yang lebih panjang dari
-  // lebar tabel dibungkus dan barisnya ditinggikan, kalau tidak sisa kalimatnya tak terlihat.
-  const hurufPerBaris = lebar.reduce((s, w) => s + w, 0) * 1.1
-  kop.forEach((t, i) => {
-    ws.addRow([t])
-    ws.mergeCells(i + 1, 1, i + 1, kolom.length)
-    const c = ws.getRow(i + 1).getCell(1)
-    c.font = i === 0 ? { bold: true, size: 12 } : { size: 9, italic: i > 1, color: { argb: i > 1 ? 'FF854F0B' : 'FF374151' } }
-    const baris = Math.ceil(t.length / hurufPerBaris)
-    if (i > 0 && baris > 1) {
-      c.alignment = { wrapText: true, vertical: 'top' }
-      ws.getRow(i + 1).height = 12.5 * baris
-    }
-  })
-  ws.addRow([])
-  const barisKepala = kop.length + 2
-  ws.addRow(kolom)
-  ws.getRow(barisKepala).eachCell(c => {
-    c.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
-    c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
-  })
-  for (const data of isi) {
-    const r = ws.addRow(data.map(c => sanitizeCell(c)))
-    const total = tebal(data[0])
-    r.eachCell({ includeEmpty: true }, (c, no) => {
-      if (no - 1 >= angkaMulai) { c.numFmt = '#,##0'; c.alignment = { horizontal: 'right' } }
-      else c.alignment = { vertical: 'top', wrapText: true }
-      if (total) {
-        c.font = { bold: true }
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } }
-      }
-    })
+const jenis = (kolom: string[], angkaMulai: number): JenisKolom[] =>
+  kolom.map((k, i) => (i < angkaMulai ? (i === 1 && angkaMulai > 1 ? 'kode' : 'teks') : k === '%' ? 'angka' : i === 1 ? 'angka' : 'rupiah'))
+
+/** Dua dokumen (rekap, rincian) — SATU susunan untuk Excel DAN PDF. */
+export function dokRealisasiPj(a: ArgEksporPj): { rekap: DokTabel; rincian: DokTabel } {
+  const kRekap = kolomRekapPj(a.namaBulan)
+  const kRinci = kolomRincianPj(a.namaBulan)
+  const jRekap = jenis(kRekap, 1)
+  const jRinci = jenis(kRinci, 3)
+  const lRekap = [34, 10, 18, 16, 18, 18, 18, 7]
+  const lRinci = [26, 28, 42, 17, 15, 17, 17, 17, 7]
+  return {
+    rekap: {
+      kop: kop(a, 'REALISASI ANGGARAN PER PENANGGUNG JAWAB'),
+      kolom: kRekap.map((judul, i) => ({ judul, jenis: jRekap[i], lebar: lRekap[i] })),
+      baris: barisDok(tabelRekapPj(a.hasil)),
+      catatan: catatanEksporPj(a),
+      mendatar: true,
+    },
+    rincian: {
+      kop: kop(a, 'RINCIAN REKENING PER PENANGGUNG JAWAB'),
+      kolom: kRinci.map((judul, i) => ({ judul, jenis: i === 2 ? 'uraian' : jRinci[i], lebar: lRinci[i] })),
+      baris: barisDok(tabelRincianPj(a.rows, a.hasil)),
+      catatan: catatanEksporPj(a),
+      mendatar: true,
+    },
   }
-  ws.columns = lebar.map(w => ({ width: w }))
-  ws.views = [{ state: 'frozen', ySplit: barisKepala }]
 }
+
+// ─── Excel ───────────────────────────────────────────────────────────────────
 
 /** Dipisah dari tombolnya supaya isi berkas bisa diuji di Node, bukan dicocokkan ke sumbernya. */
 export async function buatWorkbookRealisasiPj(a: ArgEksporPj): Promise<ExcelJS.Workbook> {
   const ExcelJSLib = await loadExcelJs()
   const wb = new ExcelJSLib.Workbook()
-  lembar(wb, 'Rekap per PJ', a, kolomRekapPj(a.namaBulan), tabelRekapPj(a.hasil), 1,
-    [34, 10, 18, 16, 18, 18, 18, 7])
-  lembar(wb, 'Rincian Rekening', a, kolomRincianPj(a.namaBulan), tabelRincianPj(a.rows, a.hasil), 3,
-    [26, 28, 42, 17, 15, 17, 17, 17, 7])
+  const { rekap, rincian } = dokRealisasiPj(a)
+  tulisTabelExcel(wb.addWorksheet('Rekap per PJ'), rekap)
+  tulisTabelExcel(wb.addWorksheet('Rincian Rekening'), rincian)
   return wb
 }
 
@@ -111,62 +105,14 @@ export async function unduhRealisasiPjExcel(a: ArgEksporPj): Promise<void> {
 
 // ─── PDF ─────────────────────────────────────────────────────────────────────
 
-const fmt = (c: SelEkspor) => (typeof c === 'number' ? c.toLocaleString('id-ID') : c)
-
 /** Dipisah dari tombolnya supaya isi berkas bisa diuji di Node. */
 export async function buatPdfRealisasiPj(a: ArgEksporPj) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const lebarHal = doc.internal.pageSize.getWidth()
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold')
-  doc.text(judul(a), lebarHal / 2, 13, { align: 'center' })
-  doc.setFontSize(8.5); doc.setFont('helvetica', 'normal')
-  doc.text(`${a.sumber} · RSJD Dr. Amino Gondohutomo · PRIMA BLUD`, lebarHal / 2, 18.5, { align: 'center' })
-  let y = 23.5
-  doc.setTextColor(133, 79, 11)
-  // Dibungkus selebar tabel: catatan belanja di luar versi pagu bisa ratusan huruf, dan satu
-  // baris rata-tengah sepanjang itu jatuh di luar kedua tepi halaman.
-  for (const t of catatanEksporPj(a)) {
-    for (const baris of doc.splitTextToSize(t, lebarHal - 20) as string[]) {
-      doc.text(baris, lebarHal / 2, y, { align: 'center' }); y += 4.2
-    }
-  }
-  doc.setTextColor(0)
-
-  const gaya = {
-    styles: { fontSize: 7.5, cellPadding: 1.4, overflow: 'linebreak' as const },
-    headStyles: { fillColor: [24, 85, 187] as [number, number, number], textColor: 255, fontStyle: 'bold' as const },
-    margin: { left: 10, right: 10 },
-  }
-
-  // Baris total dikenali dari larik mentahnya (`rekap`/`rincian`), bukan dari teks sel
-  // yang sudah diformat.
-  const rekap = tabelRekapPj(a.hasil)
-  autoTable(doc, {
-    head: [kolomRekapPj(a.namaBulan)], body: rekap.map(r => r.map(fmt)), startY: y + 1, ...gaya,
-    didParseCell: (d) => {
-      if (d.section !== 'body') return
-      if (d.column.index >= 1) d.cell.styles.halign = 'right'
-      if (tebal(rekap[d.row.index]?.[0])) { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = [243, 244, 246] }
-    },
-  })
-  const rincian = tabelRincianPj(a.rows, a.hasil)
-  doc.addPage()
-  doc.setFontSize(11); doc.setFont('helvetica', 'bold')
-  doc.text('Rincian rekening per Penanggung Jawab', 10, 13)
-  autoTable(doc, {
-    head: [kolomRincianPj(a.namaBulan)], body: rincian.map(r => r.map(fmt)), startY: 17, ...gaya,
-    didParseCell: (d) => {
-      if (d.section !== 'body') return
-      if (d.column.index >= 3) d.cell.styles.halign = 'right'
-      if (tebal(rincian[d.row.index]?.[0])) { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = [243, 244, 246] }
-    },
-  })
-  const jml = doc.getNumberOfPages()
-  for (let i = 1; i <= jml; i++) {
-    doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120)
-    doc.text(`Halaman ${i} dari ${jml}`, lebarHal / 2, doc.internal.pageSize.getHeight() - 6, { align: 'center' })
-  }
+  const { rekap, rincian } = dokRealisasiPj(a)
+  gambarTabelPdf(doc, autoTable, rekap)
+  gambarTabelPdf(doc, autoTable, rincian, { halamanBaru: true })
+  kakiDokPdf(doc, MODUL_BLUD)
   return doc
 }
 

@@ -33,13 +33,14 @@ console.log('A. Unduhan Excel Data Entry membawa kolom "Indikator Induk", pembac
   const keg = [ra(3, 'kegiatan', 'PROG', 'KEG A', 'IND KEG A', 2), ra(4, 'kegiatan', 'PROG', 'KEG B', 'IND KEG B', null)];
   const wb = await buatWorkbookList(keg, 'kegiatan', induk);
   const ws = wb.worksheets[0];
-  const kepala = (ws.getRow(1).values as unknown[]).map(v => String(v ?? ''));
+  // Gaya resmi bersama: kop 1–6, kepala baris 7, nomor kolom (1)(2)… baris 8, data mulai 9.
+  const kepala = (ws.getRow(7).values as unknown[]).map(v => String(v ?? ''));
   ok('A1 kolom "Indikator Induk" tepat sesudah "Indikator"', kepala.indexOf('Indikator Induk') === kepala.indexOf('Indikator') + 1, kepala.join('|'));
   const kol = kepala.indexOf('Indikator Induk');
   ok('A2 isinya teks indikator induk TANPA penanda matriks; kosong bila belum tertaut',
-    String(ws.getRow(2).getCell(kol).value) === 'IND PROG DUA' && !ws.getRow(3).getCell(kol).value, String(ws.getRow(2).getCell(kol).value));
+    String(ws.getRow(9).getCell(kol).value) === 'IND PROG DUA' && !ws.getRow(10).getCell(kol).value, String(ws.getRow(9).getCell(kol).value));
   ok('A3 tanpa baris induk / tingkat tujuan → kolomnya tidak ada',
-    !((await buatWorkbookList(keg, 'kegiatan')).worksheets[0].getRow(1).values as unknown[]).includes('Indikator Induk'));
+    !((await buatWorkbookList(keg, 'kegiatan')).worksheets[0].getRow(7).values as unknown[]).includes('Indikator Induk'));
 
   const buf = Buffer.from(await wb.xlsx.writeBuffer());
   const hasil = await parseRenaksiFile(buf, 'rencana-aksi-kegiatan.xlsx');

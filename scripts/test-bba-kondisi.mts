@@ -159,12 +159,13 @@ ok('B19 Rekap BMD: TTD C59/C60, kota H59, Pengurus H61, nama C64/H64', nilai(rek
 const wbJ = new ExcelJS.Workbook()
 const kj = tulisLembarKerja(wbJ, [{ ...aset({ id: 1, golongan: 'B', kondisi: 'B', kondisi_sumber: 'CEK', kondisi_tgl: '2024-01-01', nama: 'Meja Perawat' }), lokasi_nama: 'Ruang Uji', gedung_nama: 'Gedung I', barang_nama: 'Meja', kondisi_oleh_nama: 'budi' },
   aset({ id: 2, golongan: 'A' })], batas)
-const kepalaKerja = (kj.getRow(1).values as unknown[]).slice(1)
-const barisKerja = [2, 3].map(r => (kj.getRow(r).values as unknown[]).slice(1))
+// Gaya resmi bersama: kop 1–6, kepala baris 7 (tanpa baris nomor kolom), data mulai 8.
+const kepalaKerja = (kj.getRow(7).values as unknown[]).slice(1)
+const barisKerja = [8, 9].map(r => (kj.getRow(r).values as unknown[]).slice(1))
 const meja = barisKerja.find(b => b.includes('Meja Perawat')) ?? [], tanahK = barisKerja.find(b => b.includes('A')) ?? []
 ok('B20 format kerja: satu lembar datar + tambahan PRIMA (nama, ruangan, gedung, dicek oleh, status cek; tanah tanpa status)', kepalaKerja.includes('Nama Sehari-hari') && kepalaKerja.includes('Dicek Oleh')
   && meja.includes('Ruang Uji') && meja.includes('Gedung I') && meja.includes('budi') && meja.includes('Perlu dicek ulang')
-  && (tanahK[kepalaKerja.indexOf('Status Cek')] ?? '') === '' && !!kj.autoFilter)
+  && (tanahK[kepalaKerja.indexOf('Status Cek')] ?? '') === '' && JSON.stringify(kj.autoFilter).includes('"row":7'))
 const pakai = new Set<string>()
 ok('B21 nama lembar KIR aman: ≤ 31 huruf, tanpa karakter terlarang, tidak kembar', namaLembarAman('KIR Ruang [ICU]: Lt 2/3', pakai) === 'KIR Ruang ICU Lt 2 3'
   && namaLembarAman('KIR Ruang ICU Lt 2 3', pakai) === 'KIR Ruang ICU Lt 2 3 (2)' && namaLembarAman('x'.repeat(40), pakai).length === 31)

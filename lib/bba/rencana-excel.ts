@@ -1,7 +1,10 @@
 // lib/bba/rencana-excel.ts — Excel daftar rencana per tahun (docs/konsep/bba/CONCEPT-bba-buku-aset.md §9):
 // per jenis rencana (pola RKBMD pengadaan & pemeliharaan) dengan data buku aset tiap barang di
-// sampingnya. Bahan kerja internal, bukan format provinsi — tanpa kop & tanda tangan.
+// sampingnya. Bahan kerja internal, bukan format provinsi — gaya resmi bersama PRIMA
+// (lib/shared/tabel-dokumen.ts), tanpa tanda tangan.
 import type ExcelJS from 'exceljs';
+import { tulisTabelExcel, type BarisDok, type JenisKolom } from '@/lib/shared/tabel-dokumen';
+import { periodeTahun } from '@/lib/shared/gaya-dokumen';
 import { JENIS_RENCANA, LABEL_JENIS, LABEL_ANGGARAN, type JenisRencana, type Anggaran } from './rencana';
 import { LABEL_STATUS, type BbaStatus } from './status';
 import type { Dimiliki } from './kondisi';
@@ -14,12 +17,12 @@ export interface BarisRencanaExcel {
   alasan: string | null; status: BbaStatus; usulan_keputusan: string | null;
 }
 
-const KOLOM: [judul: string, lebar: number][] = [
-  ['No', 5], ['Kode', 12], ['Uraian', 40], ['Barang', 22], ['Unit / PJ', 18], ['Vol', 7], ['Satuan', 9], ['Harga Satuan', 15],
-  ['Nilai Rencana', 17], ['Anggaran', 13], ['Nilai Didanai', 17], ['Dimiliki', 9], ['Baik', 7], ['Rusak Ringan', 9], ['Rusak Berat', 9],
-  ['Aset Sasaran', 30], ['Alasan', 40], ['Status', 16],
+const KOLOM: [judul: string, lebar: number, jenis: JenisKolom][] = [
+  ['No', 5, 'nomor'], ['Kode', 12, 'kode'], ['Uraian', 40, 'uraian'], ['Barang', 22, 'teks'], ['Unit / PJ', 18, 'teks'], ['Vol', 7, 'desimal'],
+  ['Satuan', 9, 'teks'], ['Harga Satuan', 15, 'rupiah'], ['Nilai Rencana', 17, 'rupiah'], ['Anggaran', 13, 'teks'], ['Nilai Didanai', 17, 'rupiah'],
+  ['Dimiliki', 9, 'angka'], ['Baik', 7, 'angka'], ['Rusak Ringan', 9, 'angka'], ['Rusak Berat', 9, 'angka'],
+  ['Aset Sasaran', 30, 'teks'], ['Alasan', 40, 'teks'], ['Status', 16, 'teks'],
 ];
-const KOLOM_UANG = new Set([8, 9, 11]);
 
 /** Usulan DITOLAK tidak ikut — catatan sejarah, bukan rencana. Urutan kelompok = urutan jenis di konsep, "belum digolongkan" terakhir. */
 export function kelompokRencana<T extends Pick<BarisRencanaExcel, 'jenis_rencana' | 'usulan_keputusan'>>(rows: readonly T[]): [JenisRencana | null, T[]][] {
@@ -33,48 +36,44 @@ export function tulisDaftarRencana(
   wb: ExcelJS.Workbook, tahun: number, rows: readonly BarisRencanaExcel[],
   dimiliki: ReadonlyMap<number, Dimiliki>, sasaran: ReadonlyMap<number, string[]>,
 ): ExcelJS.Worksheet {
-  const ws = wb.addWorksheet(`Rencana ${tahun}`, { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
-  KOLOM.forEach(([, w], i) => { ws.getColumn(i + 1).width = w; });
-  ws.getCell('A1').value = `DAFTAR RENCANA BARANG MILIK DAERAH TAHUN ${tahun}`;
-  ws.getCell('A1').font = { bold: true, size: 13 };
-  ws.getCell('A2').value = 'Per jenis rencana, dengan data Buku Aset tiap barang (register aktif yang ditautkan ke barang itu).';
-  ws.getCell('A2').font = { italic: true, size: 9 };
-  const kepala = ws.getRow(4);
-  KOLOM.forEach(([j], i) => { const c = kepala.getCell(i + 1); c.value = j; c.font = { bold: true }; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }; });
-  kepala.height = 30;
-
-  let r = 5;
+  const kosong = () => Array<string>(KOLOM.length).fill('');
+  const baris: BarisDok[] = [];
   let totalRencana = 0, totalDidanai = 0;
   for (const [jenis, xs] of kelompokRencana(rows)) {
-    const judul = ws.getRow(r++);
-    judul.getCell(1).value = jenis ? LABEL_JENIS[jenis].toUpperCase() : 'BELUM DIGOLONGKAN';
-    judul.font = { bold: true };
+    const judul = kosong();
+    judul[2] = jenis ? LABEL_JENIS[jenis].toUpperCase() : 'BELUM DIGOLONGKAN';
+    baris.push({ sel: judul, tingkat: 'induk1' });
     let subRencana = 0, subDidanai = 0;
     xs.forEach((x, i) => {
       const d = x.barang_id ? dimiliki.get(x.barang_id) : undefined;
       const didanai = x.anggaran === 'DIDANAI' ? (x.anggaran_nilai ?? x.nilai_rencana) : 0;
       subRencana += x.nilai_rencana; subDidanai += didanai;
-      const baris = ws.getRow(r++);
-      baris.values = [
+      baris.push({ kedalaman: 1, sel: [
         i + 1, x.canonical_id, x.uraian, x.barang_nama ?? '', x.sub_bidang || x.penanggung_jawab || '', x.vol, x.satuan ?? '', x.harga,
         x.nilai_rencana, LABEL_ANGGARAN[x.anggaran], didanai || '', d?.jumlah ?? '', d?.kondisi.baik ?? '', d?.kondisi.rusak_ringan ?? '', d?.kondisi.rusak_berat ?? '',
         (sasaran.get(x.id) ?? []).join('; '), x.alasan ?? '', LABEL_STATUS[x.status],
-      ];
-      baris.alignment = { vertical: 'top', wrapText: true };
-      KOLOM_UANG.forEach(c => { baris.getCell(c).numFmt = FMT_UANG; });
+      ] });
     });
-    const sub = ws.getRow(r++);
-    sub.getCell(3).value = `Jumlah ${jenis ? LABEL_JENIS[jenis] : 'belum digolongkan'}`;
-    sub.getCell(9).value = subRencana; sub.getCell(11).value = subDidanai;
-    sub.font = { bold: true };
-    KOLOM_UANG.forEach(c => { sub.getCell(c).numFmt = FMT_UANG; });
+    const sub: (string | number)[] = kosong();
+    sub[2] = `Jumlah ${jenis ? LABEL_JENIS[jenis] : 'belum digolongkan'}`;
+    sub[8] = subRencana; sub[10] = subDidanai;
+    baris.push({ sel: sub, tingkat: 'induk2' });
     totalRencana += subRencana; totalDidanai += subDidanai;
-    r++;
   }
-  const tot = ws.getRow(r);
-  tot.getCell(3).value = 'JUMLAH SELURUHNYA';
-  tot.getCell(9).value = totalRencana; tot.getCell(11).value = totalDidanai;
-  tot.font = { bold: true };
-  KOLOM_UANG.forEach(c => { tot.getCell(c).numFmt = FMT_UANG; });
+  const tot: (string | number)[] = kosong();
+  tot[2] = 'JUMLAH SELURUHNYA';
+  tot[8] = totalRencana; tot[10] = totalDidanai;
+  baris.push({ sel: tot, total: true });
+
+  const ws = wb.addWorksheet(`Rencana ${tahun}`);
+  tulisTabelExcel(ws, {
+    kop: {
+      judul: 'DAFTAR RENCANA BARANG MILIK DAERAH', periode: periodeTahun(tahun), modul: 'BUKU BESAR ASET',
+      keterangan: 'Per jenis rencana, dengan data Buku Aset tiap barang (register aktif yang ditautkan ke barang itu).',
+    },
+    kolom: KOLOM.map(([judul, lebar, jenis]) => ({ judul, lebar, jenis, ...(jenis === 'rupiah' ? { numFmt: FMT_UANG } : {}) })),
+    baris,
+    mendatar: true,
+  });
   return ws;
 }

@@ -18,6 +18,7 @@
 import ExcelJS from 'exceljs';
 import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
+import { adalahBarisHiasan, adalahBarisJudul } from '@/lib/shared/impor-tabel';
 import type { BarisRko, PetaRko } from '@/lib/kinerja/gabung-rko';
 import type { SskMonths, SumberSSK } from '@/app/(dashboard)/kinerja/_types';
 
@@ -168,6 +169,7 @@ const judulGabung = (a: string[], b: string[]) => a.map((x, c) => `${x ?? ''} ${
 function cariHeader(grid: string[][]): { row: number; dua: boolean; peta: Peta; skor: number } | null {
   let terbaik: { row: number; dua: boolean; peta: Peta; skor: number } | null = null;
   for (let r = 0; r < Math.min(BARIS_CARI, grid.length); r++) {
+    if (adalahBarisJudul(grid[r] ?? [])) continue;   // kop unduhan PRIMA (sel gabung)
     for (const dua of [false, true]) {
       if (dua && r + 1 >= grid.length) continue;
       const peta = petaKolom(dua ? judulGabung(grid[r] ?? [], grid[r + 1] ?? []) : grid[r] ?? []);
@@ -277,6 +279,7 @@ function bacaSheet(grid: Grid, nama: string, paksa?: PetaRko): { hasil: ParseRko
     const uraian = sanitizeImportText(teks[r][peta.uraian] ?? '').slice(0, MAXLEN_URAIAN);
     if (!uraian) continue;
     if (petaKolom(teks[r])) continue;                 // echo baris judul (berkas multi-halaman)
+    if (adalahBarisHiasan(teks[r])) continue;         // (1)(2)…, JUMLAH, catatan, tanda tangan
     if (calon.length >= MAX_ROWS) { terpotong = true; break; }
 
     const months = KUNCI_BULAN.reduce((acc, b, i) => {
