@@ -327,7 +327,7 @@ console.log('\n── G. Pergeseran sesudah Perubahan ──')
   cek('Pergeseran: babak lama diukur dari ACUAN baris di layar', PL.includes('const isiBabakLama = rows.length > 0 && babakLama(penanda, dpaVersi)'))
   cek('Pergeseran: Buat Pergeseran lewat bukaKunciBabakLama dulu, baru kunci biasa',
     PL.includes('const kunciBabakLama = bukaKunciBabakLama(penanda, dpaVersi, sasaran, history)')
-    && /const alasanKunciBorongan = !versi\s*\? ''\s*: kunciBabakLama \?\? `Versi/.test(PL))
+    && /const alasanKunciBorongan = !versi\s*\? ''\s*: kunciBabakLama \?\? \(adaPeriodeKosong\(/.test(PL))
   cek('Pergeseran: Sinkronkan DPA mati di isi babak lama', PL.includes('disabled={injecting || !rows.length || isiBabakLama}'))
   cek('Pergeseran: Tutup mati di isi babak lama (sebelum lembar penutupan dibuka)',
     /const alasanKunciTutup = !rows\.length\s*\? 'Belum ada tabelnya\.'\s*: isiBabakLama\s*\?/.test(PL))

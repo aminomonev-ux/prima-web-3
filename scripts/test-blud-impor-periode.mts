@@ -148,7 +148,7 @@ bab('C. Rantai asal_impor — modal → klien → Zod → audit')
   const modalKode = kode(modal)
   cek('Modal mengirim berkas+lembar+baris',
     /const asal: AsalImpor = \{\s*berkas:[\s\S]{0,120}lembar:[\s\S]{0,120}baris:/.test(modalKode)
-      && modalKode.includes('onTerapkan(keDpaBarisInput(hasil.baris), asal)')
+      && modalKode.includes('onTerapkan(keDpaBarisInput(barisDipakai), asal)')
       && modalKode.includes('onTerapkan(barisMasuk, { ...asal,'))
   cek('Klien menyimpannya di asalImporRef',
     /function terapkanImpor[\s\S]{0,600}asalImporRef\.current\s*=\s*asal/.test(kode(dpa)))

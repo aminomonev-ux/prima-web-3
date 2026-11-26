@@ -1639,7 +1639,9 @@ export default function DpaClient({
       return
     }
     setRows(built)
-    setVersi('')  // unset versi tersimpan (form baru)
+    // `versi` SENGAJA tetap (CONCEPT-blud-impor-formulir-baru §2.4): Form Baru mengganti
+    // ISI, bukan sasaran (L80). Mengosongkannya membuat Simpan ke versi hari ini yang
+    // sudah ada mengirim angka kunci 0 dan ditolak 409.
     setBelumTersimpan(true)
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
@@ -1712,7 +1714,11 @@ export default function DpaClient({
     // dialog "berkas basi" sudah menimbang simpanan sesudah berkas diunduh, jadi
     // yang menyimpan di SELA pratinjau dan Simpan tetap dijawab 409.
     const balik = !!asal.ke_versi_terbuka && asal.ke_versi_terbuka === versi
-    if (balik) { if (simpananKini != null) setVersion(simpananKini) }
+    // Formulir luar di atas versi terbuka (CONCEPT-blud-impor-formulir-baru §2) juga
+    // berhenti di form: versi tetap, sasaran Simpan tidak berpindah (L80), angka kunci
+    // segar dari pratinjau (L77) — dipakai hanya kalau sasarannya versi ini sendiri.
+    const gantiIsi = !!asal.di_atas_versi && asal.di_atas_versi === versi
+    if (balik || gantiIsi) { if (simpananKini != null) setVersion(simpananKini) }
     else setVersi('')
     asalImporRef.current    = asal
     asalSalinRef.current    = null
@@ -1720,9 +1726,13 @@ export default function DpaClient({
     asalBerkasRef.current   = null
     asalPerubahanRef.current = null
     setImportDpaBuka(false)
+    const tombolSimpan = periodeTulis ? 'Simpan Periode' : 'Simpan'
     showToast(balik
-      ? `${baris.length} baris dari "${asal.berkas}" dipasang di atas versi ${formatTanggalId(versi)} — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`
-      : `${baris.length} baris dibaca dari "${asal.berkas}" — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
+      ? `${baris.length} baris dari "${asal.berkas}" dipasang di atas versi ${formatTanggalId(versi)} — belum tersimpan, periksa lalu tekan ${tombolSimpan}.`
+      : gantiIsi
+        ? `${baris.length} baris dari "${asal.berkas}" menggantikan isi tabel — versi ${formatTanggalId(versi)} belum berubah. `
+          + `Periksa, lalu tekan ${tombolSimpan} untuk menjadikannya versi ${formatTanggalId(sasaranSimpan(periodeTulis))}.`
+        : `${baris.length} baris dibaca dari "${asal.berkas}" — belum tersimpan, periksa lalu tekan ${tombolSimpan}.`)
     // Tawaran menyalin data induk menunggu barisnya benar-benar ada di layar —
     // modalnya membaca `rows`, bukan muatan pratinjau impor. Impor-balik tidak
     // menawarkannya: barisnya memang sudah dari versi ini.
@@ -1940,20 +1950,24 @@ export default function DpaClient({
     })
   }
 
-  // ── Kunci tombol yang mengganti SELURUH tabel sekaligus ────────────────────
-  // Bukan karena tombolnya berbahaya, tapi karena satu klik di layar yang sedang
-  // memegang versi tersimpan menghapus ratusan baris dan menggantinya — lalu
-  // Simpan berikutnya menuliskannya ke slot yang sama. Pintunya dibuka lagi
-  // dengan memilih periode yang masih kosong, atau menghapus versinya.
-  const alasanKunciBorongan = versi
-    ? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
-    : ''
-  // Impor SENGAJA tidak ikut kunci itu lagi (konsep Perubahan §11.3): di atas versi
-  // tersimpan ia hanya menerima Excel unduhan PRIMA dari versi itu — jangkarnya utuh,
-  // sifatnya sama dengan Pulihkan Cadangan — dan penjaganya di server (`periksaImporBalik`).
-  const tooltipImpor = versi
-    ? `Masukkan lagi Excel unduhan versi ${formatTanggalId(versi)} yang sudah disunting — formulir dari luar hanya ke periode yang belum punya versi`
-    : undefined
+  // Sasaran Simpan, sekali dihitung: dipakai untuk menyaring daftar sumber DAN
+  // untuk ditampilkan di modal. Rumusnya milik `sasaranSimpan`, yang juga dipakai
+  // tombol Simpan — kalau ada dua rumus, modalnya menjanjikan tempat yang salah.
+  const sasaran = sasaranSimpan(periodeTulis)
+  const sasaranTeks = formatTanggalId(sasaran)
+  // Form Baru & Impor TIDAK dikunci lagi saat versi tersimpan terbuka
+  // (CONCEPT-blud-impor-formulir-baru §2.4). Keduanya hanya mengganti ISI layar;
+  // sasaran Simpan tidak berpindah, jadi versi yang terbuka tetap utuh sampai Simpan —
+  // dan Simpan ke tanggal lain melahirkan versi baru. Untuk tahun yang belum berjalan
+  // kunci lama buntu: "periode yang belum punya versi" tidak pernah ditawarkan.
+  // Rekening berealisasi tetap ditahan pagar Simpan di server (§4.3).
+  const akibatSimpan = !versi
+    ? ''
+    : sasaran === versi
+      ? `saat Simpan, isi versi ${formatTanggalId(versi)} diganti`
+      : `versi ${formatTanggalId(versi)} tidak berubah, saat Simpan isinya jadi versi ${sasaranTeks}`
+  const tooltipImpor = versi ? `Ganti isi tabel dengan Excel — ${akibatSimpan}` : undefined
+  const tooltipFormBaru = versi ? `Ganti isi tabel dengan kerangka dari Kode Besar — ${akibatSimpan}` : undefined
   // Salin Tahun patokannya SENGAJA berbeda: sasarannya tahun yang sedang dibuka,
   // bukan slot versi. Menyalin ke tahun yang sudah berisi tidak pernah benar,
   // sekalipun layarnya kebetulan kosong karena sedang memilih periode historis.
@@ -1962,16 +1976,8 @@ export default function DpaClient({
     : history.length > 0
       ? `DPA ${tahun} sudah punya ${history.length} versi. Salin dari tahun lain hanya untuk tahun yang masih kosong.`
       : ''
-  // Sasaran Simpan, sekali dihitung: dipakai untuk menyaring daftar sumber DAN
-  // untuk ditampilkan di modal. Rumusnya milik `sasaranSimpan`, yang juga dipakai
-  // tombol Simpan — kalau ada dua rumus, modalnya menjanjikan tempat yang salah.
-  const sasaran = sasaranSimpan(periodeTulis)
-  // Salin Versi SENGAJA tidak ikut `alasanKunciBorongan`. Tombol-tombol itu
-  // dikunci karena mengganti tabel dengan baris dari LUAR tahun ini (atau dari
-  // nol): `anggaran_key`-nya kosong, jadi menuliskannya di atas versi tersimpan
-  // memutus tautan ke belanja yang sudah tercatat. Salin Versi mengambil baris
-  // dari tahun yang SAMA dengan jangkar utuh — dan sasaran yang sudah berisi
-  // justru pemakaian utamanya: "mulai versi hari ini dari angka Juli".
+  // Salin Versi mengambil baris dari tahun yang SAMA dengan jangkar utuh — sasaran
+  // yang sudah berisi justru pemakaian utamanya: "mulai versi hari ini dari angka Juli".
   // ── DPA Perubahan (konsep §7, §12) ─────────────────────────────────────────
   const penanda = babak.penanda
   const babakSasaran = keBabak(penanda, sasaran)
@@ -2071,7 +2077,7 @@ export default function DpaClient({
           <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px 12px', borderTop:'1px solid #0C447C', paddingTop:10 }}>
             <KelompokAksi label="Isi tabel">
               <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
-                disabled={!!alasanKunciBorongan} data-tooltip={alasanKunciBorongan}
+                data-tooltip={tooltipFormBaru}
                 onClick={mulaiFormBaru} data-rima="dpa.form-baru">
                 Form Baru
               </PrimaButton>
@@ -2101,8 +2107,7 @@ export default function DpaClient({
 
             <KelompokAksi label="Lanjutan" garis>
               {/* Konsep §5: tepat sesudah Salin Versi (beda kelompok, tetap bersebelahan) —
-                  sama-sama MENGISI layar dari angka tahun yang sama, dengan jangkar utuh.
-                  Tidak ikut `alasanKunciBorongan`. */}
+                  sama-sama MENGISI layar dari angka tahun yang sama, dengan jangkar utuh. */}
               <PrimaButton variant="purple" size="sm" iconLeft={<FileDiff className="w-3.5 h-3.5" />}
                 disabled={!!alasanKunciJadikan}
                 data-tooltip={alasanKunciJadikan
@@ -2567,8 +2572,12 @@ export default function DpaClient({
               <strong style={{ color:'#A78BFA' }}> {overwriteConfirm.length} baris</strong> baru dari Kode Besar.
             </p>
             <p style={{ fontSize:11, color:'#85B7EB', lineHeight:1.5, marginBottom:16, fontStyle:'italic' }}>
-              Versi yang sudah pernah disimpan tetap aman — pilih tanggalnya lagi dari daftar versi kalau ingin kembali.
-              Yang berganti cuma isi layar ini, dan belum tersimpan sampai Anda menekan Simpan.
+              {!versi
+                ? 'Yang berganti cuma isi layar ini, dan belum tersimpan sampai Anda menekan Simpan.'
+                : sasaranSimpan(periodeTulis) === versi
+                  ? `Saat Simpan, isi versi ${formatTanggalId(versi)} diganti kerangka ini. Isi lamanya tetap bisa diambil kembali dari Riwayat Simpan.`
+                  : `Versi ${formatTanggalId(versi)} tidak berubah. Saat Simpan, isi layar ini jadi versi baru ${sasaranTeks}.`}
+              {versi && ' Kalau versi ini sudah dipakai mencatat realisasi, Simpan akan menahan rekening yang hilang.'}
             </p>
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
               <PrimaButton variant="ghost" onClick={() => setOverwriteConfirm(null)}>

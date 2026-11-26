@@ -327,7 +327,7 @@ console.log('\n── F. Sambungan ──')
   // Sejak Tahap 5 putusan §11.2 digabung dengan penjaga impor-balik (§11.3) ke `tolak` &
   // `peringatan` — yang dijaga tetap sama: tolak menyembunyikan tombol, peringatan ditanya.
   cek('F11 Modal: tombol Masukkan HILANG saat ditolak',
-    modal.includes("tolak: b?.tolak ?? (putusan.jenis === 'tolak' ? putusan.pesan : null),") && modal.includes('{hasil && !tolak && ('))
+    modal.includes("tolak: b?.tolak ?? g?.tolak ?? (putusan.jenis === 'tolak' ? putusan.pesan : null),") && modal.includes('{hasil && !tolak && ('))
   cek('F12 Modal: peringatan ditanyakan lewat confirmDialog sebelum onTerapkan',
     /if \(peringatan\.length && !\(await confirmDialog\(\{[\s\S]*?\}\)\)\) return\s*const asal/.test(modal)
       && modal.includes("...(putusan.jenis === 'peringatan' ? [putusan.pesan] : [])"))

@@ -33,9 +33,10 @@ import type { DpaBarisInput } from '@/types'
 // dari modul ringan. Mengambil keduanya dari `import-dpa.ts` akan menyeret
 // parser + `schemas.ts` + `ioredis` ke bundel browser dan build Next gagal
 // dengan "Module not found: Can't resolve 'dns'".
-import type { BarisTerbaca, PetaKolom } from '@/lib/blud/import-dpa'
+import type { BarisDiLuarRumus, BarisTerbaca, PetaKolom } from '@/lib/blud/import-dpa'
 import type { PerbaikanImpor, SumberSelisih } from '@/lib/blud/import-rapikan'
 import { keDpaBarisInput } from '@/lib/blud/import-dpa-shared'
+import { recalcDpaJumlah } from '@/lib/blud/recalc'
 
 interface JangkarTerdampak {
   anggaran_key: string
@@ -54,6 +55,20 @@ export type AsalImpor = {
   /** Impor-balik (§11.3): versi tersimpan yang isinya diganti, dan simpanan asal berkasnya. */
   ke_versi_terbuka?: string
   simpanan_berkas?: number | null
+  /** Formulir luar di atas versi terbuka (CONCEPT-blud-impor-formulir-baru §2). */
+  di_atas_versi?: string
+  jangkar_dipasangkan?: number
+}
+
+/** Cermin `GantiIsi` di route impor. */
+interface GantiIsi {
+  versi: string
+  simpananKini: number
+  sasaranSama: boolean
+  pasangan: Record<number, string>
+  dipasangkan: number
+  berebut: number
+  tolak: string | null
 }
 
 /** Cermin `ImporBalik` di route impor. */
@@ -80,6 +95,7 @@ interface HasilPreview {
   peringatan: string[]
   perbaikan: PerbaikanImpor[]
   sumberSelisih: SumberSelisih[]
+  diLuarRumus: BarisDiLuarRumus[]
   realisasiTerdampak: JangkarTerdampak[]
   /** Kop "DPA PERUBAHAN KE-n" berkas (format Ringkas); null = murni. */
   perubahanKe: number | null
@@ -89,6 +105,7 @@ interface HasilPreview {
   unduhan: { tahun: number; versi: string; simpananKe: number } | null
   /** Hanya bila modal dibuka di atas versi tersimpan. */
   imporBalik: ImporBalik | null
+  gantiIsi: GantiIsi | null
 }
 
 const rp =(n: number | null | undefined) => (n == null ? '—' : Number(n).toLocaleString('id-ID'))
@@ -109,9 +126,9 @@ export default function ImportDpaModal({
   /** Tanggal sasaran Simpan (`sasaranSimpan`) — server menilai babaknya (§11.2). */
   sasaran: string
   /**
-   * Versi tersimpan yang sedang terbuka di layar ('' = tidak ada). Terisi = impor-balik
-   * (§11.3): hanya Excel unduhan PRIMA dari versi itu yang diterima, dan isinya
-   * DIPASANG di atas versi itu — bukan menggantikan tabel dengan baris serba-baru.
+   * Versi tersimpan yang sedang terbuka di layar ('' = tidak ada). Excel unduhan PRIMA
+   * (ber-Jangkar) dari versi itu DIPASANG di atasnya (impor-balik §11.3); formulir lain
+   * MENGGANTI isi tabel dengan jangkar yang dipasangkan server (CONCEPT-blud-impor-formulir-baru §2).
    */
   versiTerbuka: string
   onTutup: () => void
@@ -120,11 +137,14 @@ export default function ImportDpaModal({
 }) {
   const [sibuk, setSibuk] = useState(false)
   const [hasil, setHasil] = useState<HasilPreview | null>(null)
+  /** Baris "tidak dihitung rumus Excel" (K2) yang dipilih untuk dilewati. */
+  const [dilewati, setDilewati] = useState<Set<number>>(() => new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
   const unggah = useCallback(async (file: File) => {
     setSibuk(true)
     setHasil(null)
+    setDilewati(new Set())
     try {
       const form = new FormData()
       form.append('file', file)
@@ -161,15 +181,74 @@ export default function ImportDpaModal({
 
   // §11.3 di atas §11.2: penolakan dari salah satunya cukup; peringatan keduanya
   // ditanyakan bersama dalam SATU dialog, bukan dua dialog beruntun yang dilatih diklik.
-  const { balik, tolak, peringatan, barisMasuk } = useMemo(() => {
+  const { balik, ganti, tolak, peringatan, barisMasuk } = useMemo(() => {
     const b = hasil?.imporBalik ?? null
+    const g = hasil?.gantiIsi ?? null
     return {
       balik: b,
-      tolak: b?.tolak ?? (putusan.jenis === 'tolak' ? putusan.pesan : null),
-      peringatan: [...(b?.peringatan ?? []), ...(putusan.jenis === 'peringatan' ? [putusan.pesan] : [])],
+      ganti: g,
+      tolak: b?.tolak ?? g?.tolak ?? (putusan.jenis === 'tolak' ? putusan.pesan : null),
+      peringatan: [
+        ...(b?.peringatan ?? []),
+        ...(g?.sasaranSama
+          ? [`Isi versi ${formatTanggalId(g.versi)} akan diganti saat Simpan. Isi lamanya tetap bisa diambil kembali dari Riwayat Simpan.`]
+          : []),
+        ...(putusan.jenis === 'peringatan' ? [putusan.pesan] : []),
+      ],
       barisMasuk: b?.rows ?? null,
     }
   }, [hasil, putusan])
+
+  /**
+   * Baris berkas yang benar-benar dimasukkan: tanpa baris yang dilewati (beserta
+   * turunannya), dan — untuk formulir di atas versi terbuka — dengan jangkar versi itu
+   * terpasang supaya realisasi tidak kehilangan posnya.
+   */
+  const barisDipakai = useMemo(() => {
+    if (!hasil) return []
+    const buang = new Set(dilewati)
+    let tambah = buang.size > 0
+    while (tambah) {
+      tambah = false
+      for (const b of hasil.baris) {
+        if (!buang.has(b.barisExcel) && b.indukBarisExcel != null && buang.has(b.indukBarisExcel)) {
+          buang.add(b.barisExcel)
+          tambah = true
+        }
+      }
+    }
+    return hasil.baris
+      .filter(b => !buang.has(b.barisExcel))
+      .map(b => {
+        const key = ganti?.pasangan[b.barisExcel]
+        return key && !b.jangkar ? { ...b, jangkar: key } : b
+      })
+  }, [hasil, dilewati, ganti])
+
+  /** Baris pratinjau + total, dihitung ulang tanpa baris yang dilewati. */
+  const { pratinjau, totalTampil } = useMemo(() => {
+    if (!hasil) return { pratinjau: [] as BarisTerbaca[], totalTampil: 0 }
+    if (!dilewati.size) return { pratinjau: hasil.baris, totalTampil: hasil.totalHitung }
+    const hitung = recalcDpaJumlah(keDpaBarisInput(barisDipakai))
+    return {
+      pratinjau: barisDipakai.map((b, i) => ({ ...b, jumlahHitung: hitung[i]?.jumlah ?? b.jumlahHitung })),
+      totalTampil: hitung.filter(r => !r.parent_id).reduce((s, r) => s + (r.jumlah ?? 0), 0),
+    }
+  }, [hasil, dilewati, barisDipakai])
+
+  /**
+   * Induk yang selisihnya SELURUHNYA berasal dari baris "tidak dihitung rumus" yang
+   * sudah dilewati — selisih itu sudah beres, catatannya tidak perlu ditampilkan lagi.
+   */
+  const indukBeres = useMemo(() => {
+    const beres = new Set<number>()
+    for (const s of hasil?.sumberSelisih ?? []) {
+      const diBawah = (hasil?.diLuarRumus ?? []).filter(d => d.indukBarisExcel === s.barisExcel)
+      if (!diBawah.length || !diBawah.every(d => dilewati.has(d.barisExcel))) continue
+      if (Math.abs(s.residu + diBawah.reduce((t, d) => t + d.nilai, 0)) < 0.5) beres.add(s.barisExcel)
+    }
+    return beres
+  }, [hasil, dilewati])
 
   /**
    * Tidak ada permintaan jaringan di sini — hasil pratinjau langsung dioper ke
@@ -183,7 +262,7 @@ export default function ImportDpaModal({
     // §11.2/§11.3 "peringatan dulu" — ditanyakan di depan tombol, bukan sekadar
     // tertulis di panel yang bisa terlewat di bawah pratinjau pohon.
     if (peringatan.length && !(await confirmDialog({
-      title: balik ? 'Periksa sebelum menimpa isi versi ini' : 'Jenis berkas tidak cocok dengan tujuan Simpan',
+      title: balik || ganti?.sasaranSama ? 'Periksa sebelum mengganti isi versi ini' : 'Jenis berkas tidak cocok dengan tujuan Simpan',
       message: peringatan.join('\n\n'),
       confirmLabel: 'Tetap Masukkan ke Form',
       variant: 'warning',
@@ -191,20 +270,32 @@ export default function ImportDpaModal({
     const asal: AsalImpor = {
       berkas: hasil.namaBerkas.slice(0, 120),
       lembar: hasil.namaLembar.slice(0, 60),
-      baris:  hasil.baris.length,
+      baris:  barisDipakai.length,
     }
     // Impor-balik memasang GABUNGAN buatan server (jangkar → row_id versi, baris yang
     // hilang mengikuti aturan hapus §10), bukan baris berkas apa adanya.
     if (balik && barisMasuk) {
       onTerapkan(barisMasuk, { ...asal, ke_versi_terbuka: balik.versi, simpanan_berkas: balik.simpananBerkas }, balik.simpananKini)
+    } else if (ganti) {
+      const dipasangkan = barisDipakai.filter(b => ganti.pasangan[b.barisExcel]).length
+      onTerapkan(keDpaBarisInput(barisDipakai), { ...asal, di_atas_versi: ganti.versi, jangkar_dipasangkan: dipasangkan }, ganti.simpananKini)
     } else {
-      onTerapkan(keDpaBarisInput(hasil.baris), asal)
+      onTerapkan(keDpaBarisInput(barisDipakai), asal)
     }
-  }, [hasil, tolak, peringatan, balik, barisMasuk, onTerapkan])
+  }, [hasil, tolak, peringatan, balik, ganti, barisMasuk, barisDipakai, onTerapkan])
 
-  const bermasalah = hasil?.baris.filter(b => b.catatan.length) ?? []
-  const selisih = hasil && hasil.totalFile != null ? hasil.totalFile - hasil.totalHitung : null
-  const kedalaman = hitungKedalaman(hasil?.baris ?? [])
+  const bermasalah = (hasil?.baris ?? [])
+    .filter(b => !dilewati.has(b.barisExcel))
+    .map(b => (indukBeres.has(b.barisExcel) ? { ...b, catatan: b.catatan.filter(c => !c.startsWith('Angka di berkas')) } : b))
+    .filter(b => b.catatan.length)
+  const sisaSelisih = (hasil?.sumberSelisih ?? []).filter(s => !indukBeres.has(s.barisExcel))
+  const selisih = hasil && hasil.totalFile != null ? hasil.totalFile - totalTampil : null
+  // K2: bagian selisih yang dijelaskan baris "tidak dihitung rumus Excel" yang tetap dimasukkan.
+  const diLuarAktif = (hasil?.diLuarRumus ?? []).filter(d => !dilewati.has(d.barisExcel))
+  const nilaiDiLuar = diLuarAktif.reduce((s, d) => s + d.nilai, 0)
+  const selisihTerjelaskan = selisih != null && selisih !== 0 && nilaiDiLuar !== 0
+    && Math.abs(selisih + nilaiDiLuar) < 0.5
+  const kedalaman = hitungKedalaman(pratinjau)
 
   return (
     <div
@@ -240,10 +331,11 @@ export default function ImportDpaModal({
             <div style={{ textAlign: 'center', padding: '28px 12px' }}>
               {versiTerbuka ? (
                 <p className="blud-imp-muted" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>
-                  Versi <strong>{formatTanggalId(versiTerbuka)}</strong> sedang terbuka. Pilih Excel unduhan PRIMA
-                  dari versi ini (menu Cetak → DPA BLUD) yang sudah Anda sunting — isinya dipasang di atas
-                  versi ini, dan perubahannya ditampilkan dulu. Formulir dari luar diimpor ke periode yang
-                  belum punya versi. <strong>Tidak ada yang ditulis ke basis data</strong> sampai Anda menekan Simpan.
+                  Versi <strong>{formatTanggalId(versiTerbuka)}</strong> sedang terbuka. Excel unduhan PRIMA dari versi ini
+                  dipasang di atas versi ini dan perubahannya ditampilkan dulu. Formulir lain mengganti isi tabel —
+                  versi {formatTanggalId(versiTerbuka)} tidak berubah, dan saat Simpan isinya jadi versi{' '}
+                  {sasaran === versiTerbuka ? `${formatTanggalId(sasaran)} (isi versi ini diganti)` : `baru ${formatTanggalId(sasaran)}`}.
+                  {' '}<strong>Tidak ada yang ditulis ke basis data</strong> sampai Anda menekan Simpan.
                 </p>
               ) : (
                 <p className="blud-imp-muted" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>
@@ -276,6 +368,21 @@ export default function ImportDpaModal({
 
               {balik?.banding && <PanelBanding versi={balik.versi} simpananKini={balik.simpananKini} banding={balik.banding} />}
 
+              {ganti && !ganti.tolak && (
+                <Panel judul="Berkas ini mengganti isi tabel">
+                  <p style={{ fontSize: 11.5, lineHeight: 1.6 }}>
+                    {ganti.sasaranSama
+                      ? <>Isi versi <strong>{formatTanggalId(ganti.versi)}</strong> diganti isi berkas ini saat Anda menekan Simpan. Isi lamanya tetap bisa diambil kembali dari Riwayat Simpan.</>
+                      : <>Versi <strong>{formatTanggalId(ganti.versi)}</strong> tidak berubah. Saat Simpan, isi berkas ini jadi versi baru <strong>{formatTanggalId(sasaran)}</strong>.</>}
+                  </p>
+                  <p className="blud-imp-muted" style={{ fontSize: 11, lineHeight: 1.6, marginTop: 6 }}>
+                    {ganti.dipasangkan} dari {hasil.baris.length} baris berkas punya pasangan di versi {formatTanggalId(ganti.versi)}
+                    {' '}(kode rekening dan uraian sama), jadi belanja yang sudah tercatat tetap menempel ke barisnya.
+                    {ganti.berebut > 0 && ` ${ganti.berebut} baris tidak dipasangkan karena calonnya kembar — dianggap baris baru.`}
+                  </p>
+                </Panel>
+              )}
+
               <Panel judul="Yang terbaca dari berkas">
                 <Baris label="Terbaca">
                   {kalimatTerbaca({
@@ -303,13 +410,15 @@ export default function ImportDpaModal({
               <Panel judul="Neraca">
                 <Baris label="Baris terbaca">{hasil.baris.length}{hasil.ditahan.length ? ` · ${hasil.ditahan.length} ditahan` : ''}</Baris>
                 <Baris label="Total menurut berkas">{rp(hasil.totalFile)}</Baris>
-                <Baris label="Total hitung ulang">{rp(hasil.totalHitung)}</Baris>
+                <Baris label="Total hitung ulang">{rp(totalTampil)}</Baris>
                 <Baris label="Selisih">
-                  <strong style={{ color: selisih ? '#E24B4A' : '#1D9E75' }}>
+                  <strong style={{ color: selisih && !selisihTerjelaskan ? '#E24B4A' : '#1D9E75' }}>
                     {selisih == null
                       ? 'tidak bisa dibandingkan'
+                      : selisihTerjelaskan
+                        ? `${rp(selisih)} — seluruhnya dari baris yang tidak dihitung rumus Excel (lihat di bawah)`
                       : selisih === 0
-                        ? (hasil.sumberSelisih.length
+                        ? (sisaSelisih.length
                             // Nol di akar TIDAK berarti benar: kesalahan bisa saling
                             // menghapus. Menulis "cocok persis" di situ menyesatkan.
                             ? 'nihil di total — tapi lihat catatan di bawah'
@@ -348,12 +457,43 @@ export default function ImportDpaModal({
                 </Panel>
               )}
 
-              {hasil.perbaikan.length > 0 && (
-                <Panel judul={`Dirapikan otomatis — ${hasil.perbaikan.length} baris`}>
+              {!balik && hasil.diLuarRumus.length > 0 && (
+                <Panel judul={`Tidak dihitung rumus Excel — ${hasil.diLuarRumus.length} baris`} bahaya>
                   <p style={{ fontSize: 11.5, lineHeight: 1.6, marginBottom: 8 }}>
-                    Susunan baris diperbaiki memakai rumus yang ada di berkas. Tidak ada nominal yang
-                    ditambahkan — angkanya tetap dari volume × harga. Tiap perbaikan hanya dipakai
-                    kalau sesudahnya angka di berkas jadi cocok.
+                    Rumus baris induknya di Excel tidak menyebut baris berikut, jadi Excel tidak menghitungnya
+                    (biasanya rentang SUM tidak ikut melebar sesudah baris disisipkan). PRIMA tetap menghitungnya,
+                    sehingga total di sini lebih besar dari angka Excel. Kalau baris itu memang bukan anggaran,
+                    centang <strong>Lewati</strong>.
+                  </p>
+                  <div style={{ maxHeight: 170, overflowY: 'auto', fontSize: 11, lineHeight: 1.6 }}>
+                    {hasil.diLuarRumus.slice(0, 60).map(d => (
+                      <label key={d.barisExcel} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8, padding: '3px 0', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={dilewati.has(d.barisExcel)}
+                          onChange={e => setDilewati(prev => {
+                            const n = new Set(prev)
+                            if (e.target.checked) n.add(d.barisExcel)
+                            else n.delete(d.barisExcel)
+                            return n
+                          })} />
+                        <span>Lewati</span>
+                        <span className="blud-imp-muted">b.{d.barisExcel}</span>
+                        <strong style={{ flex: '1 1 160px', minWidth: 0 }}>{d.uraian || '(tanpa uraian)'}</strong>
+                        <span style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>Rp {rp(d.nilai)}</span>
+                        <span className="blud-imp-muted" style={{ flexBasis: '100%', paddingLeft: 22 }}>
+                          di bawah b.{d.indukBarisExcel} {d.indukUraian}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </Panel>
+              )}
+
+              {hasil.perbaikan.length > 0 && (
+                <Panel judul={`Dibetulkan otomatis — ${hasil.perbaikan.length} baris`}>
+                  <p style={{ fontSize: 11.5, lineHeight: 1.6, marginBottom: 8 }}>
+                    Susunan baris dibetulkan memakai rumus yang ada di berkas. Tidak ada nominal yang
+                    ditambahkan — angkanya tetap dari volume × harga. Tiap pembetulan hanya dipakai
+                    kalau sesudahnya angka di berkas jadi cocok. Excel Anda sendiri tidak diubah.
                   </p>
                   <div style={{ maxHeight: 150, overflowY: 'auto', fontSize: 11, lineHeight: 1.6 }}>
                     {hasil.perbaikan.slice(0, 40).map(p => (
@@ -385,10 +525,10 @@ export default function ImportDpaModal({
                   seluruh blok "Belanja Modal" (41 baris, mulai urutan ke-348)
                   tidak pernah terlihat di panel yang justru gunanya memeriksa
                   pohon. Divirtualisasi supaya ribuan baris tetap ringan. */}
-              <Panel judul={`Pratinjau pohon — ${hasil.baris.length} baris`}>
+              <Panel judul={`Pratinjau pohon — ${pratinjau.length} baris`}>
                 <Virtuoso
                   style={{ height: 280 }}
-                  data={hasil.baris}
+                  data={pratinjau}
                   defaultItemHeight={18}
                   itemContent={(_i, b) => (
                     <div style={{ display: 'flex', gap: 8, padding: '2px 0', fontSize: 11 }}>
@@ -429,7 +569,7 @@ export default function ImportDpaModal({
           )}
           {hasil && !tolak && (
             <PrimaButton variant="primary" disabled={sibuk} onClick={() => void terapkan()}>
-              Masukkan {(barisMasuk ?? hasil.baris).length} baris ke Form
+              Masukkan {(barisMasuk ?? barisDipakai).length} baris ke Form
             </PrimaButton>
           )}
         </div>

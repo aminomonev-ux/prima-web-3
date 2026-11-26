@@ -105,6 +105,18 @@ export function periodeHistorisTersedia(
 }
 
 /**
+ * Apakah pemilih periode punya periode kosong untuk ditawarkan? Dipakai kalimat kunci
+ * supaya hanya menyebut jalan keluar yang benar-benar ada (CONCEPT-blud-impor-formulir-baru
+ * §2.5) — untuk tahun yang belum berjalan daftarnya selalu kosong. Rumusnya dipinjam,
+ * bukan ditulis ulang: kalimat dan pilihan di layar tidak boleh berbeda pendapat.
+ */
+export function adaPeriodeKosong(
+  tahun: number, versiTerpakai: readonly string[], sekarang: number = Date.now(),
+): boolean {
+  return periodeHistorisTersedia(tahun, versiTerpakai, sekarang).length > 0
+}
+
+/**
  * Apakah `tanggal` itu tanggal kanonik sebuah PERIODE historis — hari terakhir
  * bulan yang sudah lewat?
  *

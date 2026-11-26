@@ -36,7 +36,7 @@ import type { SimpananItem } from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import PeriodeVersiSelect from '@/components/blud/PeriodeVersiSelect'
 import SpandukLihat from '@/components/blud/SpandukLihat'
-import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk, periodeUntukVersi, sasaranSimpan } from '@/lib/blud/tanggal'
+import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk, periodeUntukVersi, sasaranSimpan, adaPeriodeKosong } from '@/lib/blud/tanggal'
 import {
   alasanKunciSalinVersi, petakanPergeseranRows, totalAkarPergeseran, type AsalSalin,
 } from '@/lib/blud/salin-versi'
@@ -2155,9 +2155,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // §9 — pengecualian babak lama: Buat Pergeseran adalah satu-satunya jalan ke DPA
   // Perubahan, jadi ia tidak boleh terkunci justru di sini. `null` = aturan biasa.
   const kunciBabakLama = bukaKunciBabakLama(penanda, dpaVersi, sasaran, history)
+  // Kalimatnya hanya menyebut jalan yang ada (CONCEPT-blud-impor-formulir-baru §2.5): tahun
+  // yang belum berjalan tidak pernah punya periode kosong di pemilih periode.
   const alasanKunciBorongan = !versi
     ? ''
-    : kunciBabakLama ?? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
+    : kunciBabakLama ?? (adaPeriodeKosong(tahun, history.map(h => h.versi_tanggal))
+      ? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
+      : `Versi ${formatTanggalId(versi)} sedang terbuka dan tahun ${tahun} belum punya periode lain untuk diisi. `
+        + 'Untuk menarik DPA terbaru ke versi ini, pakai Sinkronkan DPA; untuk mulai dari nol, hapus versinya dulu di menu Pengaturan.')
   // Cermin layar DPA: Salin Versi SENGAJA di luar `alasanKunciBorongan`. "Buat
   // Pergeseran" dikunci karena menarik DPA — baris yang jangkarnya belum ada;
   // Salin Versi mengambil baris pergeseran tahun yang sama dengan jangkar utuh,

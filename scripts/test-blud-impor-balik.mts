@@ -180,7 +180,7 @@ console.log('\n── C. periksaImporBalik ──')
     jangkar: new Set(barisMurni().map(r => r.anggaran_key!)),
   }
   const b = (x: Partial<BerkasImporBalik> = {}): BerkasImporBalik => ({
-    adaKolomJangkar: true, perubahanKe: null,
+    perubahanKe: null,
     unduhan: { tahun: 2099, versi: '2099-07-31', simpananKe: 3 },
     baris: barisMurni().map((r, i) => ({ barisExcel: 8 + i, uraian: r.uraian, jangkar: r.anggaran_key })),
     ...x,
@@ -188,8 +188,8 @@ console.log('\n── C. periksaImporBalik ──')
   const tolakNya = (p: ReturnType<typeof periksaImporBalik>) => p.tolak ?? ''
   const segar = periksaImporBalik(b(), v)
   cek('C1 berkas segar: lolos tanpa peringatan', segar.tolak === null && 'peringatan' in segar && segar.peringatan.length === 0)
-  cek('C2 tanpa kolom Jangkar (formulir luar) → tolak',
-    tolakNya(periksaImporBalik(b({ adaKolomJangkar: false }), v)).includes('formulir dari luar'))
+  // C2/C15 lama (formulir luar ditolak) dicabut: formulir luar kini lewat pasangkanJangkar
+  // (CONCEPT-blud-impor-formulir-baru §2) dan tidak pernah sampai ke penjaga ini.
   cek('C3 tahun lain → tolak',
     tolakNya(periksaImporBalik(b({ unduhan: { tahun: 2098, versi: '2099-07-31', simpananKe: 3 } }), v)).includes('DPA 2098'))
   const lain = tolakNya(periksaImporBalik(b({ unduhan: { tahun: 2099, versi: '2099-06-30', simpananKe: 3 } }), v))
@@ -220,9 +220,6 @@ console.log('\n── C. periksaImporBalik ──')
   const lama = periksaImporBalik(b({ unduhan: null }), v)
   cek('C14 unduhan tanpa penanda → peringatan, bukan tolak',
     lama.tolak === null && lama.peringatan.join(' ').includes('tidak mencatat dari simpanan ke berapa'))
-  // Urutan: berkas dari luar disebut sebagai berkas dari luar, bukan "jangkar asing".
-  cek('C15 tanpa kolom Jangkar didahulukan dari pemeriksaan lain',
-    tolakNya(periksaImporBalik(b({ adaKolomJangkar: false, unduhan: { tahun: 2001, versi: '2001-01-31', simpananKe: 1 } }), v)).includes('formulir dari luar'))
 }
 
 // ─── D. Menggabungkan ───────────────────────────────────────────────────────
@@ -327,7 +324,7 @@ for (const [nama, rows, ke] of [['murni', barisMurni(), null], ['Perubahan', bar
   const h = await bacaWb(wb)
   const versiInput = keInput([...rows])
   const putusan = periksaImporBalik(
-    { adaKolomJangkar: h.kolom.jangkar != null, perubahanKe: h.perubahanKe, unduhan: h.unduhan, baris: h.baris },
+    { perubahanKe: h.perubahanKe, unduhan: h.unduhan, baris: h.baris },
     { tahun: 2099, versi: '2099-07-31', simpananKini: 4, babak: ke, jangkar: new Set(versiInput.map(r => r.anggaran_key!)) },
   )
   cek(`E1 ${nama}: berkas sendiri yang segar lolos tanpa peringatan`,
@@ -364,29 +361,29 @@ console.log('\n── F. Sambungan ──')
     iPeriksa > 0 && iGabung > iPeriksa && /if \(putusan\.tolak !== null\) \{[\s\S]{0,140}\} else \{\s*const g = gabungImporBalik/.test(rute))
   cek('F4 route: jenis dinilai pada babak VERSI terbuka', rute.includes('babak: keBabak(penanda, versi),'))
   cek('F5 route: realisasi terdampak dihitung dari GABUNGAN',
-    rute.includes('imporBalik?.rows ? imporBalik.rows.map(r => r.anggaran_key) : hasil.baris.map(b => b.jangkar)'))
+    /imporBalik\?\.rows\s*\? imporBalik\.rows\.map\(r => r\.anggaran_key\)\s*: hasil\.baris\.map\(b => gantiIsi\?\.pasangan\[b\.barisExcel\] \?\? b\.jangkar\)/.test(rute))
   cek('F6 route: jawaban membawa unduhan & imporBalik', rute.includes('unduhan: hasil.unduhan,') && /\bimporBalik,\n/.test(rute))
 
   const modal = kode(baca('components/blud/ImportDpaModal.tsx'))
   cek('F7 modal: versi terbuka dikirim', modal.includes("if (versiTerbuka) form.append('versi_terbuka', versiTerbuka)"))
   cek('F8 modal: penolakan impor-balik menyembunyikan tombol Masukkan',
-    modal.includes('tolak: b?.tolak ?? (putusan.jenis === \'tolak\' ? putusan.pesan : null),') && modal.includes('{hasil && !tolak && ('))
+    modal.includes('tolak: b?.tolak ?? g?.tolak ?? (putusan.jenis === \'tolak\' ? putusan.pesan : null),') && modal.includes('{hasil && !tolak && ('))
   cek('F9 modal: peringatan impor-balik ditanyakan sebelum onTerapkan',
     /if \(peringatan\.length && !\(await confirmDialog\(\{[\s\S]*?\}\)\)\) return/.test(modal)
-      && modal.includes('peringatan: [...(b?.peringatan ?? []), ...(putusan.jenis === \'peringatan\' ? [putusan.pesan] : [])],'))
+      && modal.includes('...(b?.peringatan ?? []),') && modal.includes('...(putusan.jenis === \'peringatan\' ? [putusan.pesan] : []),'))
   cek('F10 modal: yang dipasang GABUNGAN server + angka kunci segar',
     modal.includes('onTerapkan(barisMasuk, { ...asal, ke_versi_terbuka: balik.versi, simpanan_berkas: balik.simpananBerkas }, balik.simpananKini)'))
 
   const dpa = kode(baca('app/(dashboard)/blud/dpa/dpa-client.tsx'))
   const tombol = dpa.slice(dpa.indexOf('data-rima="dpa.impor"') - 260, dpa.indexOf('data-rima="dpa.impor"'))
   cek('F11 layar: Impor TIDAK lagi dikunci versi tersimpan', !tombol.includes('alasanKunciBorongan') && tombol.includes('onClick={() => { void bukaImpor() }}'))
-  cek('F12 layar: Form Baru TETAP terkunci', /disabled=\{!!alasanKunciBorongan\}[\s\S]{0,120}onClick=\{mulaiFormBaru\}/.test(dpa))
+  cek('F12 layar: Form Baru TIDAK lagi dikunci versi tersimpan (§2.4)', !dpa.includes('alasanKunciBorongan') && /data-tooltip=\{tooltipFormBaru\}\s*onClick=\{mulaiFormBaru\}/.test(dpa))
   const elImpor = dpa.slice(dpa.indexOf('<ImportDpaModal'), dpa.indexOf('/>', dpa.indexOf('<ImportDpaModal')))
   cek('F13 layar: versi terbuka dioper ke modal', elImpor.includes('versiTerbuka={versi}'))
   const badan = dpa.slice(dpa.indexOf('function terapkanImpor'), dpa.indexOf('async function bukaImpor'))
   cek('F14 terapkanImpor: impor-balik memakai angka kunci SEGAR & tidak melepas versi',
     badan.includes("const balik = !!asal.ke_versi_terbuka && asal.ke_versi_terbuka === versi")
-      && badan.includes('if (balik) { if (simpananKini != null) setVersion(simpananKini) }')
+      && badan.includes('if (balik || gantiIsi) { if (simpananKini != null) setVersion(simpananKini) }')
       && badan.includes("else setVersi('')"))
   cek('F15 terapkanImpor: sasaran Simpan tidak disentuh', !badan.includes('setPeriodeTulis('))
   cek('F16 bukaImpor menanyakan isian belum tersimpan',

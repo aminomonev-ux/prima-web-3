@@ -359,6 +359,9 @@ export const AsalImporSchema = z.object({
   // yang MENIMPA versi tersimpan — dua kejadian yang sangat berbeda di baris audit.
   ke_versi_terbuka: TanggalSchema.optional(),
   simpanan_berkas:  z.coerce.number().int().min(0).nullable().optional(),
+  // Formulir luar di atas versi terbuka (CONCEPT-blud-impor-formulir-baru §2) — audit saja.
+  di_atas_versi:        TanggalSchema.optional(),
+  jangkar_dipasangkan:  z.coerce.number().int().min(0).optional(),
 });
 
 /**

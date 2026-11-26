@@ -68,7 +68,7 @@ export interface SimpulImpor {
 
 export interface PerbaikanImpor {
   barisExcel: number
-  jenis: 'PINDAH_ANAK' | 'ISI_VOL_HARGA'
+  jenis: 'PINDAH_ANAK' | 'ISI_VOL_HARGA' | 'SAMBUNG_RANTAI'
   keterangan: string
 }
 
@@ -289,4 +289,159 @@ export function sumberSelisih(
     })
   })
   return hasil.sort((a, b) => Math.abs(b.residu) - Math.abs(a.residu))
+}
+
+// ─── Aturan 3–5: salah rumus yang lazim di formulir tangan ───────────────────
+// Konsep: docs/konsep/blud/CONCEPT-blud-impor-formulir-baru.md §3. Sama seperti
+// aturan 1: rumus cuma usulan, aritmetika yang memutuskan.
+
+/** Segmen kode yang bisa dibandingkan: "5.2.06" dan "5.2.6" sama. */
+export function segmenKodeNormal(kode: string): string[] {
+  return kode.split('.').map(s => s.trim()).filter(Boolean)
+    .map(s => (/^\d+$/.test(s) ? String(Number(s)) : s.toLowerCase()))
+}
+
+/** `a` awalan sejati `b` (lebih pendek, semua segmennya sama). */
+export function awalanKode(a: readonly string[], b: readonly string[]): boolean {
+  return a.length > 0 && a.length < b.length && a.every((s, i) => s === b[i])
+}
+
+/**
+ * Induk cadangan dari AWALAN kode untuk berkas berkode satu kolom — di bentuk itu
+ * "posisi kolom" tidak membawa informasi apa pun (semua baris berkode sedalam 1).
+ * Dipilih baris di atasnya yang kodenya awalan TERPANJANG; seri → yang terdekat.
+ * Baris tanpa kode memulangkan null (penambatan posisi yang menanganinya).
+ */
+export function indukDariAwalanKode(kode: readonly string[]): (number | null)[] {
+  const seg = kode.map(segmenKodeNormal)
+  return seg.map((s, i) => {
+    if (!s.length) return null
+    let pilih: number | null = null
+    for (let j = i - 1; j >= 0; j--) {
+      if (!awalanKode(seg[j], s)) continue
+      if (pilih == null || seg[j].length > seg[pilih].length) pilih = j
+    }
+    return pilih
+  })
+}
+
+/**
+ * Aturan 3 (K1) — rumus induk melompati anak dan menunjuk cucunya.
+ *
+ *     b.398  BELANJA MODAL               =F399+F517+F525   ← menunjuk 525
+ *     b.524  Belanja Modal Aset Lainnya  =SUM(F525:F525)
+ *
+ * b.525 diklaim dua baris; yang terdekat (b.524) menang, lalu b.524 sendiri tidak
+ * disebut rumus mana pun dan jadi akar palsu (L1). Di sini puncak rantai b.525
+ * (= b.524) dipasang di bawah pengklaim yang jauh (b.398) — HANYA kalau sesudahnya
+ * angka tertulis b.398 sama persis dengan jumlah anak barunya. Lompatan beberapa
+ * tingkat ikut tertangani karena yang dipasang selalu PUNCAK rantainya.
+ *
+ * `pengklaim` = indeks anak → indeks baris yang rumusnya menyebutnya.
+ * Memulangkan induk-rumus baru + `sambung` (puncak → induk barunya).
+ */
+export function sambungRantaiTerlompati(
+  simpul: readonly SimpulImpor[],
+  pengklaim: ReadonlyMap<number, readonly number[]>,
+  indukRumusAwal: readonly (number | null)[],
+  uraian: readonly string[] = [],
+): { indukRumus: (number | null)[]; sambung: Map<number, number>; perbaikan: PerbaikanImpor[] } {
+  const indukRumus = [...indukRumusAwal]
+  const sambung = new Map<number, number>()
+  const perbaikan: PerbaikanImpor[] = []
+  const puncak = (i: number): number => {
+    let t = i
+    let jaga = 0
+    while (indukRumus[t] != null && jaga++ < 64) t = indukRumus[t] as number
+    return t
+  }
+  const leluhur = (calon: number, dari: number): boolean => {
+    let p = indukRumus[dari]
+    let jaga = 0
+    while (p != null && jaga++ < 64) {
+      if (p === calon) return true
+      p = indukRumus[p]
+    }
+    return false
+  }
+  const label = (i: number) => (uraian[i] ? ` "${uraian[i]}"` : '')
+
+  const urut = [...pengklaim.keys()].sort((a, b) => a - b)
+  for (const d of urut) {
+    const daftar = pengklaim.get(d) ?? []
+    if (daftar.length < 2) continue
+    for (const p of [...daftar].sort((a, b) => a - b)) {
+      if (p === indukRumus[d]) continue
+      const t = puncak(d)
+      if (t === p || leluhur(p, d)) continue            // sudah serantai
+      if (pengklaim.has(t)) continue                     // puncaknya disebut rumus lain
+      if (!(p < t) || leluhur(t, p)) continue            // jangan sampai melingkar
+      const fileP = simpul[p]?.jumlahFile
+      const fileT = simpul[t]?.jumlahFile
+      if (fileP == null || fileT == null) continue       // tak bisa dibuktikan
+      let jumlahAnak = 0
+      let terbaca = true
+      indukRumus.forEach((q, k) => {
+        if (q !== p) return
+        const v = simpul[k].jumlahFile
+        if (v == null) terbaca = false
+        else jumlahAnak += v
+      })
+      if (!terbaca) continue
+      if (Math.abs(fileP - (jumlahAnak + fileT)) >= EPS_RAPIKAN) continue
+
+      indukRumus[t] = p
+      sambung.set(t, p)
+      perbaikan.push({
+        barisExcel: simpul[t].barisExcel,
+        jenis: 'SAMBUNG_RANTAI',
+        keterangan: `Dipindah ke bawah b.${simpul[p].barisExcel}${label(p)}. Rumus b.${simpul[p].barisExcel} `
+          + `menyebut b.${simpul[d].barisExcel} (bagian dari baris ini), bukan baris ini — sesudah dipindah `
+          + `angkanya cocok persis (Rp ${fileP.toLocaleString('id-ID')}).`,
+      })
+    }
+  }
+  return { indukRumus, sambung, perbaikan }
+}
+
+/**
+ * Aturan 4 (K4) — baris yang tetap dijumlah DUA kali sesudah pohonnya final: dua
+ * rumus menyebutnya, dan yang satu tidak terselesaikan aturan 3. Excel menghitung
+ * uang yang sama dua kali; PRIMA menghitungnya sekali. Klaim yang lewat baris hasil
+ * sambungan (aturan 3) bukan dobel — sambungan itulah pembetulannya.
+ *
+ * Hanya pengklaim yang memang TERHITUNG di total Excel yang dinilai: rantai rumusnya
+ * (`indukRumus`) berujung di akar pohon. Pengklaim yatim di Excel (ditempel lewat
+ * awalan kode/posisi) tidak menggandakan apa pun di Excel — tanpa saringan ini,
+ * pembuktian aturan 3 yang gagal ikut dilaporkan sebagai "dijumlah dua kali".
+ */
+export function klaimGanda(
+  pengklaim: ReadonlyMap<number, readonly number[]>,
+  induk: readonly (number | null)[],
+  indukRumus: readonly (number | null)[],
+  sambung: ReadonlyMap<number, number>,
+): Array<{ anak: number; pengklaim: number[] }> {
+  const dihitungExcel = (c: number): boolean => {
+    let t = c
+    let jaga = 0
+    while (indukRumus[t] != null && jaga++ < 64) t = indukRumus[t] as number
+    return induk[t] == null
+  }
+  const hasil: Array<{ anak: number; pengklaim: number[] }> = []
+  for (const [d, semua] of pengklaim) {
+    const daftar = semua.filter(dihitungExcel)
+    if (daftar.length < 2) continue
+    const dobel = daftar.filter(p => {
+      if (p === induk[d]) return false
+      // Lewat sambungan aturan 3? Naik dari d sampai p; kalau anak langsung p di
+      // jalur itu adalah baris sambungan milik p, klaimnya sudah dibetulkan.
+      let anakJalur = d
+      let q = induk[d]
+      let jaga = 0
+      while (q != null && q !== p && jaga++ < 64) { anakJalur = q; q = induk[q] }
+      return !(q === p && sambung.get(anakJalur) === p)
+    })
+    if (dobel.length) hasil.push({ anak: d, pengklaim: [induk[d], ...dobel].filter((x): x is number => x != null) })
+  }
+  return hasil.sort((a, b) => a.anak - b.anak)
 }

@@ -29,8 +29,24 @@ import { totalAkarDpa } from '@/lib/blud/salin-versi'
 import { keDpaBarisInput } from '@/lib/blud/import-dpa-shared'
 import { dpaKeInput } from '@/lib/blud/row-map'
 import { formatTanggalId } from '@/lib/blud/tanggal'
-import { periksaImporBalik, gabungImporBalik, type BandingImporBalik } from '@/lib/blud/impor-balik'
+import { periksaImporBalik, gabungImporBalik, pasangkanJangkar, type BandingImporBalik } from '@/lib/blud/impor-balik'
 import type { DpaBarisInput } from '@/types'
+
+/**
+ * Formulir dari luar di atas versi terbuka (CONCEPT-blud-impor-formulir-baru §2): isi
+ * layar diganti, sasaran Simpan tidak berpindah. `pasangan` = jangkar versi terbuka yang
+ * ikut ke baris berkas supaya realisasi tidak kehilangan posnya.
+ */
+interface GantiIsi {
+  versi: string
+  simpananKini: number
+  /** Sasaran Simpan = versi terbuka → Simpan mengganti isi versi itu. */
+  sasaranSama: boolean
+  pasangan: Record<number, string>
+  dipasangkan: number
+  berebut: number
+  tolak: string | null
+}
 
 /** Jawaban impor-balik ke versi terbuka (§11.3) — `rows` siap dipasang ke form kalau tidak ditolak. */
 interface ImporBalik {
@@ -139,7 +155,20 @@ async function tanganiPreview(
     // angka kuncinya dibaca DI SINI, bukan dipercaya dari layar: layar bisa memegang
     // suntingan yang belum tersimpan, dan angka kunci wajib segar dari server (L77).
     let imporBalik: ImporBalik | null = null
-    if (versiTerbukaParsed.success) {
+    let gantiIsi: GantiIsi | null = null
+    if (versiTerbukaParsed.success && hasil.kolom.jangkar == null) {
+      const versi = versiTerbukaParsed.data
+      const [barisVersi, simpananKini] = await Promise.all([getDpaByDate(tahun, versi), getDpaVersion(tahun, versi)])
+      const p = pasangkanJangkar(barisVersi.map(dpaKeInput), hasil.baris)
+      gantiIsi = {
+        versi, simpananKini,
+        sasaranSama: sasaranParsed.success && sasaranParsed.data === versi,
+        pasangan: p.pasangan,
+        dipasangkan: Object.keys(p.pasangan).length,
+        berebut: p.berebut,
+        tolak: barisVersi.length ? null : `Versi ${formatTanggalId(versi)} tidak ditemukan lagi — mungkin baru dihapus. Muat ulang halaman DPA.`,
+      }
+    } else if (versiTerbukaParsed.success) {
       const versi = versiTerbukaParsed.data
       const [barisVersi, simpananKini] = await Promise.all([getDpaByDate(tahun, versi), getDpaVersion(tahun, versi)])
       const dasar = { versi, simpananKini, simpananBerkas: hasil.unduhan?.simpananKe ?? null }
@@ -151,7 +180,7 @@ async function tanganiPreview(
       } else {
         const versiInput = barisVersi.map(dpaKeInput)
         const putusan = periksaImporBalik(
-          { adaKolomJangkar: hasil.kolom.jangkar != null, perubahanKe: hasil.perubahanKe, unduhan: hasil.unduhan, baris: hasil.baris },
+          { perubahanKe: hasil.perubahanKe, unduhan: hasil.unduhan, baris: hasil.baris },
           {
             tahun, versi, simpananKini, babak: keBabak(penanda, versi),
             jangkar: new Set(versiInput.map(r => r.anggaran_key ?? '').filter(Boolean)),
@@ -171,7 +200,9 @@ async function tanganiPreview(
     // dibandingkan dengan hasil GABUNGAN-nya: baris yang dinolkan tetap membawa jangkar.
     const terpakai = await jangkarDipakaiRealisasi(tahun)
     const jangkarBaru = new Set(
-      (imporBalik?.rows ? imporBalik.rows.map(r => r.anggaran_key) : hasil.baris.map(b => b.jangkar)).filter(Boolean) as string[],
+      (imporBalik?.rows
+        ? imporBalik.rows.map(r => r.anggaran_key)
+        : hasil.baris.map(b => gantiIsi?.pasangan[b.barisExcel] ?? b.jangkar)).filter(Boolean) as string[],
     )
     const realisasiTerdampak = terpakai.filter(t => !jangkarBaru.has(t.anggaran_key))
 
@@ -203,7 +234,8 @@ async function tanganiPreview(
         + `total ${hasil.totalHitung}, ditahan ${hasil.ditahan.length}, `
         + `realisasi terdampak ${realisasiTerdampak.length}`
         + `${hasil.perubahanKe ? `, berkas DPA Perubahan ke-${hasil.perubahanKe}` : ''}`
-        + `${imporBalik ? `, impor-balik ke versi ${imporBalik.versi}${imporBalik.tolak ? ' (ditolak)' : ''}` : ''}`,
+        + `${imporBalik ? `, impor-balik ke versi ${imporBalik.versi}${imporBalik.tolak ? ' (ditolak)' : ''}` : ''}`
+        + `${gantiIsi ? `, formulir di atas versi ${gantiIsi.versi} (${gantiIsi.dipasangkan} baris membawa pos lama)` : ''}`,
     })
 
     return NextResponse.json({
@@ -223,12 +255,14 @@ async function tanganiPreview(
         // disembunyikan. Perbaikan diam-diam adalah kerusakan diam-diam.
         perbaikan: hasil.perbaikan,
         sumberSelisih: hasil.sumberSelisih,
+        diLuarRumus: hasil.diLuarRumus,
         realisasiTerdampak,
         perubahanKe: hasil.perubahanKe,
         versiKop: hasil.versiKop,
         unduhan: hasil.unduhan,
         tujuan,
         imporBalik,
+        gantiIsi,
       },
     })
   } catch (err) {

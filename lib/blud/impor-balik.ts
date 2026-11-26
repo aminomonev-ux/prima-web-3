@@ -4,6 +4,7 @@
 // Fungsi murni, aman untuk klien: dipanggil route impor (server yang memegang isi
 // versi & angka kuncinya) dan diuji sungguhan — pola `salin-versi.ts`.
 
+import { segmenKodeNormal } from './import-rapikan'
 import { hapusAtauNolkan } from './perubahan'
 import { recalcDpaJumlah } from './recalc'
 import { formatTanggalId } from './tanggal'
@@ -34,8 +35,8 @@ export function bacaTeksPenandaUnduhan(teks: string): PenandaUnduhan | null {
 
 // ─── Penjaga (§11.3 butir 1–4) ───────────────────────────────────────────────
 
+/** Berkas BER-kolom Jangkar (unduhan PRIMA). Formulir luar lewat `pasangkanJangkar`. */
 export interface BerkasImporBalik {
-  adaKolomJangkar: boolean
   perubahanKe: number | null
   unduhan: PenandaUnduhan | null
   baris: ReadonlyArray<{ barisExcel: number; uraian: string; jangkar: string | null }>
@@ -57,20 +58,16 @@ export type PutusanImporBalik =
 const kunci = (k: string | null | undefined): string => (k ?? '').trim().toLowerCase()
 
 /**
- * Yang DITOLAK: berkas yang tidak bisa dipastikan berasal dari versi ini — tanpa kolom
- * Jangkar (formulir luar), tahun/versi lain menurut penandanya, jenis murni/Perubahan
- * yang tidak cocok, atau jangkar yang tidak dikenal versi ini. Yang DIPERINGATKAN:
- * berkas yang mungkin basi — suntingan yang tersimpan sesudah ia diunduh akan tertimpa.
+ * Hanya untuk berkas BER-kolom Jangkar. Formulir dari luar (tanpa Jangkar) tidak lewat
+ * sini lagi — ia mengganti isi layar dan jangkarnya dipasangkan `pasangkanJangkar`
+ * (konsep CONCEPT-blud-impor-formulir-baru §2).
+ * Yang DITOLAK: berkas yang tidak bisa dipastikan berasal dari versi ini — tahun/versi
+ * lain menurut penandanya, jenis murni/Perubahan yang tidak cocok, atau jangkar yang
+ * tidak dikenal versi ini. Yang DIPERINGATKAN: berkas yang mungkin basi — suntingan
+ * yang tersimpan sesudah ia diunduh akan tertimpa.
  */
 export function periksaImporBalik(b: BerkasImporBalik, v: VersiTerbuka): PutusanImporBalik {
   const tgl = formatTanggalId(v.versi)
-  if (!b.adaKolomJangkar) {
-    return {
-      tolak: `Versi ${tgl} sedang terbuka. Ke versi yang sudah tersimpan hanya bisa dimasukkan Excel unduhan PRIMA `
-        + 'dari versi itu, dan berkas ini tidak punya kolom Jangkar — bentuknya formulir dari luar. '
-        + 'Formulir dari luar diimpor ke periode yang belum punya versi.',
-    }
-  }
   const u = b.unduhan
   if (u && u.tahun !== v.tahun) {
     return { tolak: `Berkas ini unduhan DPA ${u.tahun}, sedangkan yang terbuka DPA ${v.tahun}.` }
@@ -119,6 +116,71 @@ export function periksaImporBalik(b: BerkasImporBalik, v: VersiTerbuka): Putusan
     )
   }
   return { tolak: null, peringatan }
+}
+
+// ─── Formulir luar di atas versi terbuka (CONCEPT-blud-impor-formulir-baru §2) ──
+
+export interface HasilPasangJangkar {
+  /** barisExcel → anggaran_key milik baris versi yang jadi pasangannya. */
+  pasangan: Record<number, string>
+  /** Baris berkas yang punya calon tapi calonnya kembar — sengaja tidak dipasangkan. */
+  berebut: number
+}
+
+const rapikanUraian = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
+const kunciKode = (kode: string) => segmenKodeNormal(kode).join('.')
+
+/**
+ * Formulir dari luar tidak membawa `anggaran_key`; tanpa pemasangan ini setiap
+ * realisasi yang sudah tercatat kehilangan posnya begitu isinya disimpan. Baris berkas
+ * dipasangkan dengan baris versi terbuka lewat kode (segmen dinormalkan) + uraian;
+ * yang tersisa lewat kode saja bila kode itu tunggal di KEDUA sisi. Satu lawan satu —
+ * calon yang kembar tidak dipasangkan (menebak di sini membelokkan realisasi ke baris
+ * yang salah, lebih buruk daripada pos baru yang disebut di modal).
+ */
+export function pasangkanJangkar(
+  versi: ReadonlyArray<{ kode_rekening?: string | null; uraian?: string | null; anggaran_key?: string | null }>,
+  berkas: ReadonlyArray<{ barisExcel: number; kode: string; uraian: string; jangkar?: string | null }>,
+): HasilPasangJangkar {
+  const pasangan: Record<number, string> = {}
+  let berebut = 0
+  const terpakai = new Set<string>()
+  const sudah = new Set<number>()
+
+  const tahap = (kunci: (kode: string, uraian: string) => string | null) => {
+    const sisiVersi = new Map<string, string[]>()
+    for (const v of versi) {
+      const key = v.anggaran_key?.trim()
+      if (!key || terpakai.has(key)) continue
+      const k = kunci(v.kode_rekening ?? '', v.uraian ?? '')
+      if (k != null) sisiVersi.set(k, [...(sisiVersi.get(k) ?? []), key])
+    }
+    const sisiBerkas = new Map<string, number[]>()
+    for (const b of berkas) {
+      if (b.jangkar || sudah.has(b.barisExcel)) continue
+      const k = kunci(b.kode, b.uraian)
+      if (k != null) sisiBerkas.set(k, [...(sisiBerkas.get(k) ?? []), b.barisExcel])
+    }
+    for (const [k, daftar] of sisiBerkas) {
+      const calon = sisiVersi.get(k)
+      if (!calon) continue
+      if (calon.length !== 1 || daftar.length !== 1) continue
+      pasangan[daftar[0]] = calon[0]
+      terpakai.add(calon[0])
+      sudah.add(daftar[0])
+    }
+  }
+  tahap((kode, uraian) => (uraian.trim() ? `${kunciKode(kode)}|${rapikanUraian(uraian)}` : null))
+  tahap(kode => (kunciKode(kode) ? kunciKode(kode) : null))
+
+  // Yang masih punya calon sekunci (kode+uraian) tapi tak terpasang = berebut.
+  const sisaVersi = new Set(versi.filter(v => v.anggaran_key && !terpakai.has(v.anggaran_key.trim()))
+    .map(v => `${kunciKode(v.kode_rekening ?? '')}|${rapikanUraian(v.uraian ?? '')}`))
+  for (const b of berkas) {
+    if (b.jangkar || sudah.has(b.barisExcel)) continue
+    if (sisaVersi.has(`${kunciKode(b.kode)}|${rapikanUraian(b.uraian)}`)) berebut++
+  }
+  return { pasangan, berebut }
 }
 
 // ─── Menggabungkan (§11.3 butir 5) ───────────────────────────────────────────

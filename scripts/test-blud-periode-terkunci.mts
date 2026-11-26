@@ -250,10 +250,12 @@ bab('C. belumTersimpan — bendera "layar ≠ yang tersimpan"')
 bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')
 {
   const dpa = kode(baca(KLIEN_DPA))
-  cek('DPA: alasan kunci diturunkan dari versi yang terbuka',
-    /const alasanKunciBorongan = versi\s*\n\s*\? `Versi \$\{formatTanggalId\(versi\)\}/.test(dpa))
-  cek('DPA: Form Baru ikut terkunci',
-    /disabled=\{!!alasanKunciBorongan\}[\s\S]{0,120}onClick=\{mulaiFormBaru\}/.test(dpa))
+  // Form Baru DILEPAS dari kunci versi tersimpan (CONCEPT-blud-impor-formulir-baru §2.4):
+  // ia hanya mengganti ISI, sasaran Simpan tetap — yang dijaga kini tooltip akibat Simpan.
+  cek('DPA: kunci borongan dibuang, Form Baru menyebut akibat Simpan',
+    !dpa.includes('alasanKunciBorongan') && /data-tooltip=\{tooltipFormBaru\}\s*onClick=\{mulaiFormBaru\}/.test(dpa))
+  cek('DPA: akibat Simpan dihitung dari sasaran vs versi terbuka',
+    /const akibatSimpan = !versi\s*\? ''\s*: sasaran === versi/.test(dpa))
   // Impor DILEPAS dari kunci ini sejak DPA Perubahan Tahap 5 (§11.3): di atas versi
   // tersimpan ia hanya menerima Excel unduhan PRIMA versi itu (jangkar utuh), dan
   // penjaganya di server — `test-blud-impor-balik.mts` bagian C & F.
@@ -266,8 +268,8 @@ bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')
     /alasanKunciSalinTahun[\s\S]{0,400}history\.length > 0/.test(dpa))
   cek('DPA: Salin Tahun tetap menjaga syarat lama',
     /alasanKunciSalinTahun = tahunList\.filter\(t => t !== tahun\)\.length === 0/.test(dpa))
-  cek('DPA: alasan kunci dipakai sebagai tooltip',
-    (dpa.match(/data-tooltip=\{alasanKunciBorongan\}/g) ?? []).length === 1)
+  cek('DPA: executeBuildForm tidak melepas versi',
+    !dpa.slice(dpa.indexOf('function executeBuildForm'), dpa.indexOf('function executeBuildForm') + 900).includes("setVersi('')"))
   // "Salin ke Induk" TIDAK mengganti tabel — ia membaca baris yang ada.
   cek('DPA: Salin ke Induk tidak ikut terkunci',
     /disabled=\{!rows\.length\}[\s\S]{0,120}setSalinBuka\(true\)/.test(dpa))

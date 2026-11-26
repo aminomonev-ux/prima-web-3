@@ -246,6 +246,9 @@ export async function POST(req: NextRequest) {
       + `${asal_impor?.ke_versi_terbuka
         ? ` · impor-balik ke versi terbuka ${asal_impor.ke_versi_terbuka} (berkas dari simpanan ke-${asal_impor.simpanan_berkas ?? '?'})`
         : ''}`
+      + `${asal_impor?.di_atas_versi
+        ? ` · formulir di atas versi ${asal_impor.di_atas_versi} — ${asal_impor.jangkar_dipasangkan ?? 0} dari ${asal_impor.baris} baris membawa pos lama`
+        : ''}`
       // Babak Perubahan. Yang MEMBUAT penanda disebut terang-terangan: tabel penanda
       // menyimpan keadaan berjalan, baris ini yang menyimpan ceritanya.
       + `${result.perubahan

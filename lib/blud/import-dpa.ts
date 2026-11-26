@@ -24,6 +24,7 @@ import {
 } from './import-dpa-grid'
 import {
   rapikanHierarki, normalkanDaunTanpaPerkalian, sumberSelisih,
+  sambungRantaiTerlompati, klaimGanda, indukDariAwalanKode, segmenKodeNormal, awalanKode,
   type SimpulImpor, type PerbaikanImpor, type SumberSelisih,
 } from './import-rapikan'
 
@@ -74,6 +75,18 @@ export interface BarisDitahan {
   alasan: string
 }
 
+/**
+ * Baris yang TIDAK dihitung rumus induknya di Excel (rentang SUM tidak ikut melebar,
+ * konsep §3.2 K2). PRIMA menghitungnya — modal menawarkan "Lewati" per baris.
+ */
+export interface BarisDiLuarRumus {
+  barisExcel: number
+  uraian: string
+  nilai: number
+  indukBarisExcel: number
+  indukUraian: string
+}
+
 export interface HasilBacaDpa {
   namaLembar: string
   barisHeader: number
@@ -89,6 +102,7 @@ export interface HasilBacaDpa {
   perbaikan: PerbaikanImpor[]
   /** Baris yang MELAHIRKAN sisa selisih; yang cuma mewarisi tidak ikut. */
   sumberSelisih: SumberSelisih[]
+  diLuarRumus: BarisDiLuarRumus[]
   /**
    * Kop "DPA PERUBAHAN KE-n" (format Ringkas, konsep Perubahan §11.1) — satu-satunya
    * pembeda dari DPA murni, kolomnya sama persis. `null` = murni / formulir luar.
@@ -626,6 +640,14 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
 
   const indexDariBarisExcel = new Map(mentah.map((m, i) => [m.barisExcel, i]))
   const posisi = kedalamanPosisi(mentah)
+  const kodeSatuKolom = kolom.kode.akhir === kolom.kode.awal
+  const simpulRapi: SimpulImpor[] = mentah.map(m => ({
+    barisExcel:     m.barisExcel,
+    jumlahFile:     m.jumlahFile,
+    vol:            m.vol,
+    harga:          m.harga,
+    rumusPerkalian: (faktorPerkalian(grid.sel(m.barisExcel, kolom.jumlah).rumus)?.length ?? 0) >= 2,
+  }))
 
   // Induk menurut rumus agregasi — sumber paling tegas, juga di berkas berkolom
   // Level (kolom itu cuma memastikan TIPE; lihat cabang `pakaiLevel`).
@@ -647,23 +669,45 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
       else pengklaim.set(j, [i])
     }
   })
-  const indukRumus = new Array<number | null>(mentah.length).fill(null)
+  let indukRumus = new Array<number | null>(mentah.length).fill(null)
   const diklaimGanda: number[] = []
   let dipakaiRumus = 0
+  // Diklaim lebih dari satu: yang kodenya awalan TERPANJANG kode anak menang (K4 —
+  // rumus yang menjumlah dua kali, kode yang memutuskan tempatnya); tanpa kode yang
+  // cocok, yang terdekat seperti dulu.
+  const segKode = mentah.map(m => segmenKodeNormal(m.kode))
+  const pilihPengklaim = (j: number, daftar: number[]): number => {
+    const sj = segKode[j]
+    if (daftar.length < 2 || !sj.length) return Math.max(...daftar)
+    let pilih: number | null = null
+    for (const c of daftar) {
+      const sc = segKode[c]
+      if (!sc.length || !(awalanKode(sc, sj) || sc.join('.') === sj.join('.'))) continue
+      if (pilih == null || sc.length > segKode[pilih].length || (sc.length === segKode[pilih].length && c > pilih)) pilih = c
+    }
+    return pilih ?? Math.max(...daftar)
+  }
   for (const [j, daftar] of pengklaim) {
-    indukRumus[j] = Math.max(...daftar)
+    indukRumus[j] = pilihPengklaim(j, daftar)
     dipakaiRumus++
     if (daftar.length > 1) diklaimGanda.push(mentah[j].barisExcel)
   }
-  if (diklaimGanda.length) {
+
+  const pakaiLevel = kolom.level != null && mentah.every(m => m.level != null)
+  const indukPosisi = indukDariKedalaman(posisi)
+  // Kode satu kolom: semua baris berkode "sedalam 1", jadi posisi tak bermakna —
+  // cadangan induk baris berkode diambil dari awalan kodenya (konsep §3.2 K5).
+  const indukAwalan = kodeSatuKolom ? indukDariAwalanKode(mentah.map(m => m.kode)) : null
+  const cadangan = mentah.map((_, i) => indukAwalan?.[i] ?? indukPosisi[i])
+  let sambung = new Map<number, number>()
+  const perbaikanSambung: PerbaikanImpor[] = []
+  let dariAwalan: number[] = []
+  if (pakaiLevel && diklaimGanda.length) {
     peringatan.push(
       `${diklaimGanda.length} baris diklaim lebih dari satu induk oleh rumus berkas `
       + `(b.${diklaimGanda.slice(0, 5).join(', b.')}). Dipakai induk terdekat.`,
     )
   }
-
-  const pakaiLevel = kolom.level != null && mentah.every(m => m.level != null)
-  const indukPosisi = indukDariKedalaman(posisi)
 
   let induk: (number | null)[]
   let sumber: SumberHierarki
@@ -703,8 +747,15 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     }
     sumber = 'level'
   } else if (dipakaiRumus > 0) {
-    induk = mentah.map((_, i) => indukRumus[i] ?? indukPosisi[i])
+    const s = sambungRantaiTerlompati(simpulRapi, pengklaim, indukRumus, mentah.map(m => m.uraian))
+    indukRumus = s.indukRumus
+    sambung = s.sambung
+    perbaikanSambung.push(...s.perbaikan)
+    induk = mentah.map((_, i) => indukRumus[i] ?? cadangan[i])
     sumber = 'rumus'
+    dariAwalan = mentah
+      .filter((m, i) => indukRumus[i] == null && indukAwalan?.[i] != null && m.kode)
+      .map(m => m.barisExcel)
   } else {
     // Kode satu kolom + tanpa Level + tanpa rumus = unduhan PRIMA versi lama.
     // Hierarkinya benar-benar tidak ada di berkas: tidak ada posisi kolom untuk
@@ -730,13 +781,6 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   // Baris yang rumusnya perkalian tidak boleh punya anak: begitu ia dianggap
   // induk, vol × harga miliknya DIBUANG dan angkanya lenyap dari total. Tiap
   // pemindahan harus membuktikan dirinya lebih dulu — lihat `import-rapikan.ts`.
-  const simpulRapi: SimpulImpor[] = mentah.map(m => ({
-    barisExcel:     m.barisExcel,
-    jumlahFile:     m.jumlahFile,
-    vol:            m.vol,
-    harga:          m.harga,
-    rumusPerkalian: (faktorPerkalian(grid.sel(m.barisExcel, kolom.jumlah).rumus)?.length ?? 0) >= 2,
-  }))
   const rapi = rapikanHierarki(simpulRapi, induk)
   induk = rapi.induk
 
@@ -746,7 +790,7 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   normal.vol.forEach((v, i) => { mentah[i].vol = v })
   normal.harga.forEach((v, i) => { mentah[i].harga = v })
   simpulRapi.forEach((s, i) => { s.vol = normal.vol[i]; s.harga = normal.harga[i] })
-  const perbaikan = [...rapi.perbaikan, ...normal.perbaikan]
+  const perbaikan = [...perbaikanSambung, ...rapi.perbaikan, ...normal.perbaikan]
 
   // Kedalaman final dari pohon, lalu dipetakan berperingkat ke rantai.
   const kedalamanPohon = mentah.map((_, i) => {
@@ -763,7 +807,32 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   // baris (144 dari 558 pada berkas 2026) karena kedalaman posisi memang kasar.
   // Daftar sepanjang itu melatih orang mengabaikan panelnya — padahal rumuslah
   // yang dipakai, dan rumus itu yang benar.
-  if (!pakaiLevel) {
+  // Kode satu kolom tidak punya "posisi" untuk dibandingkan (semua sedalam 1) —
+  // dulu itulah sumber "42 baris berbeda pendapat" yang tak berarti apa-apa.
+  // Pembandingnya awalan kode, dan yang disebut barisnya, bukan cuma jumlahnya.
+  if (!pakaiLevel && kodeSatuKolom) {
+    const seg = mentah.map(m => segmenKodeNormal(m.kode))
+    const bentrok = new Map<number, number[]>()
+    mentah.forEach((_, i) => {
+      const p = induk[i]
+      if (p == null || !seg[i].length || !seg[p].length) return
+      // Kode sama persis dengan induknya lazim (judul kelompok berulang) — bukan bentrok.
+      if (awalanKode(seg[p], seg[i]) || seg[p].join('.') === seg[i].join('.')) return
+      bentrok.set(p, [...(bentrok.get(p) ?? []), i])
+    })
+    if (bentrok.size) {
+      const contoh = [...bentrok].slice(0, 5).map(([p, anak]) =>
+        `b.${mentah[p].barisExcel} ${mentah[p].uraian} (${mentah[p].kode}) membawahi `
+        + anak.slice(0, 3).map(a => `${mentah[a].kode}`).join(', ')
+        + (anak.length > 3 ? `, dan ${anak.length - 3} lagi` : ''))
+      peringatan.push(
+        `Kode rekening ${bentrok.size === 1 ? 'satu induk' : `${bentrok.size} induk`} tidak sejalan dengan anaknya: `
+        + `${contoh.join('; ')}${bentrok.size > 5 ? '; …' : ''}. Susunannya mengikuti rumus berkas — `
+        + 'kalau kodenya keliru, betulkan di Excel.',
+      )
+    }
+  }
+  if (!pakaiLevel && !kodeSatuKolom) {
     const beda = mentah.filter((_, i) =>
       indukRumus[i] != null && indukPosisi[i] != null && indukRumus[i] !== indukPosisi[i]).length
     if (beda) {
@@ -785,6 +854,7 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
 
   const pjSah = new Set((opsi.penanggungJawabSah ?? []).map(s => s.trim().toLowerCase()))
   const ditahan: BarisDitahan[] = []
+  const pjAngka: number[] = []
   const baris: BarisTerbaca[] = mentah.map((m, i) => {
     const catatan: string[] = []
     const tipe = pakaiLevel ? (m.level as TipeBaris) : petaTipe.get(kedalamanPohon[i])!
@@ -796,6 +866,12 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
 
     let pj = m.pj
     let keterangan = m.keterangan
+    // Kolom PJ berisi ANGKA saja = hitungan bantu di samping tabel (K6), bukan nama
+    // orang. Memindahkannya ke keterangan sebagai "PJ berkas: 291000000" cuma sampah.
+    if (pj && /\d/.test(pj) && /^[\d.,\s]+$/.test(pj)) {
+      pjAngka.push(m.barisExcel)
+      pj = null
+    }
     if (pj && pjSah.size && !pjSah.has(pj.trim().toLowerCase())) {
       keterangan = [keterangan, `PJ berkas: ${pj}`].filter(Boolean).join(' · ')
       catatan.push(`Penanggung jawab "${pj}" tidak ada di master — dipindah ke keterangan.`)
@@ -843,6 +919,69 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   const dihitung = recalcDpaJumlah(keDpaBarisInput(baris))
   dihitung.forEach((d, i) => { baris[i].jumlahHitung = d.jumlah })
 
+  if (pjAngka.length) {
+    peringatan.push(
+      `${pjAngka.length} baris berisi angka di kolom Penanggung Jawab `
+      + `(b.${pjAngka.slice(0, 5).join(', b.')}${pjAngka.length > 5 ? ', …' : ''}) — dianggap hitungan bantu, `
+      + 'tidak dimasukkan sebagai penanggung jawab.',
+    )
+  }
+
+  // K4 — uang yang dijumlah dua kali oleh rumus Excel (sesudah pohon final).
+  if (!pakaiLevel) {
+    const dobel = klaimGanda(pengklaim, induk, indukRumus, sambung)
+    if (dobel.length) {
+      const contoh = dobel.slice(0, 5).map(d =>
+        `b.${mentah[d.anak].barisExcel} ${mentah[d.anak].uraian} (Rp ${baris[d.anak].jumlahHitung.toLocaleString('id-ID')}) `
+        + `oleh b.${d.pengklaim.map(p => mentah[p].barisExcel).join(' dan b.')}`)
+      peringatan.push(
+        `${dobel.length} baris dijumlah dua kali oleh rumus Excel: ${contoh.join('; ')}${dobel.length > 5 ? '; …' : ''}. `
+        + 'PRIMA menghitungnya sekali, jadi totalnya lebih kecil dari angka Excel sebesar itu.',
+      )
+    }
+  }
+
+  // K2 — baris berangka yang tidak disebut rumus induknya: Excel tidak menghitungnya,
+  // PRIMA menghitungnya. Disebut satu per satu supaya modal bisa menawarkan "Lewati".
+  const diLuarRumus: BarisDiLuarRumus[] = []
+  const anakFinal = new Map<number, number[]>()
+  induk.forEach((p, i) => { if (p != null) anakFinal.set(p, [...(anakFinal.get(p) ?? []), i]) })
+  // Subpohon yang sebagian isinya SUDAH disebut rumus di luar subpohon itu adalah
+  // aturan 3 yang gagal dibuktikan (uangnya sudah dihitung Excel lewat jalur lain) —
+  // itu dilaporkan lewat sumber selisih, bukan sebagai "tidak dihitung".
+  const disebutDariLuar = (akar: number): boolean => {
+    const isi = new Set<number>()
+    const antre = [akar]
+    while (antre.length) { const x = antre.pop()!; if (isi.has(x)) continue; isi.add(x); antre.push(...(anakFinal.get(x) ?? [])) }
+    for (const x of isi) {
+      if (x === akar) continue
+      if ((pengklaim.get(x) ?? []).some(c => !isi.has(c))) return true
+    }
+    return false
+  }
+  mentah.forEach((m, i) => {
+    const p = induk[i]
+    if (p == null || pengklaim.has(i) || sambung.has(i)) return
+    const anakRumus = mentah[p].anakDariRumus
+    if (!anakRumus || anakRumus.includes(m.barisExcel)) return
+    if (Math.abs(baris[i].jumlahHitung) < 0.5) return
+    if (disebutDariLuar(i)) return
+    diLuarRumus.push({
+      barisExcel: m.barisExcel, uraian: m.uraian, nilai: baris[i].jumlahHitung,
+      indukBarisExcel: mentah[p].barisExcel, indukUraian: mentah[p].uraian,
+    })
+  })
+  // K3 — disebut sekali; baris yang sudah tampil di panel K2 tidak diulang di sini.
+  const diPanelK2 = new Set(diLuarRumus.map(d => d.barisExcel))
+  const awalanSaja = dariAwalan.filter(b => !diPanelK2.has(b))
+  if (awalanSaja.length) {
+    peringatan.push(
+      `${awalanSaja.length} baris berkode tidak disebut rumus penjumlahan mana pun `
+      + `(b.${awalanSaja.slice(0, 5).join(', b.')}${awalanSaja.length > 5 ? ', …' : ''}) — induknya `
+      + 'diambil dari awalan kode rekening.',
+    )
+  }
+
   const akar = baris.filter(b => b.indukBarisExcel == null)
   const totalHitung = akar.reduce((s, b) => s + b.jumlahHitung, 0)
   // Akar yang tidak membawa angka biasanya baris judul nyasar tanpa induk —
@@ -870,11 +1009,16 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   // yang memang kosong — rumus tanpa hasil di sana nol.
   const takTerbandingkan = baris.filter(b => b.jumlahFile == null)
   if (takTerbandingkan.length) {
+    const indukNya = [...new Set(takTerbandingkan.map(b => b.indukBarisExcel).filter((x): x is number => x != null))]
+    const petaUraian = new Map(baris.map(b => [b.barisExcel, b.uraian]))
+    const diBawah = indukNya.length && indukNya.length <= 3
+      ? `, di bawah ${indukNya.map(p => `b.${p} "${petaUraian.get(p) ?? ''}"`).join(', ')}`
+      : ''
     peringatan.push(
       `${takTerbandingkan.length} baris tidak membawa angka di kolom Jumlah berkas `
       + `(b.${takTerbandingkan.slice(0, 5).map(b => b.barisExcel).join(', b.')}`
-      + `${takTerbandingkan.length > 5 ? ', …' : ''}) — angkanya tetap dihitung dari `
-      + 'volume × harga, tapi tidak bisa diadu dengan angka di berkas.',
+      + `${takTerbandingkan.length > 5 ? ', …' : ''}${diBawah}) — angkanya dihitung dari volume × harga; `
+      + 'kalau keduanya kosong, barisnya masuk dengan nilai 0 sebagai rincian.',
     )
   }
 
@@ -901,7 +1045,13 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     )
   }
   if (akar.length > 1) {
-    peringatan.push(`Berkas punya ${akar.length} baris tanpa induk — DPA seharusnya satu akar.`)
+    const contoh = akar.slice(0, 5).map(b =>
+      `b.${b.barisExcel} ${b.uraian || '(tanpa uraian)'} (Rp ${b.jumlahHitung.toLocaleString('id-ID')})`)
+    peringatan.push(
+      `Berkas punya ${akar.length} baris tanpa induk — DPA seharusnya satu akar: ${contoh.join(', ')}`
+      + `${akar.length > 5 ? ', …' : ''}. Baris di luar akar pertama biasanya tidak disebut rumus `
+      + 'induknya di Excel.',
+    )
   }
 
   return {
@@ -916,6 +1066,7 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     peringatan,
     perbaikan,
     sumberSelisih: sumberSisa,
+    diLuarRumus,
     perubahanKe: kop?.ke ?? null,
     versiKop: kop?.versi ?? null,
     unduhan: bacaPenandaUnduhan(grid),
