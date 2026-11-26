@@ -31,6 +31,7 @@ import ModalPengadaan from './_components/ModalPengadaan';
 import GarisTahap from './_components/GarisTahap';
 import MenuBaris, { type ButirMenu } from './_components/MenuBaris';
 import LembarKeputusan, { LABEL_KURANG } from './_components/LembarKeputusan';
+import KartuPagu from './_components/KartuPagu';
 import { JENIS_RENCANA, LABEL_JENIS, LABEL_ANGGARAN, alasanTakBisaUbahAnggaran, type Anggaran } from '@/lib/bba/rencana';
 import {
   tahapRencana, kurangPertama, masukTabRencana, hitungTabRencana, TAB_RENCANA, LABEL_TAB_RENCANA, type TabRencana, type Kurang,
@@ -446,7 +447,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
 
       {tab === 'siap' ? (
         <LembarKeputusan rows={rowsTampil} pilihan={pilihan} c={c} bolehUbah={bolehRencana}
-          onPilih={pilihAnggaran} onLengkapi={lengkapi} onBuka={r => bukaItem(r, 'data')} />
+          onPilih={pilihAnggaran} onLengkapi={lengkapi} onBuka={r => bukaItem(r, 'data')}
+          atas={<KartuPagu tahun={tahun} rows={rows} pilihan={pilihan} c={c} />} />
       ) : (
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
