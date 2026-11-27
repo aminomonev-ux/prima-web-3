@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
   try {
     const h = await kirimLaporanKeDrive(false)
+    // 'sibuk' = tombol "Kirim sekarang" sedang jalan; putaran berikutnya mengejar.
     // Dicatat hanya bila ada yang dikirim/gagal — 288 panggilan sehari yang tidak mengirim apa-apa bukan jejak yang berguna.
     if (h.status === 'selesai' && (h.dikirim.length || h.gagal.length)) {
       await writeAuditLog({ req, eventType: 'BBA_DRIVE_KIRIM', username: 'cron',

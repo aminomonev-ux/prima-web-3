@@ -82,12 +82,12 @@ export async function uploadBufferToDrive(opts: {
  * Timpa ISI berkas yang sudah ada (laporan yang diperbarui berkala, CONCEPT-bba-revamp-alur §5B.2) — folder tetap
  * berisi satu berkas per jenis; Drive menyimpan riwayat revisinya sendiri ("Kelola versi").
  */
-export async function perbaruiBerkasDrive(opts: { fileId: string; buffer: Buffer; mimeType: string }): Promise<{ fileId: string; size: number | null }> {
+export async function perbaruiBerkasDrive(opts: { fileId: string; buffer: Buffer; mimeType: string }): Promise<{ fileId: string; size: number | null; trashed: boolean; parents: string[] | null }> {
   const stream = new PassThrough();
   stream.end(opts.buffer);
-  const res = await getDriveClient().files.update({ fileId: opts.fileId, media: { mimeType: opts.mimeType, body: stream }, fields: 'id,size' }, { timeout: BATAS_WAKTU_DRIVE_MS });
+  const res = await getDriveClient().files.update({ fileId: opts.fileId, media: { mimeType: opts.mimeType, body: stream }, fields: 'id,size,trashed,parents' }, { timeout: BATAS_WAKTU_DRIVE_MS });
   const size = res.data.size == null ? null : Number(res.data.size);
-  return { fileId: res.data.id ?? opts.fileId, size: Number.isFinite(size) ? size : null };
+  return { fileId: res.data.id ?? opts.fileId, size: Number.isFinite(size) ? size : null, trashed: res.data.trashed === true, parents: res.data.parents ?? null };
 }
 
 /** Akun & kuota token yang terpasang. `batas` null = tanpa batas (Workspace). */

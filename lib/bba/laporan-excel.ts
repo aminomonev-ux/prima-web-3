@@ -28,9 +28,12 @@ const k = (judul: string, jenis: KolomDok['jenis'], lebar: number): KolomDok => 
 /**
  * Sidik isi — dasar "perlu dikirim ke Drive?" (§5B.3). Dihitung dari BAHAN, bukan dari berkas (exceljs menulis cap waktu),
  * jadi bahan yang sama selalu bersidik sama, dan penghapusan baris pun mengubahnya (beda dengan MAX(updated_at)).
+ * Tanggal hari ini TIDAK ikut (berkas tidak dikirim ulang tiap hari), tapi status berlaku/kedaluwarsa penawaran yang
+ * dihitung darinya ikut — kalau tidak, salinan Drive tetap menulis "berlaku" sesudah suratnya lewat masa berlaku.
  */
-export function sidikBahan(b: Omit<BahanBukuRencana, 'hariIni'>): string {
-  return createHash('sha256').update(JSON.stringify([b.tahun, b.rencana, b.penerimaan, b.penawaran])).digest('hex');
+export function sidikBahan(b: BahanBukuRencana): string {
+  const berlaku = b.penawaran.map(i => masihBerlaku(i.berlaku_sampai, b.hariIni));
+  return createHash('sha256').update(JSON.stringify([b.tahun, b.rencana, b.penerimaan, b.penawaran, berlaku])).digest('hex');
 }
 
 export function tulisBukuRencana(wb: ExcelJS.Workbook, b: BahanBukuRencana, aktif: LembarBuku = 'Ringkasan'): void {

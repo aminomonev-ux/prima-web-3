@@ -91,6 +91,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [fOrigin, setFOrigin] = useState('');
   const [fJenis, setFJenis] = useState('');
   const [q, setQ] = useState('');
+  /** Kata cari yang benar-benar dipakai muatan terakhir (q baru berlaku saat dimuat). */
+  const [qDimuat, setQDimuat] = useState('');
   const [fBukti, setFBukti] = useState(false);
   const [saringanBuka, setSaringanBuka] = useState(false);
   /** Keputusan anggaran yang dipilih di lembar keputusan tapi belum disimpan — id → pilihan. */
@@ -132,7 +134,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       if (nomor !== nomorMuat.current) return;
       if (d.ok) {
         const r = d as unknown as BbaListResult & { kpi?: BbaKpi };
-        setRows(r.rows); setTotal(r.total);
+        setRows(r.rows); setTotal(r.total); setQDimuat(q.trim());
         // Pilihan yang belum tersimpan bertahan di atas data terbaru (L77) — kecuali yang barisnya hilang
         // atau yang kini sudah sama dengan yang tersimpan.
         setPilihan(p => {
@@ -445,7 +447,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       {tab === 'siap' ? (
         <LembarKeputusan rows={rowsTampil} pilihan={pilihan} c={c} bolehUbah={bolehRencana}
           onPilih={pilihAnggaran} onLengkapi={lengkapi} onBuka={r => bukaItem(r, 'data')}
-          atas={<KartuPagu tahun={tahun} rows={rows} pilihan={pilihan} c={c} />} />
+          atas={<KartuPagu tahun={tahun} rows={rows} pilihan={pilihan} c={c} tersaring={!!(fSumber || fOrigin || fJenis || qDimuat) || rows.length < total} />} />
       ) : (
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>

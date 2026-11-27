@@ -69,19 +69,27 @@ const bahan: BahanBukuRencana = {
   const s1 = sidikBahan(bahan)
   ok('B7 sidik stabil untuk bahan yang sama; berubah saat baris DIHAPUS (bukan cuma saat diubah)', s1 === sidikBahan(structuredClone(bahan))
     && s1 !== sidikBahan({ ...bahan, penerimaan: [] }) && s1 !== sidikBahan({ ...bahan, rencana: bahan.rencana.slice(1) }))
+  {
+    // Data uji: surat berlaku s.d. 2066-05-01, hari ini 2066-06-01 (sudah kedaluwarsa).
+    ok('B8 sidik berubah saat penawaran lewat masa berlaku (lembar Penawaran menulis "kedaluwarsa"), tidak berubah sekadar ganti hari',
+      sidikBahan({ ...bahan, hariIni: '2066-04-30' }) !== s1 && sidikBahan({ ...bahan, hariIni: '2066-06-02' }) === s1)
+  }
 }
 
 console.log('\nC. Route & sambungan')
 {
   const un = sumber('app/api/buku-besar-aset/unduh/route.ts'), dl = sumber('lib/data/bba-laporan.ts')
-  ok('C1 unduhan & Drive memakai penyusun yang SAMA (bukuRencanaBuffer → tulisBukuRencana)', un.includes('bukuRencanaBuffer(p.data.tahun, p.data.lembar)')
-    && dl.includes('tulisBukuRencana(wb, b, aktif)') && dl.includes("buat: async () => ({ ...(await bukuRencanaBuffer(t)), subfolder: String(t) })"))
+  ok('C1 unduhan & Drive memakai penyusun yang SAMA (bahanBukuRencana → tulisBuku → tulisBukuRencana)', un.includes('bukuRencanaBuffer(p.data.tahun, p.data.lembar)')
+    && dl.includes('tulisBukuRencana(wb, b, aktif)') && dl.includes('buffer: await tulisBuku(b, aktif)')
+    && dl.includes('await bahanBukuRencana(t, penawaran)') && dl.includes("tulis: () => tulisBuku(b, 'Ringkasan')"))
   const cron = sumber('app/api/cron/bba-drive/route.ts'), kirim = sumber('app/api/buku-besar-aset/drive-kirim/route.ts')
   ok('C2 cron ber-CRON_SECRET; tombol Kirim sekarang khusus Admin', cron.includes("verifyCronSecret(req.headers.get('authorization'))") && kirim.includes('bolehBatalkanFinal(g.session.role)') && kirim.includes('kirimLaporanKeDrive(true)'))
   ok('C3 subfolder "07 Laporan Buku Besar Aset", hanya lewat folder induk', sumber('lib/services/drive-tujuan.ts').includes("bba_laporan: '07 Laporan Buku Besar Aset'")
     && sumber('lib/services/drive-tujuan.ts').includes('bba_laporan: { khusus: null, cadanganUmum: false }'))
   ok('C4 berkas ditimpa di tempat lewat satu pintu (timpaDiTujuan → perbaruiBerkasDrive), 404 → dibuat baru', sumber('lib/services/drive-catatan.ts').includes('if (kodeGalatDrive(e) !== 404) throw e;')
     && dl.includes("timpaDiTujuan('bba_laporan'") && !dl.includes('perbaruiBerkasDrive'))
+  ok('C6 workbook dibangun SESUDAH putusan kirim (putaran cron yang tidak mengirim tidak menulis Excel)',
+    dl.indexOf('putuskanKirim(') > 0 && dl.indexOf('await isi.tulis()') > dl.indexOf('putuskanKirim(') && !/const isi = await w\.(buat|tulis)\(/.test(dl))
   ok('C5 jalur Simpan BBA tidak menyentuh Drive (gagal Drive tidak bisa menggagalkan simpan)', !sumber('lib/data/buku-besar-aset.ts').includes('bba-laporan') && !sumber('lib/data/bba-penerimaan.ts').includes('bba-laporan'))
 }
 
@@ -105,10 +113,11 @@ if (c) {
   const asli = google.drive
   const log: string[] = []
   let gagalUpdate: number | null = null
+  let sesudahUpdate: { trashed?: boolean; parents?: string[] } = {}
   ;(google as unknown as { drive: unknown }).drive = () => ({ files: {
     list: async () => ({ data: { files: [] } }),
     create: async (o: { requestBody: { name: string; mimeType?: string } }) => { const id = `UJIL${String(log.length + 1).padStart(10, '0')}`; log.push(`create:${o.requestBody.name}`); return { data: { id, name: o.requestBody.name, size: '10' } } },
-    update: async (o: { fileId: string }) => { log.push(`update:${o.fileId}`); if (gagalUpdate) throw Object.assign(new Error('x'), { code: gagalUpdate }); return { data: { id: o.fileId, size: '11' } } },
+    update: async (o: { fileId: string }) => { log.push(`update:${o.fileId}`); if (gagalUpdate) throw Object.assign(new Error('x'), { code: gagalUpdate }); return { data: { id: o.fileId, size: '11', ...sesudahUpdate } } },
   } })
   const B = await import('../lib/data/buku-besar-aset')
   const L = await import('../lib/data/bba-laporan')
@@ -142,6 +151,27 @@ if (c) {
     const st = await L.bacaStatusDrive()
     ok('D7 Drive menolak → gagal disebut, tanda tetap (sidik terkirim tidak maju), status terakhir merah', g.status === 'selesai' && g.gagal.length === 1
       && st.berkas['rencana:2066'].sidik_terkirim !== st.berkas['rencana:2066'].sidik_terlihat && st.terakhir?.ok === false)
+    gagalUpdate = null
+    await L.kirimLaporanKeDrive(true)
+    await B.createAset({ tahun_anggaran: 2066, uraian: 'UJIL rak', sumber_anggaran: 'BLUD', vol: 1, harga: 1 }, Number(u[0].id))
+    sesudahUpdate = { trashed: true }
+    const nSampah = log.length
+    await L.kirimLaporanKeDrive(true)
+    ok('D9 berkas lama di tempat sampah Drive → dibuat berkas baru', log.slice(nSampah).some(x => x.startsWith('create:BBA 2066')), JSON.stringify(log.slice(nSampah)))
+    await B.createAset({ tahun_anggaran: 2066, uraian: 'UJIL loker', sumber_anggaran: 'BLUD', vol: 1, harga: 1 }, Number(u[0].id))
+    sesudahUpdate = { parents: ['FOLDER-INDUK-LAMA'] }
+    const nPindah = log.length
+    await L.kirimLaporanKeDrive(true)
+    ok('D10 berkas lama tidak lagi di folder tujuan (induk diganti) → dibuat berkas baru', log.slice(nPindah).some(x => x.startsWith('create:BBA 2066')), JSON.stringify(log.slice(nPindah)))
+    sesudahUpdate = {}
+    // Pengirim lain sedang memegang kunci → langsung "sibuk", tidak menunggu sampai lock wait timeout.
+    await k.query('START TRANSACTION')
+    await k.query("SELECT version FROM blud_locks WHERE entity = 'bba_drive' AND key_id = 'kirim' FOR UPDATE")
+    const mulai = Date.now()
+    const sibuk = await L.kirimLaporanKeDrive(true)
+    const lama = Date.now() - mulai
+    await k.query('ROLLBACK')
+    ok('D11 kunci pengirim sedang dipegang → status sibuk tanpa menunggu', sibuk.status === 'sibuk' && lama < 5000, `${JSON.stringify(sibuk)} ${lama} ms`)
   } finally {
     ;(google as unknown as { drive: unknown }).drive = asli
     await bersih()

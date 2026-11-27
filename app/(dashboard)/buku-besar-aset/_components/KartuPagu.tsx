@@ -41,7 +41,11 @@ function simpanIngat(tahun: number, x: Ingat) {
   window.dispatchEvent(new Event(PERISTIWA));
 }
 
-export default function KartuPagu({ tahun, rows, pilihan, c }: { tahun: number; rows: readonly BbaRow[]; pilihan: ReadonlyMap<number, Anggaran>; c: Warna }) {
+/**
+ * `tersaring` = daftar yang dimuat bukan seluruh rencana tahun itu (saringan sumber/asal/jenis/cari, atau terpotong batas
+ * muat). "Sudah didanai" dihitung dari baris yang dimuat, jadi saat itu angkanya kurang dan sisa pagu tampil lebih longgar.
+ */
+export default function KartuPagu({ tahun, rows, pilihan, c, tersaring = false }: { tahun: number; rows: readonly BbaRow[]; pilihan: ReadonlyMap<number, Anggaran>; c: Warna; tersaring?: boolean }) {
   const ingat = uraiIngat(useSyncExternalStore(dengar, bacaTeks(tahun), () => null));
   const [jawab, setJawab] = useState<{ kunci: string; isi: JawabPagu } | null>(null);
   const setIngat = (x: Ingat) => simpanIngat(tahun, x);
@@ -106,6 +110,7 @@ export default function KartuPagu({ tahun, rows, pilihan, c }: { tahun: number; 
             : <>sisa pagu <b style={{ fontFamily: MONO }}>{fmtRp(h.sisa ?? 0)}</b></>}
         </div>
         {h.lewat && <div style={{ fontSize: 11.5, color: c.sub, marginTop: 4 }}>Ini peringatan, bukan penolakan — anggaran bisa ditambah lewat DPA Perubahan.</div>}
+        {tersaring && <div style={{ fontSize: 11.5, color: '#BA7517', marginTop: 4 }}>Saringan sedang aktif, jadi &quot;sudah didanai&quot; hanya menghitung rencana yang tampil dan sisa pagu terlihat lebih longgar dari kenyataan. Kosongkan saringan untuk membandingkan seluruh rencana {tahun}.</div>}
       </>)}
     </section>
   );

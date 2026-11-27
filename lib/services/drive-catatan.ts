@@ -77,6 +77,8 @@ export async function unggahKeTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; n
  * Unggah-atau-timpa untuk laporan berkala (CONCEPT-bba-revamp-alur §5B.2): `fileId` lama ditimpa di tempat; hilang/terhapus
  * (404) → dibuat baru. `subfolder` = folder di dalam folder tujuan (mis. per tahun), dibuat bila belum ada. Berkas BARU
  * masuk manifest `drive_arsip`; kesehatan dicatat dua-duanya.
+ * Berkas lama yang ada di tempat sampah, atau tidak lagi di folder tujuan (folder induk diganti di Admin Panel), juga
+ * dibuatkan berkas baru — kalau tidak, laporan terus diperbarui di tempat yang tidak dibuka siapa pun.
  */
 export async function timpaDiTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; name: string; mimeType: string; fileId?: string | null; subfolder?: string }): Promise<{ fileId: string; baru: boolean }> {
   try {
@@ -86,8 +88,10 @@ export async function timpaDiTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; na
     if (o.fileId) {
       try {
         const h = await perbaruiBerkasDrive({ fileId: o.fileId, buffer: o.buffer, mimeType: o.mimeType });
-        await catatKesehatan(tujuan);
-        return { fileId: h.fileId, baru: false };
+        if (!h.trashed && (h.parents === null || h.parents.includes(folderId))) {
+          await catatKesehatan(tujuan);
+          return { fileId: h.fileId, baru: false };
+        }
       } catch (e) { if (kodeGalatDrive(e) !== 404) throw e; }
     }
     const h = await uploadBufferToDrive({ buffer: o.buffer, name: o.name, mimeType: o.mimeType, folderId });

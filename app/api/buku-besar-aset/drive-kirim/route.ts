@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   const limited = await bbaRateLimit(g.session.userId, 'drive-kirim', 6); if (limited) return limited;
   const h = await kirimLaporanKeDrive(true);
   if (h.status === 'belum-diatur') return NextResponse.json({ ok: false, code: 'BELUM_DIATUR', message: 'Folder induk Drive belum diatur — atur di Admin Panel → Drive & Backup.' }, { status: 409 });
+  if (h.status === 'sibuk') return NextResponse.json({ ok: false, code: 'SEDANG_MENGIRIM', message: 'Salinan ke Drive sedang dikirim (otomatis atau oleh Admin lain). Tunggu sebentar, lalu lihat "Terakhir terkirim".' }, { status: 409 });
   await writeAuditLog({ req, eventType: 'BBA_DRIVE_KIRIM', userId: g.session.userId, username: g.session.username,
     detail: `BBA laporan ke Drive (tombol): ${h.dikirim.length} terkirim${h.gagal.length ? `, ${h.gagal.length} gagal — ${h.gagal.join(' · ')}` : ''}`.slice(0, 1000) });
   return NextResponse.json({ ok: true, ...h });
