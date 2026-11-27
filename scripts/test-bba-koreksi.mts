@@ -6,6 +6,7 @@
 // Bagian D memakai MySQL sungguhan (kotak pasir 2079, data berawalan "UJIF"), dibersihkan otomatis.
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
+import { lengkapiUntukDanai } from './bba-uji-danai.mjs'
 import { lahirDiPrima, belumTeregister, kelompokkan, rencanakanImpor, calonGantiNomor, type AsetRingan } from '../lib/bba/aset'
 import { alasanTakBisaBatalTempatkan, alasanTakBisaUbahRegister } from '../lib/bba/koreksi'
 import type { AsetBaca, HasilBacaKib } from '../lib/bba/kib-baca'
@@ -164,6 +165,7 @@ if (c) {
   /** Rencana 2079 didanai + satu penerimaan `vol` unit; dipulangkan id rencana & penerimaan. */
   const beli = async (uraian: string, vol: number, harga: number, extra: Record<string, unknown> = {}) => {
     const r = await D.createAset({ tahun_anggaran: TAHUN, uraian: `${UJI} ${uraian}`, sumber_anggaran: 'BLUD', vol, harga, satuan: 'unit', ...extra }, userId)
+    await lengkapiUntukDanai(k, r.id, 'UJIF danai')
     await D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id: r.id, expected_version: await versi(r.id) }] }, userId)
     await PEN.catatPenerimaan({ rencana_id: r.id, expected_version: await versi(r.id), tgl: '2026-05-14', vol, harga_satuan: harga }, userId)
     const p = Number((await satu<{ id: number }>('SELECT id FROM bba_penerimaan WHERE rencana_id = ? ORDER BY id DESC LIMIT 1', [r.id]))?.id)

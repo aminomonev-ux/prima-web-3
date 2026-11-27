@@ -19,7 +19,7 @@ type Warna = { card: string; text: string; sub: string; border: string; rowOdd: 
 export const LABEL_KURANG: Record<Kurang, (r: BbaRow) => string> = {
   BARANG: () => 'Pilih barang',
   JENIS: () => 'Pilih jenis',
-  REFERENSI: r => `Lengkapi referensi ${r.ref.n}/${r.ref.target}`,
+  REFERENSI: () => 'Isi referensi harga',
 };
 
 const POSISI: Array<{ nilai: Anggaran; label: string; warna: string | null }> = [

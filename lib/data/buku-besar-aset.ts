@@ -9,6 +9,7 @@ import { fmtTanggal, batasCek, ringkasDimiliki, ringkasDimilikiPerBarang, type D
 import { KUNCI_PENGATURAN, bacaPengaturan, type PengaturanBba } from '@/lib/bba/pengaturan';
 import type { Golongan, Kondisi } from '@/lib/bba/kib';
 import { alasanTakBisaUbahAnggaran, bolehDitandai, ANGGARAN, type JenisRencana, type Anggaran } from '@/lib/bba/rencana';
+import { semuaKurang, KALIMAT_KURANG } from '@/lib/bba/tahap';
 import type { DibeliLalu } from '@/lib/bba/penerimaan';
 import { isSafeFileUrl } from '@/lib/shared/url';
 import {
@@ -254,7 +255,7 @@ type BahanRef = Pick<ReferensiIsian, 'harga' | 'url' | 'file_id'>;
 function ringkasan(status: string, tautan: string[], refs: BahanRef[], jenisBukti: string[]) {
   return {
     tautan_usulan: tautan,
-    ref: kelengkapanRef(refs.filter(referensiSah).length, refs.length, tautan.length),
+    ref: kelengkapanRef(refs.filter(referensiSah).length, refs.length, tautan.length, refs.filter(r => (r.harga ?? 0) > 0).length),
     bukti: kelengkapanBukti(jenisBukti, status),
     jumlah_bukti: jenisBukti.length,
   };
@@ -679,7 +680,10 @@ export async function deleteAset(id: number): Promise<boolean> {
 
 // ─── Tanda anggaran & saran tahun lalu (Tahap D buku aset, §7.4/§14) ────────
 
-type BarisAnggaran = { id: number; canonical_id: string; status: BbaStatus; anggaran: Anggaran; usulan_keputusan: string | null; version: number };
+type BarisAnggaran = {
+  id: number; canonical_id: string; status: BbaStatus; anggaran: Anggaran; usulan_keputusan: string | null; version: number;
+  barang_id: number | null; jenis_rencana: JenisRencana | null;
+};
 
 /**
  * Semua-atau-tidak. Keputusan per item (lembar keputusan) atau satu untuk semua (bentuk lama). Versi tiap
@@ -690,16 +694,25 @@ export async function tandaiAnggaran(input: AnggaranInput, userId: number): Prom
   return withTransaction(async ({ tx }) => {
     const ids = input.item.map(x => x.id);
     const rows = (await tx`
-      SELECT id, canonical_id, status, anggaran, usulan_keputusan, version FROM buku_besar_aset WHERE id IN (${ids}) FOR UPDATE
-    ` as Array<Record<string, unknown>>).map(r => ({ ...r, id: Number(r.id), version: Number(r.version) }) as BarisAnggaran);
+      SELECT id, canonical_id, status, anggaran, usulan_keputusan, version, barang_id, jenis_rencana FROM buku_besar_aset WHERE id IN (${ids}) FOR UPDATE
+    ` as Array<Record<string, unknown>>).map(r => ({ ...r, id: Number(r.id), version: Number(r.version), barang_id: r.barang_id == null ? null : Number(r.barang_id) }) as BarisAnggaran);
     if (rows.length !== ids.length) throw new BbaNotFoundError();
     const per = new Map(rows.map(r => [r.id, r]));
     if (input.item.some(x => per.get(x.id)!.version !== x.expected_version)) throw new BbaVersionConflictError();
     const tujuan = new Map(input.item.map(x => [x.id, (x.anggaran ?? input.anggaran)!]));
+    // L82: syarat "boleh didanai" juga di sini, bukan hanya di lembar keputusan. Hanya perpindahan KE Didanai yang
+    // diperiksa; referensi dibaca sesudah baris rencananya dikunci (Simpan item menulis referensi di bawah kunci yang sama).
+    const keDanai = rows.filter(r => tujuan.get(r.id) === 'DIDANAI' && r.anggaran !== 'DIDANAI').map(r => r.id);
+    const berharga = new Map(keDanai.length ? (await tx`
+      SELECT aset_id, COUNT(*) AS n FROM bba_referensi_harga WHERE aset_id IN (${keDanai}) AND harga > 0 GROUP BY aset_id
+    ` as Array<{ aset_id: number; n: number }>).map(x => [Number(x.aset_id), Number(x.n)]) : []);
     const alasan = rows.flatMap(r => {
       if (!bolehDitandai(r)) return [`${r.canonical_id}: usulan ditolak — catatan sejarah, tidak ditandai.`];
       const a = alasanTakBisaUbahAnggaran(r.status, r.anggaran, tujuan.get(r.id)!);
-      return a ? [`${r.canonical_id}: ${a}`] : [];
+      if (a) return [`${r.canonical_id}: ${a}`];
+      if (!keDanai.includes(r.id)) return [];
+      const kurang = semuaKurang({ barang_id: r.barang_id, jenis_rencana: r.jenis_rencana, ref: { berharga: berharga.get(r.id) ?? 0 } });
+      return kurang.length ? [`${r.canonical_id}: belum bisa didanai — ${kurang.map(k => KALIMAT_KURANG[k]).join(', ')}.`] : [];
     });
     if (alasan.length) throw new BbaAnggaranError(alasan);
     const jumlah: Record<Anggaran, number> = { BELUM: 0, DIDANAI: 0, TIDAK_DIDANAI: 0 };

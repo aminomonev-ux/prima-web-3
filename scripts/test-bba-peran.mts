@@ -122,8 +122,7 @@ if (c) {
     await k.query('DELETE FROM buku_besar_aset WHERE tahun_anggaran = ?', [TAHUN])
     await k.query('DELETE FROM usulan_items WHERE no_usulan = ?', [UJI])
     await k.query('DELETE FROM usulan_headers WHERE no_usulan = ?', [UJI])
-    await k.query('DELETE FROM menu_role_access WHERE role = ?', [ROLE_UJI])
-  }
+    await k.query('DELETE FROM menu_role_access WHERE role = ?', [ROLE_UJI])  }
   await bersih()
   const D = await import('../lib/data/buku-besar-aset')
   const [u] = await k.query('SELECT id FROM users ORDER BY id LIMIT 1') as [Array<{ id: number }>, unknown]
@@ -132,8 +131,10 @@ if (c) {
   const refDb = async (id: number) => ((await k.query('SELECT url, harga FROM bba_referensi_harga WHERE aset_id = ? ORDER BY urutan', [id])) as [Array<{ url: string | null; harga: string | null }>, unknown])[0]
   // Tahap E: Dalam Proses hanya untuk rencana yang didanai — ditandai dulu bila belum.
   const proses = async (id: number, status: 'DIPROSES' | 'DIRENCANAKAN') => {
+    // Ditandai lewat SQL = data LAMA yang didanai sebelum syarat "minimal 1 referensi berharga" (2026-11-27): hanya
+    // rencana tanpa referensi tersimpan yang menguji pembekuan tautan usulan, dan lewat aplikasi itu kini ditolak.
     if (status === 'DIPROSES' && (await D.getAsetById(id))?.anggaran !== 'DIDANAI')
-      await D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versi(id) }] }, userId)
+      await k.query("UPDATE buku_besar_aset SET anggaran = 'DIDANAI', anggaran_vol = vol, anggaran_nilai = nilai_rencana WHERE id = ?", [id])
     return D.ubahStatusProses({ id, expected_version: await versi(id), status }, userId)
   }
   try {

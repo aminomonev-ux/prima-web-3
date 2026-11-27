@@ -162,6 +162,20 @@ if (c) {
     ok('E4 angka kunci basi → 409, tidak ada yang ditulis', basi instanceof B.BbaVersionConflictError && (await B.getAsetById(r1.id))?.anggaran === 'TIDAK_DIDANAI')
 
     const r2 = await B.createAset({ tahun_anggaran: 2082, uraian: 'UJIR Tambah kursi', barang_id: brg.id, sumber_anggaran: 'BLUD', vol: 3, harga: 1_000_000, jenis_rencana: 'PENAMBAHAN' }, userId)
+    // Syarat "boleh didanai" di SERVER (L82): barang & jenis wajib, referensi cukup satu yang berharga.
+    const tanpaRef = await coba(async () => B.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id: r2.id, expected_version: await versi(r2.id) }] }, userId))
+    ok('E5a didanai tanpa referensi berharga ditolak server, menyebut yang kurang, tidak menulis',
+      tanpaRef instanceof B.BbaAnggaranError && tanpaRef.message.includes('belum ada referensi harga') && (await B.getAsetById(r2.id))?.anggaran === 'BELUM', String(tanpaRef))
+    const r3 = await B.createAset({ tahun_anggaran: 2082, uraian: 'UJIR Kosong', sumber_anggaran: 'BLUD', vol: 1, harga: 1 }, userId)
+    const kosong = await coba(async () => B.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id: r3.id, expected_version: await versi(r3.id) }] }, userId))
+    const tidak = await B.tandaiAnggaran({ anggaran: 'TIDAK_DIDANAI', item: [{ id: r3.id, expected_version: await versi(r3.id) }] }, userId)
+    ok('E5b tanpa barang & jenis: keduanya disebut; "Tidak didanai" untuk rencana belum lengkap tetap boleh',
+      kosong instanceof B.BbaAnggaranError && kosong.message.includes('barang belum dipilih') && kosong.message.includes('jenis rencana belum diisi') && tidak.ditandai === 1, String(kosong))
+    const r4 = await B.createAset({ tahun_anggaran: 2082, uraian: 'UJIR Tautan tanpa harga', barang_id: brg.id, jenis_rencana: 'PENAMBAHAN', sumber_anggaran: 'BLUD', vol: 1, harga: 1,
+      referensi: [{ sumber: 'EKATALOG', url: 'https://e-katalog.lkpp.go.id/tanpa-harga' }] }, userId)
+    const tanpaHarga = await coba(async () => B.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id: r4.id, expected_version: await versi(r4.id) }] }, userId))
+    ok('E5c referensi tersimpan TANPA harga tidak dihitung', tanpaHarga instanceof B.BbaAnggaranError && tanpaHarga.message.includes('belum ada referensi harga'), String(tanpaHarga))
+    await B.updateAset({ id: r2.id, expected_version: await versi(r2.id), referensi: [{ sumber: 'LAINNYA', nama_penyedia: 'Surat penawaran (kertas)', harga: 990_000 }] }, userId)
     const t2 = await B.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id: r2.id, expected_version: await versi(r2.id) }] }, userId)
     const dd = await B.getAsetById(r2.id)
     ok('E5 tandai didanai: volume & nilai didanai = rencana saat ditandai', t2.ditandai === 1 && dd?.anggaran_vol === 3 && dd.anggaran_nilai === 3_000_000)

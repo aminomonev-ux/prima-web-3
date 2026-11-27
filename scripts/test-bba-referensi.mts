@@ -10,6 +10,7 @@
 
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
+import { lengkapiUntukDanai, buangBarangDanai } from './bba-uji-danai.mjs'
 import {
   tebakSumber, referensiSah, ringkasHarga, selisihAtasTertinggi, kelengkapanRef, perluReferensi,
   kelengkapanBukti, buktiBelumLengkap, slotDariUsulan, rapikanReferensi, referensiSama, tautanAman,
@@ -189,6 +190,7 @@ if (c) {
     await k.query('DELETE FROM usulan_items WHERE no_usulan = ?', [UJI])
     await k.query('DELETE FROM usulan_headers WHERE no_usulan = ?', [UJI])
     await k.query("DELETE FROM uploaded_files WHERE file_id LIKE 'UJIBBA\\_%'")
+    await buangBarangDanai(k, 'UJI-DANAI referensi')
   }
   await bersih()
   const D = await import('../lib/data/buku-besar-aset')
@@ -264,6 +266,7 @@ if (c) {
     ok('D14 bukti untuk item yang tidak ada → BbaNotFoundError', tanpaAset instanceof D.BbaNotFoundError)
 
     // Tahap E: diterima = lewat penerimaan, untuk rencana yang didanai (tanggal tidak boleh sesudah hari ini).
+    await lengkapiUntukDanai(k, id, 'UJI-DANAI referensi')
     await D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versiDb(id) }] }, userId)
     const PEN = await import('../lib/data/bba-penerimaan')
     await PEN.catatPenerimaan({ rencana_id: id, expected_version: await versiDb(id), tgl: '2025-03-01', vol: 4, harga_satuan: 13_000_000 }, userId)

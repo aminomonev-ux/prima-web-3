@@ -57,7 +57,10 @@ export function LencanaRef({ row }: { row: BbaRow }) {
   const isi = ref.tingkat === 'TAUTAN_USULAN'
     ? <><Link2 size={11} style={{ display: 'inline', verticalAlign: -1, marginRight: 3 }} />{row.tautan_usulan.length} usulan</>
     : `${ref.n}/${ref.target}`;
-  return <span style={{ border: `1px solid ${warna}`, color: warna, fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20, fontFamily: MONO, whiteSpace: 'nowrap' }}>{isi}</span>;
+  // Harga tanpa tautan/berkas cukup untuk didanai tapi tidak dihitung "Ref n/3" — sebutkan supaya angkanya tidak membingungkan.
+  const tanpaBukti = ref.tingkat === 'TAUTAN_USULAN' ? 0 : ref.berharga - ref.n;
+  return <span data-tooltip={tanpaBukti > 0 ? `${tanpaBukti} harga lagi belum bertautan/berkas — sudah cukup untuk didanai, tapi belum dihitung sebagai referensi lengkap` : undefined}
+    style={{ border: `1px solid ${warna}`, color: warna, fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20, fontFamily: MONO, whiteSpace: 'nowrap' }}>{isi}{tanpaBukti > 0 ? ` +${tanpaBukti}` : ''}</span>;
 }
 
 export function LencanaBukti({ bukti }: { bukti: KelengkapanBukti | null }) {

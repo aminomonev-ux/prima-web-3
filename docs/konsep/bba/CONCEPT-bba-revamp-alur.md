@@ -30,7 +30,7 @@ bba_barang ◄─RESTRICT─ buku_besar_aset ◄─RESTRICT─ bba_penerimaan �
 | A | Siapkan master **Barang** & **Ruangan** | Umum Aset | Master | daftar jenis barang & ruangan |
 | B | **Impor KIB** provinsi (isi awal Buku Aset) | Umum Aset | Buku Aset | register + kondisinya |
 | C | Kumpulkan **rencana**: Tarik dari Usulan / Tambah rencana | Perencanaan | Rencana | tahap *Perlu dilengkapi* |
-| D | **Lengkapi**: barang, jenis (ganti/tambah/baru/pelihara/rehab), alasan, aset yang diganti, 3 referensi harga | Perencanaan | Rencana | tahap *Siap diputuskan* |
+| D | **Lengkapi**: barang, jenis (ganti/tambah/baru/pelihara/rehab), alasan, aset yang diganti, referensi harga (minimal 1 yang ada harganya; 3 dianjurkan) | Perencanaan | Rencana | tahap *Siap diputuskan* |
 | E | **Putuskan anggaran** di lembar keputusan (Danai / Tidak / Nanti), dibandingkan dengan pagu | Perencanaan | Rencana → tab *Siap diputuskan* | *Didanai* → muncul di Pengadaan |
 | F | **Tandai dipesan** (tanggal kontrak/SPK) | Pengadaan | Pengadaan | *Dipesan* |
 | G | **Catat barang datang** (boleh bertahap) + unggah BAST/foto | Pengadaan | Pengadaan | *Diterima sebagian / penuh* |
@@ -88,7 +88,7 @@ Tombol langkah berikutnya per tahap:
 
 | Tahap | Tombol |
 |---|---|
-| Perlu dilengkapi | "Lengkapi referensi n/3" / "Pilih barang" / "Pilih jenis" (yang pertama kurang) |
+| Perlu dilengkapi | "Pilih barang" / "Pilih jenis" / "Isi referensi harga" (yang pertama kurang) |
 | Didanai | "Lihat di Pengadaan →" |
 | Dipesan / Diterima | "Lihat di Pengadaan →" |
 | Diterima, belum dicatat | "Lihat di Buku Aset →" |
@@ -104,6 +104,7 @@ Menu ⋯ berisi: Ubah, Bukti dukung, Riwayat dan batalkan (§5.1), dan Hapus (at
 - **Daftar dikelompokkan per jenis rencana.** Kepala kelompok berisi jumlah rencana dan total nilai.
 - **Tiap baris** berisi uraian + keterangan (jumlah, yang diganti/dimiliki, ref n/3), nilai, garis tahap, dan **sakelar tiga posisi Danai / Tidak / Nanti**. "Nanti" berarti `BELUM` dan menjadi bawaan.
 - Baris yang **belum lengkap** tetap tampil, tetapi redup dan tanpa sakelar. Gantinya tombol "Lengkapi …", jadi rencana tanpa referensi tidak bisa terdanai tanpa disadari. Rencana *Didanai* tidak tampil di tab ini.
+- **Syarat "boleh didanai"** (keputusan pemilik 2026-11-27): barang dipilih, jenis diisi, dan minimal **1 referensi yang ada harganya**, walau belum bertautan/berkas (dokumennya sering masih di berkas kertas). Tiga referensi sah tetap dianjurkan: lencana "Ref n/3" tetap kuning, harga tanpa bukti disebut sebagai "+k". Syarat yang sama diperiksa **server** (`tandaiAnggaran` → `semuaKurang` di `lib/bba/tahap.ts`, L82), hanya untuk perpindahan KE Didanai; "Tidak didanai" dan "Nanti" tetap boleh untuk rencana belum lengkap.
 - Pilihan yang berbeda dari yang tersimpan diberi **titik oranye**.
 - **Bilah lengket di bawah** muncul begitu ada perubahan: "n keputusan belum disimpan · a didanai (Rp …), b tidak", dengan tombol **Batal** (ghost) dan **Simpan keputusan (n)** (primary).
 - Pindah tab, ganti tahun, atau keluar halaman saat ada pilihan belum tersimpan → ditanya dulu. Caranya: pengingat belum-tersimpan yang sudah ada (`useIngatkanBelumTersimpan`), dan layarnya didaftarkan di `test-keluar-belum-tersimpan.mts`.

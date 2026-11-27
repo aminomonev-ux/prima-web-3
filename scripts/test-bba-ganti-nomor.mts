@@ -6,6 +6,7 @@
 // Bagian D memakai MySQL sungguhan (kotak pasir 2078, data berawalan "UJIG"), dibersihkan otomatis.
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
+import { lengkapiUntukDanai, buangBarangDanai } from './bba-uji-danai.mjs'
 import { rencanakanImpor, calonGantiNomor, calonPasti, sejenisCalon, ubahGantiNomor, selisihRiwayat, type AsetRingan } from '../lib/bba/aset'
 import { alasanTakBisaGabung } from '../lib/bba/koreksi'
 import type { AsetBaca, HasilBacaKib } from '../lib/bba/kib-baca'
@@ -160,6 +161,7 @@ if (c) {
     await k.query('DELETE p FROM bba_penerimaan p JOIN buku_besar_aset b ON b.id = p.rencana_id WHERE b.tahun_anggaran = ?', [TAHUN])
     await k.query('DELETE FROM buku_besar_aset WHERE tahun_anggaran = ?', [TAHUN])
     await k.query("DELETE FROM bba_lokasi WHERE nama LIKE 'UJIG%'")
+    await buangBarangDanai(k, 'UJI-DANAI ganti-nomor')
   }
   await bersih()
   const D = await import('../lib/data/buku-besar-aset')
@@ -266,6 +268,7 @@ if (c) {
 
     // Lahir dari Tempatkan, harga riil beda dari harga provinsi → cocok otomatis gagal → kembar; digabung dari kartu unit itu.
     const r = await D.createAset({ tahun_anggaran: TAHUN, uraian: `${UJI} Kursi roda`, sumber_anggaran: 'BLUD', vol: 1, harga: 1_111_111, satuan: 'unit' }, userId)
+    await lengkapiUntukDanai(k, r.id, 'UJI-DANAI ganti-nomor')
     await D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id: r.id, expected_version: await versi(r.id) }] }, userId)
     await PEN.catatPenerimaan({ rencana_id: r.id, expected_version: await versi(r.id), tgl: '2026-05-14', vol: 1, harga_satuan: 1_111_111 }, userId)
     const pen = Number((await satu<{ id: number }>('SELECT id FROM bba_penerimaan WHERE rencana_id = ?', [r.id]))?.id)

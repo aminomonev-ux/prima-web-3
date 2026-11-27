@@ -3,7 +3,7 @@
 // pita alur (server), Pengadaan, dan uji — satu aturan, jadi angka pita & isi tab tidak bisa berbeda pendapat.
 import type { BbaStatus } from './status';
 import type { Anggaran, JenisRencana } from './rencana';
-import type { KelengkapanRef } from './referensi';
+import { MIN_REFERENSI_DIDANAI, type KelengkapanRef } from './referensi';
 
 export const TAHAP = [
   'PERLU_DILENGKAPI', 'SIAP_DIPUTUSKAN', 'DIDANAI', 'DIPESAN', 'DITERIMA_SEBAGIAN', 'DITERIMA_PENUH', 'TERCATAT',
@@ -28,14 +28,24 @@ export type BahanTahap = {
   belum_dicatat: number;
 };
 
-/** Yang pertama kurang supaya rencana bisa diputuskan, atau `null` = lengkap. Urutan = urutan tombol "Lengkapi". */
+/**
+ * Syarat sebelum rencana boleh ditandai Didanai: barang & jenis WAJIB, referensi cukup satu yang berharga
+ * (`MIN_REFERENSI_DIDANAI`). Dipakai layar (tab, lembar keputusan) DAN server (`tandaiAnggaran`) — satu aturan (L82).
+ */
 export type Kurang = 'BARANG' | 'JENIS' | 'REFERENSI';
-export function kurangPertama(r: Pick<BahanTahap, 'barang_id' | 'jenis_rencana' | 'ref'>): Kurang | null {
-  if (r.barang_id === null) return 'BARANG';
-  if (r.jenis_rencana === null) return 'JENIS';
-  if (r.ref.tingkat !== 'LENGKAP') return 'REFERENSI';
-  return null;
+export type BahanKurang = Pick<BahanTahap, 'barang_id' | 'jenis_rencana'> & { ref: Pick<KelengkapanRef, 'berharga'> };
+export function semuaKurang(r: BahanKurang): Kurang[] {
+  const k: Kurang[] = [];
+  if (r.barang_id === null) k.push('BARANG');
+  if (r.jenis_rencana === null) k.push('JENIS');
+  if (r.ref.berharga < MIN_REFERENSI_DIDANAI) k.push('REFERENSI');
+  return k;
 }
+/** Yang pertama kurang, atau `null` = boleh diputuskan. Urutan = urutan tombol "Lengkapi". */
+export const kurangPertama = (r: BahanKurang): Kurang | null => semuaKurang(r)[0] ?? null;
+export const KALIMAT_KURANG: Record<Kurang, string> = {
+  BARANG: 'barang belum dipilih', JENIS: 'jenis rencana belum diisi', REFERENSI: 'belum ada referensi harga',
+};
 
 export function tahapRencana(r: BahanTahap): Tahap {
   if (r.usulan_keputusan === 'DITOLAK') return 'USULAN_DITOLAK';

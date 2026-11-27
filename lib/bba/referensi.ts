@@ -81,18 +81,26 @@ export function selisihAtasTertinggi(harga: number, ringkas: RingkasHarga | null
 }
 
 export type TingkatRef = 'LENGKAP' | 'SEBAGIAN' | 'KOSONG' | 'TAUTAN_USULAN';
-export type KelengkapanRef = { n: number; target: number; tingkat: TingkatRef };
+/** `berharga` = referensi tersimpan yang punya harga, berbukti atau tidak — dasar syarat "boleh didanai". */
+export type KelengkapanRef = { n: number; target: number; tingkat: TingkatRef; berharga: number };
+
+/**
+ * Syarat referensi untuk ditandai Didanai (keputusan pemilik 2026-11-27, CONCEPT-bba-revamp-alur §3.2): cukup SATU
+ * referensi yang ada harganya, walau belum bertautan/berkas — dokumen pendukungnya sering masih di berkas kertas.
+ * Target 3 referensi sah tetap jadi anjuran (lencana "Ref n/3").
+ */
+export const MIN_REFERENSI_DIDANAI = 1;
 
 /**
  * `tautanUsulan` hanya berlaku selama item BELUM punya referensi tersimpan — begitu ada
  * yang tersimpan, yang tersimpan yang berlaku (§4.1). Karena itu yang dibandingkan jumlah
  * TERSIMPAN, bukan jumlah yang sah: tiga tautan usulan yang disimpan tanpa harga = Ref 0/3.
  */
-export function kelengkapanRef(refSah: number, refTersimpan: number, tautanUsulan: number): KelengkapanRef {
+export function kelengkapanRef(refSah: number, refTersimpan: number, tautanUsulan: number, refBerharga = refSah): KelengkapanRef {
   const tingkat: TingkatRef = refTersimpan === 0 && tautanUsulan > 0 ? 'TAUTAN_USULAN'
     : refSah >= TARGET_REFERENSI ? 'LENGKAP'
     : refSah > 0 ? 'SEBAGIAN' : 'KOSONG';
-  return { n: refSah, target: TARGET_REFERENSI, tingkat };
+  return { n: refSah, target: TARGET_REFERENSI, tingkat, berharga: refTersimpan === 0 ? 0 : Math.max(refBerharga, refSah) };
 }
 
 /** Item yang ditawarkan "Lengkapi referensi": usulan DITOLAK itu catatan sejarah, tidak direncanakan lagi. */

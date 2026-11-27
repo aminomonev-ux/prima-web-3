@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
 import {
-  tahapRencana, kurangPertama, masukTabRencana, hitungTabRencana, ringkasAlur, langkahTahap, TAHAP, TAB_RENCANA,
+  tahapRencana, kurangPertama, semuaKurang, masukTabRencana, hitungTabRencana, ringkasAlur, langkahTahap, TAHAP, TAB_RENCANA,
   type BahanTahap, type Tahap,
 } from '../lib/bba/tahap'
 import { BBA_STATUSES } from '../lib/bba/status'
@@ -41,10 +41,12 @@ console.log('A. tahapRencana — semua kombinasi status × anggaran × kelengkap
     if (b.status === 'REALISASI_PENUH') return b.belum_dicatat === 0 ? 'TERCATAT' : 'DITERIMA_PENUH'
     if (b.anggaran === 'DIDANAI') return 'DIDANAI'
     if (b.anggaran === 'TIDAK_DIDANAI') return 'TIDAK_DIDANAI'
-    const lengkap = b.barang_id !== null && b.jenis_rencana !== null && b.ref.n >= 3 && b.ref.tingkat === 'LENGKAP'
+    // Keputusan pemilik 2026-11-27: barang & jenis wajib; referensi cukup satu yang ADA HARGANYA, bertautan/berkas atau tidak.
+    const lengkap = b.barang_id !== null && b.jenis_rencana !== null && b.ref.berharga >= 1
     return lengkap ? 'SIAP_DIPUTUSKAN' : 'PERLU_DILENGKAPI'
   }
-  const refs = [kelengkapanRef(3, 3, 0), kelengkapanRef(2, 3, 0), kelengkapanRef(0, 0, 0), kelengkapanRef(0, 0, 2), kelengkapanRef(4, 4, 0)]
+  const refs = [kelengkapanRef(3, 3, 0), kelengkapanRef(2, 3, 0), kelengkapanRef(0, 0, 0), kelengkapanRef(0, 0, 2), kelengkapanRef(4, 4, 0),
+    kelengkapanRef(0, 2, 0, 1), kelengkapanRef(0, 3, 0, 0)]
   let n = 0
   const beda: string[] = []
   const muncul = new Set<Tahap>()
@@ -61,18 +63,25 @@ console.log('A. tahapRencana — semua kombinasi status × anggaran × kelengkap
   ok('A5 diterima penuh: belum dicatat → Diterima penuh; semua tercatat (atau data pindahan) → Tercatat',
     tahapRencana(r({ status: 'REALISASI_PENUH', anggaran: 'DIDANAI', belum_dicatat: 2 })) === 'DITERIMA_PENUH' && tahapRencana(r({ status: 'REALISASI_PENUH', anggaran: 'DIDANAI' })) === 'TERCATAT')
   ok('A6 diterima sebagian tetap sebagian walau semua yang datang sudah dicatat', tahapRencana(r({ status: 'REALISASI_SEBAGIAN', anggaran: 'DIDANAI', belum_dicatat: 0 })) === 'DITERIMA_SEBAGIAN')
-  ok('A7 tautan usulan saja ≠ referensi lengkap', tahapRencana(r({ ref: kelengkapanRef(0, 0, 3) })) === 'PERLU_DILENGKAPI')
+  ok('A7 tautan usulan saja ≠ referensi (belum ada harga)', tahapRencana(r({ ref: kelengkapanRef(0, 0, 3) })) === 'PERLU_DILENGKAPI')
+  ok('A8 satu harga tanpa tautan/berkas sudah cukup untuk diputuskan; referensi tanpa harga belum',
+    tahapRencana(r({ ref: kelengkapanRef(0, 1, 0, 1) })) === 'SIAP_DIPUTUSKAN' && tahapRencana(r({ ref: kelengkapanRef(0, 2, 0, 0) })) === 'PERLU_DILENGKAPI'
+    && kelengkapanRef(0, 1, 0, 1).n === 0 && kelengkapanRef(0, 0, 3, 0).berharga === 0)
 }
 
 console.log('\nB. Yang kurang, garis tahap, tab, pita')
 ok('B1 yang pertama kurang: barang → jenis → referensi', kurangPertama(r({ barang_id: null, jenis_rencana: null, ref: kelengkapanRef(0, 0, 0) })) === 'BARANG'
-  && kurangPertama(r({ jenis_rencana: null, ref: kelengkapanRef(0, 0, 0) })) === 'JENIS' && kurangPertama(r({ ref: kelengkapanRef(1, 1, 0) })) === 'REFERENSI' && kurangPertama(r()) === null)
+  && kurangPertama(r({ jenis_rencana: null, ref: kelengkapanRef(0, 0, 0) })) === 'JENIS' && kurangPertama(r({ ref: kelengkapanRef(0, 2, 0, 0) })) === 'REFERENSI'
+  && kurangPertama(r({ ref: kelengkapanRef(1, 1, 0) })) === null && kurangPertama(r()) === null)
+ok('B1b server & layar memakai satu daftar kekurangan: semuanya disebut, urutan barang → jenis → referensi',
+  semuaKurang({ barang_id: null, jenis_rencana: null, ref: { berharga: 0 } }).join() === 'BARANG,JENIS,REFERENSI'
+  && tanpaKomentar(sumber('lib/data/buku-besar-aset.ts')).includes('semuaKurang({ barang_id: r.barang_id, jenis_rencana: r.jenis_rencana, ref: { berharga: berharga.get(r.id) ?? 0 } })'))
 ok('B2 garis tahap naik monoton di urutan utama; cabang merah/abu', (['PERLU_DILENGKAPI', 'SIAP_DIPUTUSKAN', 'DIDANAI', 'DIPESAN', 'DITERIMA_PENUH', 'TERCATAT'] as Tahap[])
   .map(t => langkahTahap(t).langkah).every((x, i, a) => i === 0 || x > a[i - 1])
   && langkahTahap('TIDAK_DIDANAI').cabang === 'MERAH' && langkahTahap('BATAL_DIBELI').cabang === 'MERAH' && langkahTahap('USULAN_DITOLAK').cabang === 'ABU' && langkahTahap('DIPESAN').cabang === null)
 {
   const contoh: BahanTahap[] = [
-    r({ barang_id: null }), r({ ref: kelengkapanRef(1, 1, 0) }), r(), r(), r({ anggaran: 'DIDANAI' }), r({ anggaran: 'DIDANAI', status: 'DIPROSES' }),
+    r({ barang_id: null }), r({ ref: kelengkapanRef(0, 1, 0, 0) }), r(), r(), r({ anggaran: 'DIDANAI' }), r({ anggaran: 'DIDANAI', status: 'DIPROSES' }),
     r({ anggaran: 'DIDANAI', status: 'REALISASI_SEBAGIAN', belum_dicatat: 1 }), r({ anggaran: 'DIDANAI', status: 'REALISASI_PENUH', belum_dicatat: 2 }),
     r({ anggaran: 'TIDAK_DIDANAI' }), r({ anggaran: 'DIDANAI', status: 'TIDAK_TEREALISASI' }), r({ usulan_keputusan: 'DITOLAK' }),
     r({ usulan_keputusan: 'DITOLAK', status: 'REALISASI_PENUH', belum_dicatat: 9 }),

@@ -7,6 +7,7 @@
 // Bagian D memakai MySQL sungguhan (kotak pasir 2080–2081, data berawalan "UJIE"), dibersihkan otomatis.
 import { readFileSync, existsSync } from 'node:fs'
 import mysql from 'mysql2/promise'
+import { lengkapiUntukDanai } from './bba-uji-danai.mjs'
 import { ringkasPenerimaan, alasanTolakPenerimaan, sisaDitempatkan, salinanYangDibeli, referensiDariDibeli } from '../lib/bba/penerimaan'
 import { cocokkanBelumTeregister, rencanakanImpor, type AsetRingan } from '../lib/bba/aset'
 import { alasanTolakProses, sasaranBeku, type BbaStatus } from '../lib/bba/status'
@@ -205,7 +206,7 @@ if (c) {
   const rencana = async (id: number) => satu<{ status: string; vol_realisasi: string; nilai_realisasi: string; tgl_realisasi: string | null; tgl_proses: string | null }>(
     "SELECT status, vol_realisasi, nilai_realisasi, DATE_FORMAT(tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi, DATE_FORMAT(tgl_proses, '%Y-%m-%d') AS tgl_proses FROM buku_besar_aset WHERE id = ?", [id])
   const nPen = async (id: number) => Number((await satu<{ n: number }>('SELECT COUNT(*) AS n FROM bba_penerimaan WHERE rencana_id = ?', [id]))?.n)
-  const danai = async (id: number) => D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versi(id) }] }, userId)
+  const danai = async (id: number) => { await lengkapiUntukDanai(k, id, 'UJIE danai'); return D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versi(id) }] }, userId) }
   const terima = async (id: number, o: { tgl: string; vol: number; harga_satuan: number; referensi_urutan?: number; merk_tipe?: string }) =>
     PEN.catatPenerimaan({ rencana_id: id, expected_version: await versi(id), ...o }, userId)
   const asetBaru = async (o: Record<string, unknown>) => {

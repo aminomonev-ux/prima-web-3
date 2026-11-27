@@ -8,6 +8,7 @@
 
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
+import { lengkapiUntukDanai } from './bba-uji-danai.mjs'
 import {
   rapikanNamaBarang, kunciNamaBarang, namaDasarUraian, saranBarang, barangBernamaSama,
   ringkasPerBarang, riwayatPerTahun, type BahanBarang,
@@ -200,7 +201,7 @@ if (c) {
   const baris = async (id: number) => ((await k.query("SELECT barang_id, status, DATE_FORMAT(tgl_proses, '%Y-%m-%d') AS tgl_proses, DATE_FORMAT(tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi FROM buku_besar_aset WHERE id = ?", [id])) as [Array<{ barang_id: number | null; status: string; tgl_proses: string | null; tgl_realisasi: string | null }>, unknown])[0][0]
   const jumlahBarang = async (pola: string) => Number(((await k.query('SELECT COUNT(*) AS n FROM bba_barang WHERE nama LIKE ?', [pola])) as [Array<{ n: number }>, unknown])[0][0]?.n)
   // Tahap E: realisasi hanya lewat penerimaan, untuk rencana yang didanai; tanggal penerimaan tidak boleh sesudah hari ini.
-  const danai = async (id: number) => D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versi(id) }] }, userId)
+  const danai = async (id: number) => { await lengkapiUntukDanai(k, id, 'UJIBBA danai'); return D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versi(id) }] }, userId) }
   const proses = async (id: number, status: 'DIRENCANAKAN' | 'DIPROSES' | 'TIDAK_TEREALISASI', tgl_proses?: string) =>
     D.ubahStatusProses({ id, expected_version: await versi(id), status, tgl_proses }, userId)
   const terima = async (id: number, tgl: string, vol: number, harga_satuan: number) =>
