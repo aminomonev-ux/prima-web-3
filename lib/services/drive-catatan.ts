@@ -9,7 +9,7 @@
 // belum dijalankan) tidak pernah menggagalkan unggahan.
 import { createHash } from 'node:crypto';
 import { sql } from '@/lib/data/db';
-import { jenisGalatDrive, uploadBufferToDrive, perbaruiBerkasDrive, cariAtauBuatFolder, kodeGalatDrive } from '@/lib/services/drive';
+import { jenisGalatDrive, uploadBufferToDrive, perbaruiBerkasDrive, cariAtauBuatFolder, kodeGalatDrive, type JejakIsiDrive } from '@/lib/services/drive';
 import { folderUntuk, type DriveTujuan } from '@/lib/services/drive-tujuan';
 
 /** Pesan galat dipotong — kolomnya VARCHAR(255), dan pesan Google bisa memuat isi respons panjang. */
@@ -80,7 +80,7 @@ export async function unggahKeTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; n
  * Berkas lama yang ada di tempat sampah, atau tidak lagi di folder tujuan (folder induk diganti di Admin Panel), juga
  * dibuatkan berkas baru — kalau tidak, laporan terus diperbarui di tempat yang tidak dibuka siapa pun.
  */
-export async function timpaDiTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; name: string; mimeType: string; fileId?: string | null; subfolder?: string }): Promise<{ fileId: string; baru: boolean }> {
+export async function timpaDiTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; name: string; mimeType: string; fileId?: string | null; subfolder?: string }): Promise<{ fileId: string; baru: boolean } & JejakIsiDrive> {
   try {
     const akar = await folderUntuk(tujuan);
     if (!akar) throw new FolderBelumDiaturError(tujuan);
@@ -90,7 +90,7 @@ export async function timpaDiTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; na
         const h = await perbaruiBerkasDrive({ fileId: o.fileId, buffer: o.buffer, mimeType: o.mimeType });
         if (!h.trashed && (h.parents === null || h.parents.includes(folderId))) {
           await catatKesehatan(tujuan);
-          return { fileId: h.fileId, baru: false };
+          return { fileId: h.fileId, baru: false, md5: h.md5, revisi: h.revisi, diubahPada: h.diubahPada };
         }
       } catch (e) { if (kodeGalatDrive(e) !== 404) throw e; }
     }
@@ -100,7 +100,7 @@ export async function timpaDiTujuan(tujuan: DriveTujuan, o: { buffer: Buffer; na
       catatArsip({ tujuan, fileId: h.fileId, nama: h.name, ukuran: h.size, sha256: createHash('sha256').update(o.buffer).digest('hex'), folderId }),
       catatKesehatan(tujuan),
     ]);
-    return { fileId: h.fileId, baru: true };
+    return { fileId: h.fileId, baru: true, md5: h.md5, revisi: h.revisi, diubahPada: h.diubahPada };
   } catch (e) {
     if (!(e instanceof FolderBelumDiaturError)) await catatKesehatan(tujuan, e);
     throw e;

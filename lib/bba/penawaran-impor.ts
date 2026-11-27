@@ -25,8 +25,8 @@ const kepalaPenawaran = (b: string[]) => b.some(KENALI.nama) && b.some(KENALI.ha
 export type BarisImporPenawaran = { baris: number; nama_barang: string; merk_tipe: string | null; spesifikasi: string | null; satuan: string | null; harga_satuan: number };
 export type HasilBacaPenawaran = { item: BarisImporPenawaran[]; masalah: string[]; dilewati: string[] };
 
-/** "Rp 1.250.000" / "1250000" / 1250000 → 1250000. Teks bukan angka = NaN. */
-function angka(v: unknown): number {
+/** "Rp 1.250.000" / "1250000" / 1250000 → 1250000. Teks bukan angka = NaN. Dipakai juga pembaca Drive balik. */
+export function angka(v: unknown): number {
   if (typeof v === 'number') return v;
   const t = String(v ?? '').replace(/rp/gi, '').replace(/\s/g, '');
   if (!t) return NaN;

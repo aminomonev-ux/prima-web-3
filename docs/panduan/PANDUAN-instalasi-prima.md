@@ -1054,9 +1054,21 @@ Login ke `console.cloud.google.com` **dengan akun PRIMA**:
 4. Restart aplikasi (`pm2 restart prima`).
 
 PRIMA membuat sendiri subfolder `01 Backup Database` · `02 LKJIP` · `03 Cadangan BLUD` ·
-`04 Buku Besar Aset` · `05 Lampiran Usulan` · `06 Salinan Lampiran` saat pertama dibutuhkan.
-Berkas lama **tidak dipindah** — tetap di folder lamanya dan dibuka lewat ID-nya; subfolder
-02–05 baru terisi oleh unggahan sesudahnya.
+`04 Buku Besar Aset` · `05 Lampiran Usulan` · `06 Salinan Lampiran` · `07 Laporan Buku Besar Aset`
+saat pertama dibutuhkan. Berkas lama **tidak dipindah** — tetap di folder lamanya dan dibuka lewat
+ID-nya; subfolder 02–05 baru terisi oleh unggahan sesudahnya.
+
+**Laporan BBA di folder 07 boleh disunting dari luar kantor** (`docs/konsep/bba/CONCEPT-bba-drive-balik.md`):
+PRIMA mendeteksi berkas yang diubah di luar, berhenti menimpanya, dan menampilkan spanduk "Tinjau
+perubahan" di modul BBA — tidak ada yang masuk ke PRIMA sebelum ditinjau dan diterapkan. Pesan ke pemakai:
+
+- Sunting **langsung berkas .xlsx-nya** (dibuka di Google Sheets pun tetap .xlsx). **Jangan "Simpan sebagai
+  Google Spreadsheet"** — itu berkas BARU yang tidak terlihat PRIMA.
+- Jangan menghapus kolom paling kanan yang tersembunyi (**Jangkar**) — itu penanda baris; tanpa itu baris
+  yang diubah terbaca sebagai baris baru.
+- Baris baru boleh ditambahkan di bawah tabel (Rencana, Penerimaan, Penawaran).
+
+Butuh migrasi `docs/migrations/migration-bba-drive-potret.sql` (dijalankan SEBELUM kodenya dipasang).
 
 ### 12.5 Uji
 

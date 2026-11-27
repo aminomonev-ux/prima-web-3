@@ -45,7 +45,7 @@ const bahan: BahanBukuRencana = {
     { id: 2, canonical_id: 'BBA-2', uraian: 'Kursi', barang_nama: null, sumber_anggaran: 'BLUD', vol: 1, satuan: null, harga: 5, nilai_rencana: 5, anggaran: 'BELUM', anggaran_nilai: null, jenis_rencana: null, tgl_proses: null, vol_realisasi: 0, nilai_realisasi: 0, usulan_no: null, alasan: 'rusak', status: 'DIRENCANAKAN', usulan_keputusan: null, barang_id: null, ref: kelengkapanRef(0, 0, 0), belum_dicatat: 0 },
     { id: 3, canonical_id: 'BBA-3', uraian: 'Ditolak', barang_nama: null, sumber_anggaran: 'BLUD', vol: 1, satuan: null, harga: 99, nilai_rencana: 99, anggaran: 'BELUM', anggaran_nilai: null, jenis_rencana: null, tgl_proses: null, vol_realisasi: 0, nilai_realisasi: 0, usulan_no: 'U-1', alasan: null, status: 'DIRENCANAKAN', usulan_keputusan: 'DITOLAK', barang_id: null, ref, belum_dicatat: 0 },
   ],
-  penerimaan: [{ rencana_id: 1, tgl: '2066-03-01', vol: 2, harga_satuan: 9.5, nilai: 19, merk_tipe: 'A', penyedia: 'PT', catatan: null, pindahan: false, ditempatkan: 1 }],
+  penerimaan: [{ id: 1, rencana_id: 1, tgl: '2066-03-01', vol: 2, harga_satuan: 9.5, nilai: 19, merk_tipe: 'A', penyedia: 'PT', catatan: null, pindahan: false, ditempatkan: 1 }],
   penawaran: [{ id: 9, penawaran_id: 4, rekanan: 'PT X', nomor_surat: '1', tgl_surat: '2066-01-01', berlaku_sampai: '2066-05-01', file_id: null, barang_id: 1, barang_nama: 'Laptop', nama_barang: 'Laptop', merk_tipe: null, spesifikasi: null, satuan: 'unit', harga_satuan: 11 }],
 }
 {

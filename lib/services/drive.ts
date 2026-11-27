@@ -62,32 +62,68 @@ export function jenisGalatDrive(err: unknown): JenisGalatDrive {
   return 'lain';
 }
 
+/** Penanda isi & revisi berkas biner (xlsx) — dasar deteksi "diubah di luar PRIMA" (CONCEPT-bba-drive-balik §3). */
+export type JejakIsiDrive = { md5: string | null; revisi: string | null; diubahPada: string | null };
+const jejakIsi = (d: { md5Checksum?: string | null; headRevisionId?: string | null; modifiedTime?: string | null }): JejakIsiDrive =>
+  ({ md5: d.md5Checksum ?? null, revisi: d.headRevisionId ?? null, diubahPada: d.modifiedTime ?? null });
+
 /** Upload buffer ke folder Drive. `size` dari Drive (null bila tak dilaporkan). */
 export async function uploadBufferToDrive(opts: {
   buffer: Buffer; name: string; mimeType: string; folderId: string;
-}): Promise<{ fileId: string; name: string; size: number | null }> {
+}): Promise<{ fileId: string; name: string; size: number | null } & JejakIsiDrive> {
   const drive = getDriveClient();
   const stream = new PassThrough();
   stream.end(opts.buffer);
   const res = await drive.files.create({
     requestBody: { name: opts.name, parents: [opts.folderId] },
     media:       { mimeType: opts.mimeType, body: stream },
-    fields:      'id,name,size',
+    fields:      'id,name,size,md5Checksum,headRevisionId,modifiedTime',
   });
   const size = res.data.size == null ? null : Number(res.data.size);
-  return { fileId: res.data.id ?? '', name: res.data.name ?? opts.name, size: Number.isFinite(size) ? size : null };
+  return { fileId: res.data.id ?? '', name: res.data.name ?? opts.name, size: Number.isFinite(size) ? size : null, ...jejakIsi(res.data) };
 }
 
 /**
  * Timpa ISI berkas yang sudah ada (laporan yang diperbarui berkala, CONCEPT-bba-revamp-alur §5B.2) — folder tetap
  * berisi satu berkas per jenis; Drive menyimpan riwayat revisinya sendiri ("Kelola versi").
  */
-export async function perbaruiBerkasDrive(opts: { fileId: string; buffer: Buffer; mimeType: string }): Promise<{ fileId: string; size: number | null; trashed: boolean; parents: string[] | null }> {
+export async function perbaruiBerkasDrive(opts: { fileId: string; buffer: Buffer; mimeType: string }): Promise<{ fileId: string; size: number | null; trashed: boolean; parents: string[] | null } & JejakIsiDrive> {
   const stream = new PassThrough();
   stream.end(opts.buffer);
-  const res = await getDriveClient().files.update({ fileId: opts.fileId, media: { mimeType: opts.mimeType, body: stream }, fields: 'id,size,trashed,parents' }, { timeout: BATAS_WAKTU_DRIVE_MS });
+  const res = await getDriveClient().files.update({ fileId: opts.fileId, media: { mimeType: opts.mimeType, body: stream }, fields: 'id,size,trashed,parents,md5Checksum,headRevisionId,modifiedTime' }, { timeout: BATAS_WAKTU_DRIVE_MS });
   const size = res.data.size == null ? null : Number(res.data.size);
-  return { fileId: res.data.id ?? opts.fileId, size: Number.isFinite(size) ? size : null, trashed: res.data.trashed === true, parents: res.data.parents ?? null };
+  return { fileId: res.data.id ?? opts.fileId, size: Number.isFinite(size) ? size : null, trashed: res.data.trashed === true, parents: res.data.parents ?? null, ...jejakIsi(res.data) };
+}
+
+/** Metadata tanpa isi: satu panggilan murah tiap putaran cron. 404 dilempar apa adanya (pemanggil memakai `kodeGalatDrive`). */
+export async function metadataBerkasDrive(fileId: string): Promise<JejakIsiDrive & { trashed: boolean; oleh: string | null; olehKami: boolean | null }> {
+  const r = await getDriveClient().files.get({ fileId, fields: 'md5Checksum,headRevisionId,modifiedTime,trashed,lastModifyingUser(displayName,me)' }, { timeout: BATAS_WAKTU_DRIVE_MS });
+  return { ...jejakIsi(r.data), trashed: r.data.trashed === true, oleh: r.data.lastModifyingUser?.displayName ?? null, olehKami: r.data.lastModifyingUser?.me ?? null };
+}
+
+export type RevisiDrive = { id: string; md5: string | null; diubahPada: string | null; oleh: string | null; olehKami: boolean | null };
+
+/** Riwayat revisi berkas biner, lama → baru. */
+export async function daftarRevisiDrive(fileId: string): Promise<RevisiDrive[]> {
+  const hasil: RevisiDrive[] = [];
+  let pageToken: string | undefined;
+  do {
+    const r = await getDriveClient().revisions.list({ fileId, pageSize: 200, pageToken, fields: 'nextPageToken,revisions(id,md5Checksum,modifiedTime,lastModifyingUser(displayName,me))' }, { timeout: BATAS_WAKTU_DRIVE_MS });
+    for (const v of r.data.revisions ?? []) {
+      if (v.id) hasil.push({ id: v.id, md5: v.md5Checksum ?? null, diubahPada: v.modifiedTime ?? null, oleh: v.lastModifyingUser?.displayName ?? null, olehKami: v.lastModifyingUser?.me ?? null });
+    }
+    pageToken = r.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return hasil;
+}
+
+/** Isi satu revisi (bukan "versi terbaru apa pun") — pratinjau & terapkan membaca revisi yang SAMA. `null` = kepala berkas. */
+export async function unduhRevisiDrive(fileId: string, revisi: string | null): Promise<Buffer> {
+  const d = getDriveClient();
+  const r = revisi
+    ? await d.revisions.get({ fileId, revisionId: revisi, alt: 'media' }, { responseType: 'arraybuffer', timeout: BATAS_WAKTU_DRIVE_MS })
+    : await d.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer', timeout: BATAS_WAKTU_DRIVE_MS });
+  return Buffer.from(r.data as ArrayBuffer);
 }
 
 /** Akun & kuota token yang terpasang. `batas` null = tanpa batas (Workspace). */

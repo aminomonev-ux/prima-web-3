@@ -31,10 +31,13 @@ export function StatusDriveBba({ c, bolehKirim }: { c: WarnaBba; bolehKirim: boo
   async function kirim() {
     setSibuk(true);
     try {
-      const d = await fetchJson<unknown>('/api/buku-besar-aset/drive-kirim', { method: 'POST' }) as unknown as { ok: boolean; message?: string; dikirim?: string[]; gagal?: string[] };
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/drive-kirim', { method: 'POST' }) as unknown as { ok: boolean; message?: string; dikirim?: string[]; gagal?: string[]; ditahan?: string[] };
+      // Berkas yang diubah di luar PRIMA tidak ditimpa sampai ditinjau (spanduk di atas halaman).
+      const tahan = d.ditahan?.length ? ` ${d.ditahan.length} berkas ditahan — ada perubahan di Drive yang menunggu ditinjau.` : '';
       if (!d.ok) toast.error(d.message || 'Gagal mengirim');
-      else if (d.gagal?.length) toast.error(`${d.dikirim?.length ?? 0} terkirim, ${d.gagal.length} gagal: ${d.gagal[0]}`);
-      else toast.success(d.dikirim?.length ? `${d.dikirim.length} berkas terkirim ke Drive` : 'Tidak ada yang berubah sejak kiriman terakhir');
+      else if (d.gagal?.length) toast.error(`${d.dikirim?.length ?? 0} terkirim, ${d.gagal.length} gagal: ${d.gagal[0]}${tahan}`);
+      else if (tahan && !d.dikirim?.length) toast.warning(tahan.trim());
+      else toast.success((d.dikirim?.length ? `${d.dikirim.length} berkas terkirim ke Drive.` : 'Tidak ada yang berubah sejak kiriman terakhir.') + tahan);
       void muat();
     } finally { setSibuk(false); }
   }

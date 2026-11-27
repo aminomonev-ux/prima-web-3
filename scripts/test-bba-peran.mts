@@ -65,7 +65,7 @@ const HARAP: Record<string, string> = {
   'anggaran/route.ts': "'rencana'", 'salin-tahun-lalu/route.ts': "'rencana'",
   'aset/antrean/route.ts': "'aset'", 'aset/register/route.ts': "'aset'", 'aset/hapus/route.ts': "'aset'",
   'aset/batal-tempatkan/route.ts': "'aset'", 'aset/batal-hapus/route.ts': "'aset'", 'aset/gabung/route.ts': "'aset'",
-  'hapus-berantai/route.ts': "'rencana'", 'penawaran/route.ts': "'rencana', 'pengadaan'", 'penawaran/impor/route.ts': "'rencana', 'pengadaan'", 'drive-kirim/route.ts': "'rencana'",
+  'hapus-berantai/route.ts': "'rencana'", 'penawaran/route.ts': "'rencana', 'pengadaan'", 'penawaran/impor/route.ts': "'rencana', 'pengadaan'", 'drive-kirim/route.ts': "'rencana'", 'drive-balik/route.ts': "'rencana', 'pengadaan'",
 }
 const akarApi = path.join(process.cwd(), 'app/api/buku-besar-aset')
 const semuaRoute: string[] = []

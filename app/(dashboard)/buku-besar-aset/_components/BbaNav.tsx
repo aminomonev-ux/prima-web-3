@@ -6,6 +6,8 @@ import type { ReactNode } from 'react';
 import { BookOpen, ClipboardList, ShoppingCart, Layers, Printer, Eye, Tags } from 'lucide-react';
 import { MENU_BBA, LABEL_MENU_BBA, MENU_BACA_SAJA_BBA, type MenuBba, type Izin } from '@/lib/bba/peran';
 import PitaAlur, { type PindahPita } from './PitaAlur';
+import { SpandukDrive } from './TinjauDrive';
+import type { WarnaBba } from './BbaShell';
 
 export type PetaIzinLayar = Record<MenuBba, Izin>;
 
@@ -51,9 +53,7 @@ export function navDockBba(peta: PetaIzinLayar, aktif: HalamanBba, pergi: (href:
   }));
 }
 
-type Warna = { text: string; sub: string; border: string };
-
-type PropsNav = { aktif: HalamanBba; peta: PetaIzinLayar; c: Warna;
+type PropsNav = { aktif: HalamanBba; peta: PetaIzinLayar; c: WarnaBba;
   /** Tahun pita alur — tanpa ini tahun berjalan. */
   tahun?: number; segarkan?: number; pindah?: PindahPita };
 
@@ -83,6 +83,8 @@ export default function BbaNav({ aktif, peta, c, tahun, segarkan, pindah }: Prop
         );
       })}
     </nav>
+    {/* Perubahan laporan di Drive yang menunggu ditinjau (CONCEPT-bba-drive-balik §2) — di semua halaman BBA. */}
+    <SpandukDrive c={c} />
     <PitaAlur tahun={tahun ?? new Date().getFullYear()} peta={peta} c={c} segarkan={segarkan} pindah={pindah} />
   </>);
 }

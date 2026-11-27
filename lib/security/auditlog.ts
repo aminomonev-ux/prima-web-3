@@ -52,6 +52,7 @@ export type AuditEventType =
   | 'BBA_PENAWARAN_IMPOR'
   | 'BBA_UNDUH'
   | 'BBA_DRIVE_KIRIM'
+  | 'BBA_DRIVE_BALIK'
   | 'BBA_PENGATURAN'
   // ─── LKJIP ─────────────────────────────────────────────────────────
   | 'LKJIP_CREATE'
