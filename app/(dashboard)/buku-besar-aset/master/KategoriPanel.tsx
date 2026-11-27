@@ -138,7 +138,9 @@ export default function KategoriPanel({ c, data, onData, bolehUbah }: Props) {
                     </div>
                   </div>
                 )}
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                {/* Di ponsel baris Modal (kode · nama · KIB · aksi) lebih lebar dari kartu — digeser, bukan terpotong. */}
+                <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: modal ? 560 : 0 }}>
                   <tbody>
                     {milik.length === 0 && <tr><td style={{ ...td, color: c.sub, textAlign: 'center' }}>Belum ada jenis kategori.</td></tr>}
                     {milik.map((j, i) => ubah?.id === j.id ? (
@@ -172,6 +174,7 @@ export default function KategoriPanel({ c, data, onData, bolehUbah }: Props) {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </div>

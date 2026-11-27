@@ -11,6 +11,7 @@ import BbaShell, { type WarnaBba } from '../_components/BbaShell';
 import type { PetaIzinLayar } from '../_components/BbaNav';
 import { TombolUnduhBuku, StatusDriveBba } from '../_components/UnduhBuku';
 import { bolehBatalkanFinal } from '@/lib/constants';
+import type { MasterKategoriData } from '@/lib/bba/kategori';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const URL_EXCEL = '/api/buku-besar-aset/aset/excel';
@@ -18,6 +19,7 @@ const URL_EXCEL = '/api/buku-besar-aset/aset/excel';
 type Props = {
   username: string; role: string; themePreference: 'dark' | 'light'; beku: InfoBeku; izin: PetaIzinLayar;
   perGolongan: Record<Golongan, number>; ruangan: { id: number; nama: string; n: number }[]; tahunIni: number;
+  kategori: MasterKategoriData;
 };
 
 // Berkas dikirim server dengan Content-Disposition attachment — halaman tidak berpindah.
@@ -38,12 +40,17 @@ function Kartu({ c, judul, ket, n, children }: { c: WarnaBba; judul: string; ket
   );
 }
 
-export default function CetakClient({ username, role, themePreference, beku, izin, perGolongan, ruangan, tahunIni }: Props) {
+export default function CetakClient({ username, role, themePreference, beku, izin, perGolongan, ruangan, tahunIni, kategori }: Props) {
   const total = Object.values(perGolongan).reduce((s, n) => s + n, 0);
   const berisi = ruangan.filter(r => r.n > 0);
   const [ruang, setRuang] = useState('SEMUA');
   const [tahunSensus, setTahunSensus] = useState(String(tahunIni));
   const [tahunRencana, setTahunRencana] = useState(String(tahunIni + 1));
+  // Saringan kategori berlaku untuk KEDUA unduhan rencana — satu pilihan, bukan dua yang bisa berbeda.
+  const [fKat, setFKat] = useState('');
+  const [fJenisKat, setFJenisKat] = useState('');
+  const indukDipilih = kategori.induk.find(i => i.nama === fKat);
+  const saring = { ...(fKat ? { kategori: fKat } : {}), ...(fJenisKat ? { jenis_kategori: fJenisKat } : {}) };
   return (
     <BbaShell username={username} role={role} themePreference={themePreference} beku={beku} izin={izin} aktif="cetak" remah="Cetak & Excel">
       {c => {
@@ -56,6 +63,10 @@ export default function CetakClient({ username, role, themePreference, beku, izi
         const nRuang = ruang === 'SEMUA' ? berisi.reduce((s, r) => s + r.n, 0) : ruangan.find(r => String(r.id) === ruang)?.n ?? 0;
         const tahunSah = /^\d{4}$/.test(tahunSensus);
         const tahunRencanaSah = /^\d{4}$/.test(tahunRencana);
+        const pilihKategori = (<>
+          <select value={fKat} onChange={e => { setFKat(e.target.value); setFJenisKat(''); }} style={inp} aria-label="Kategori rencana"><option value="">Semua kategori</option>{kategori.induk.map(i => <option key={i.id} value={i.nama}>{i.nama}</option>)}</select>
+          {indukDipilih && <select value={fJenisKat} onChange={e => setFJenisKat(e.target.value)} style={inp} aria-label="Jenis kategori rencana"><option value="">Semua jenis</option>{kategori.jenis.filter(j => j.kategori_id === indukDipilih.id).map(j => <option key={j.id} value={j.nama}>{j.nama}</option>)}</select>}
+        </>);
         return (<>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>🖨️ Cetak & Excel</h1>
           <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 6, lineHeight: 1.6 }}>
@@ -68,7 +79,8 @@ export default function CetakClient({ username, role, themePreference, beku, izi
           <div style={grid}>
             <Kartu c={c} judul={`BBA ${tahunRencanaSah ? tahunRencana : '…'} — Rencana s.d. Pengadaan`} ket="Ringkasan · Rencana · Pengadaan · Penerimaan · Penawaran — format seragam, sama dengan salinan di Drive">
               <input value={tahunRencana} onChange={e => setTahunRencana(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" aria-label="Tahun buku rencana" style={{ ...inp, width: 70, fontFamily: MONO }} />
-              {tahunRencanaSah ? <TombolUnduhBuku tahun={Number(tahunRencana)} lembar="Ringkasan" /> : <span style={{ fontSize: 11.5, color: c.sub }}>isi tahun</span>}
+              {pilihKategori}
+              {tahunRencanaSah ? <TombolUnduhBuku tahun={Number(tahunRencana)} lembar="Ringkasan" saring={saring} /> : <span style={{ fontSize: 11.5, color: c.sub }}>isi tahun</span>}
             </Kartu>
           </div>
 
@@ -107,7 +119,8 @@ export default function CetakClient({ username, role, themePreference, beku, izi
             </Kartu>
             <Kartu c={c} judul="Daftar rencana per tahun" ket={`per jenis rencana, dengan jumlah & kondisi yang dimiliki tiap barang · tahun ${tahunRencanaSah ? tahunRencana : '…'}`}>
               <input value={tahunRencana} onChange={e => setTahunRencana(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" aria-label="Tahun rencana" style={{ ...inp, width: 70, fontFamily: MONO }} />
-              {tahunRencanaSah ? <PrimaButton variant="success" size="sm" onClick={() => unduh({ jenis: 'RENCANA', tahun: tahunRencana })}>Unduh Excel</PrimaButton> : <span style={{ fontSize: 11.5, color: c.sub }}>isi tahun</span>}
+              {pilihKategori}
+              {tahunRencanaSah ? <PrimaButton variant="success" size="sm" onClick={() => unduh({ jenis: 'RENCANA', tahun: tahunRencana, ...saring })}>Unduh Excel</PrimaButton> : <span style={{ fontSize: 11.5, color: c.sub }}>isi tahun</span>}
             </Kartu>
           </div>
           <div style={{ fontSize: 11.5, color: c.sub, marginTop: 12, lineHeight: 1.5 }}>

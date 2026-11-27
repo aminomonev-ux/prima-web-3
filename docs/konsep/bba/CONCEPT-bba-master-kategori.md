@@ -2,7 +2,7 @@
 
 - **Modul Utama:** Buku Besar Aset (`app/(dashboard)/buku-besar-aset`)
 - **Integrasi Terkait:** Modul BLUD (`Master Akun` & `Kode Besar`), Usulan Kebutuhan, Cetak & Ekspor Excel
-- **Status Dokumen:** DIKERJAKAN 2026-11-27 — mig `docs/migrations/migration-bba-master-kategori.sql` (**WAJIB dijalankan di server kantor sebelum kodenya dipasang**), regresi `npx tsx --env-file=.env.local scripts/test-bba-kategori.mts` (46, kotak pasir 2063, 13 uji mutasi tertangkap). Keputusan pelaksanaan yang menyimpang/menambah konsep: §7.
+- **Status Dokumen:** DIKERJAKAN 2026-11-27 — mig `docs/migrations/migration-bba-master-kategori.sql` (**WAJIB dijalankan di server kantor sebelum kodenya dipasang**), regresi `npx tsx --env-file=.env.local scripts/test-bba-kategori.mts` (52, kotak pasir 2063, 16 uji mutasi tertangkap). Keputusan pelaksanaan yang menyimpang/menambah konsep: §7.
 - **Prasyarat sebelum implementasi:** kolom/tabel baru wajib masuk `docs/schema-mysql.sql` + `docs/migrations/migration-*.sql`, dan setiap tulis soft-FK (`kategori_id`, `jenis_kategori_id`, `kelompok_kib`) wajib lewat cek-eksistensi (L68)
 
 ---
@@ -228,4 +228,4 @@ Setiap item pada tahap Rencana, Pengadaan, Penawaran, dan Aset menyimpan:
 7. **Ganti nama jenis menjalar** ke teks pemakai tanpa menaikkan angka kunci (label, bukan isi); **pindah induk** melepas tautan pemakai (Modal/bukan milik keputusan tiap item).
 8. **Migrasi**: teks kategori surat penawaran yang bukan nama induk dipindah ke `jenis_kategori` — dibiarkan, ia terbaca sebagai induk yang tidak ada dan Simpan surat berikutnya ditolak.
 9. **Pencarian rekening BLUD** (`GET /api/buku-besar-aset/kategori?rekening=`) hanya untuk penyunting Master; daftar kategori (`GET`) untuk semua pemegang BBA.
-10. **Belum dikerjakan**: tombol saringan kategori di layar Cetak (API `aset/excel?jenis=RENCANA&kategori=` dan `unduh?kategori=` sudah menerimanya), kolom kategori di antrean Tempatkan, dan `ModalImporKib`/penentu golongan dari `kelompok_kib` saat Tempatkan (golongan tetap dipilih petugas).
+10. **Saringan unduhan & Tempatkan**: saringan Kategori/Jenis di Cetak berlaku untuk KEDUA unduhan rencana (buku Rencana s.d. Pengadaan + daftar rencana per tahun), lewat SATU aturan `cocokSaringKategori` — "Modal" = `adalahModal`, sama dengan daftar Rencana; berkas tersaring diberi tanda di namanya. Pengadaan menyaring dengan aturan yang sama. Antrean Tempatkan menampilkan jenis · kode · kelompok KIB, dan golongan KIB awal diisi dari kelompok KIB (`golonganDariKelompokKib`; tetap bisa diganti petugas). Tabel jenis kategori Modal digeser mendatar di ponsel.

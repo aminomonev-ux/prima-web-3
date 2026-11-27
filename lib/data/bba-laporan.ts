@@ -19,6 +19,7 @@ import { timpaDiTujuan, ringkasGalat } from '@/lib/services/drive-catatan';
 import { metadataBerkasDrive, daftarRevisiDrive, kodeGalatDrive } from '@/lib/services/drive';
 import { tujuanTerkonfigurasi } from '@/lib/services/drive-tujuan';
 import { createHash } from 'node:crypto';
+import { cocokSaringKategori, type SaringKategori } from '@/lib/bba/kategori';
 
 const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const KUNCI_STATUS_DRIVE = 'bba_drive_status';
@@ -57,27 +58,29 @@ async function tulisBuku(b: BahanBukuRencana, aktif: LembarBuku): Promise<Buffer
 export async function bukuRencanaBuffer(
   tahun: number,
   aktif: LembarBuku = 'Ringkasan',
-  filter?: { kategori?: string; jenis_kategori?: string },
+  filter: SaringKategori = {},
 ): Promise<{ buffer: Buffer; nama: string; sidik: string }> {
   const dasar = await bahanBukuRencana(tahun);
-  const cocokKat = <T extends { kategori?: string | null; jenis_kategori?: string | null }>(x: T) => {
-    if (filter?.kategori && (x.kategori ?? '').toLowerCase() !== filter.kategori.toLowerCase()) return false;
-    if (filter?.jenis_kategori && (x.jenis_kategori ?? '').toLowerCase() !== filter.jenis_kategori.toLowerCase()) return false;
-    return true;
-  };
-  const b: BahanBukuRencana = (filter?.kategori || filter?.jenis_kategori)
+  // Surat penawaran tidak punya aturan "dianggap Modal" — kategorinya dicocokkan apa adanya.
+  const cocokSurat = (x: { kategori?: string | null; jenis_kategori?: string | null }) =>
+    (!filter.kategori || (x.kategori ?? '').toLowerCase() === filter.kategori.toLowerCase())
+    && (!filter.jenis_kategori || (x.jenis_kategori ?? '').toLowerCase() === filter.jenis_kategori.toLowerCase());
+  const tersaring = !!(filter.kategori || filter.jenis_kategori);
+  const b: BahanBukuRencana = tersaring
     ? (() => {
-        const rencana = dasar.rencana.filter(cocokKat);
+        const rencana = dasar.rencana.filter(r => cocokSaringKategori(r, filter));
         const ids = new Set(rencana.map(r => r.id));
         return {
           ...dasar,
           rencana,
           penerimaan: dasar.penerimaan.filter(p => ids.has(p.rencana_id)),
-          penawaran: dasar.penawaran.filter(cocokKat),
+          penawaran: dasar.penawaran.filter(cocokSurat),
         };
       })()
     : dasar;
-  return { buffer: await tulisBuku(b, aktif), nama: namaBerkasBukuRencana(tahun), sidik: sidikBahan(b) };
+  // Nama berkas tersaring dibedakan — kalau sama, salinan sebagian mudah tertukar dengan buku utuhnya.
+  const nama = tersaring ? namaBerkasBukuRencana(tahun).replace(/\.xlsx$/, ` (${[filter.kategori, filter.jenis_kategori].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]/g, '-')}).xlsx`) : namaBerkasBukuRencana(tahun);
+  return { buffer: await tulisBuku(b, aktif), nama, sidik: sidikBahan(b) };
 }
 
 /** Buku Aset (KIB) — format provinsi yang sudah ada, satu lembar per golongan (§5B.1), hanya buku resmi. */

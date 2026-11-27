@@ -14,6 +14,7 @@ import { bolehBerRuang, punyaKondisi, fmtTanggal } from '@/lib/bba/kondisi';
 import { namaTampil, type AsetRingan } from '@/lib/bba/aset';
 import { alasanTakBisaBatalTempatkan } from '@/lib/bba/koreksi';
 import type { AntreanTerima, AntreanRehab } from '@/lib/data/bba-penerimaan';
+import { golonganDariKelompokKib } from '@/lib/bba/kategori';
 import type { CalonKembar } from '@/lib/data/bba-aset';
 import { kunciNamaBarang } from '@/lib/bba/barang';
 import type { BbaLokasi } from '@/lib/data/buku-besar-aset';
@@ -67,6 +68,11 @@ export function PanelAntrean({ c, bolehUbah, kunciMuat, onTersimpan }: { c: Warn
             <span style={{ flex: '1 1 220px', minWidth: 0 }}>
               <b>{x.barang_nama ?? x.uraian}</b>
               <span style={{ color: c.sub }}> · diterima {fmtTanggal(x.tgl)} · {fmtRp(x.harga_satuan)}/unit{x.merk_tipe ? ` · ${x.merk_tipe}` : ''}</span>
+              {(x.jenis_kategori || x.kode_rekening || x.kelompok_kib) && (
+                <span style={{ display: 'block', fontSize: 11.5, color: c.sub }}>
+                  {[x.jenis_kategori, x.kode_rekening].filter(Boolean).join(' · ')}{x.kelompok_kib ? <> · <span style={{ color: '#7C5CFC', fontWeight: 600 }}>KIB {x.kelompok_kib}</span></> : null}
+                </span>
+              )}
             </span>
             <span style={{ fontFamily: MONO, whiteSpace: 'nowrap' }}>{x.sisa} dari {x.vol} unit</span>
             {bolehUbah && <PrimaButton variant="success" size="sm" onClick={() => setTempat(x)}>Catat di Buku Aset</PrimaButton>}
@@ -90,7 +96,9 @@ export function PanelAntrean({ c, bolehUbah, kunciMuat, onTersimpan }: { c: Warn
 }
 
 function ModalTempatkan({ c, p, lokasi, onTutup, onTersimpan }: { c: WarnaBba; p: AntreanTerima; lokasi: BbaLokasi[]; onTutup: () => void; onTersimpan: () => void }) {
-  const [f, setF] = useState({ golongan: 'B' as Golongan, nama_resmi: (p.barang_nama ?? p.uraian).toUpperCase().slice(0, 255), nama: '', jumlah: p.sisa, lokasi: '', kondisi: 'B' as Kondisi, catatan: '' });
+  // Golongan awal dari kelompok KIB jenis kategorinya (Master Kategori); tetap bisa diganti petugas.
+  const golonganSaran = golonganDariKelompokKib(p.kelompok_kib);
+  const [f, setF] = useState({ golongan: (golonganSaran ?? 'B') as Golongan, nama_resmi: (p.barang_nama ?? p.uraian).toUpperCase().slice(0, 255), nama: '', jumlah: p.sisa, lokasi: '', kondisi: 'B' as Kondisi, catatan: '' });
   const [sibuk, setSibuk] = useState(false);
   const inp = gayaInput(c), label = gayaLabel(c);
 
@@ -124,7 +132,7 @@ function ModalTempatkan({ c, p, lokasi, onTutup, onTersimpan }: { c: WarnaBba; p
         {p.merk_tipe && <> Golongan B membawa merk/tipe <b style={{ color: c.text }}>{p.merk_tipe}</b> ke kolom Merk/Type KIB.</>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-        <label style={label}>Golongan KIB
+        <label style={label}>Golongan KIB{golonganSaran && <span style={{ fontSize: 10.5 }}> — diisi dari kelompok KIB {p.kelompok_kib}{f.golongan !== golonganSaran ? ' (diubah)' : ''}</span>}
           <select value={f.golongan} onChange={e => setF({ ...f, golongan: e.target.value as Golongan })} style={inp}>
             {GOLONGAN.map(g => <option key={g} value={g}>{g} · {NAMA_GOLONGAN[g]}</option>)}
           </select>

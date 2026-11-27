@@ -9,14 +9,17 @@ import { fetchJson } from '@/lib/shared/api';
 import type { LembarBuku } from '@/lib/bba/laporan-excel';
 import type { WarnaBba } from './BbaShell';
 
-export const urlBukuRencana = (tahun: number, lembar: LembarBuku) => `/api/buku-besar-aset/unduh?tahun=${tahun}&lembar=${encodeURIComponent(lembar)}`;
+export type SaringKategori = { kategori?: string; jenis_kategori?: string };
+export const urlBukuRencana = (tahun: number, lembar: LembarBuku, saring: SaringKategori = {}) =>
+  `/api/buku-besar-aset/unduh?${new URLSearchParams({ tahun: String(tahun), lembar, ...(saring.kategori ? { kategori: saring.kategori } : {}), ...(saring.jenis_kategori ? { jenis_kategori: saring.jenis_kategori } : {}) })}`;
 
 // Berkas dikirim server dengan Content-Disposition attachment — halaman tidak berpindah.
-export function TombolUnduhBuku({ tahun, lembar }: { tahun: number; lembar: LembarBuku }) {
+export function TombolUnduhBuku({ tahun, lembar, saring }: { tahun: number; lembar: LembarBuku; saring?: SaringKategori }) {
+  const tersaring = [saring?.kategori, saring?.jenis_kategori].filter(Boolean).join(' › ');
   return (
     <PrimaButton variant="success" size="sm" iconLeft={<FileSpreadsheet size={14} />} disabled={tahun < 2020 || tahun > 2100}
-      data-tooltip={`BBA ${tahun} — Rencana s.d. Pengadaan (5 lembar, terbuka di lembar ${lembar})`}
-      onClick={() => { window.location.href = urlBukuRencana(tahun, lembar); }}>Unduh Excel</PrimaButton>
+      data-tooltip={`BBA ${tahun} — Rencana s.d. Pengadaan (5 lembar, terbuka di lembar ${lembar})${tersaring ? ` — hanya ${tersaring}` : ''}`}
+      onClick={() => { window.location.href = urlBukuRencana(tahun, lembar, saring); }}>Unduh Excel</PrimaButton>
   );
 }
 

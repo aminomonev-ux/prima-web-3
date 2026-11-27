@@ -154,6 +154,20 @@ export function adalahModal(row: Pick<InfoKategoriItem, 'kategori' | 'kategori_a
   return !new RegExp(POLA_KODE_OPERASI).test(normKode(row.kode_rekening));
 }
 
+export type SaringKategori = { kategori?: string; jenis_kategori?: string };
+
+/**
+ * Saringan Kategori/Jenis untuk baris RENCANA yang sudah dinormalkan (`mapRow`). "Modal" = `adalahModal` — sama dengan
+ * saringan daftar Rencana di server (`SYARAT_MODAL`), kalau tidak item lama tanpa kategori tampil di layar tapi hilang dari Excel.
+ */
+export function cocokSaringKategori(row: Pick<InfoKategoriItem, 'kategori' | 'jenis_kategori' | 'kode_rekening' | 'kategori_aset'>, s: SaringKategori): boolean {
+  const kat = s.kategori?.trim().toLowerCase();
+  if (kat && (kat === 'modal' ? !adalahModal(row) : (row.kategori ?? '').trim().toLowerCase() !== kat)) return false;
+  const jns = s.jenis_kategori?.trim().toLowerCase();
+  if (jns && (row.jenis_kategori ?? row.kategori_aset ?? '').trim().toLowerCase() !== jns) return false;
+  return true;
+}
+
 export interface PilihanKategori { kategori_id: number | null; jenis_kategori_id: number | null }
 
 const samaNama = (a: string | null | undefined, b: string | null | undefined) =>

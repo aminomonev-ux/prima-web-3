@@ -21,7 +21,7 @@ import { ModalTandaiDipesan, ModalCatatDatang, langkahMundur } from '../_compone
 import PanelRiwayat from '../_components/PanelRiwayat';
 import { TombolUnduhBuku } from '../_components/UnduhBuku';
 import GarisTahap from '../_components/GarisTahap';
-import type { MasterKategoriData } from '@/lib/bba/kategori';
+import { cocokSaringKategori, type MasterKategoriData } from '@/lib/bba/kategori';
 import MenuBaris, { type ButirMenu } from '../_components/MenuBaris';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -68,7 +68,7 @@ export default function PengadaanClient({ username, role, themePreference, beku,
     return per;
   }, [data.rows]);
   const kata = q.trim().toLowerCase();
-  const tampil = data.rows.filter(r => tabDari(r) === tab && (!fKat || r.kategori === fKat)
+  const tampil = data.rows.filter(r => tabDari(r) === tab && (!fKat || cocokSaringKategori(r, { kategori: fKat }))
     && (!kata || `${r.canonical_id} ${r.uraian} ${r.barang_nama ?? ''} ${r.kode_rekening ?? ''} ${r.jenis_kategori ?? ''}`.toLowerCase().includes(kata)));
   const totalAnggaran = data.rows.reduce((t, r) => t + (r.anggaran_nilai ?? r.nilai_rencana), 0);
   const totalDiterima = data.rows.reduce((t, r) => t + r.nilai_realisasi, 0);

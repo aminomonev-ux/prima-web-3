@@ -67,7 +67,9 @@ async function susun(wb: import('exceljs').Workbook, p: AsetExcelInput, tanggal:
     case 'RENCANA': {
       const { rows, dimiliki, sasaran } = await rencanaUntukExcel(p.tahun, { kategori: p.kategori, jenis_kategori: p.jenis_kategori });
       tulisDaftarRencana(wb, p.tahun, rows, dimiliki, sasaran);
-      return { nama: `Daftar-Rencana-${p.tahun}-${tanggal}.xlsx`, register: rows.length };
+      // Berkas tersaring dibedakan namanya — kalau sama, daftar sebagian mudah tertukar dengan daftar utuh.
+      const saring = [p.kategori, p.jenis_kategori].filter(Boolean).join('-').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      return { nama: `Daftar-Rencana-${p.tahun}${saring ? `-${saring}` : ''}-${tanggal}.xlsx`, register: rows.length };
     }
   }
 }

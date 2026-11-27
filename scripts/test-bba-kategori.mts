@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
 import {
   deteksiKelompokKib, adalahModal, normalisasiKategoriItem, pilihanDariBaris, kelompokKibPilihan, gabungRekeningBlud, POLA_KODE_OPERASI,
+  cocokSaringKategori, golonganDariKelompokKib,
   type MasterKategoriData,
 } from '../lib/bba/kategori'
 import { tahapRencana } from '../lib/bba/tahap'
@@ -59,6 +60,13 @@ ok('A11 kelompokKibPilihan: bukan Modal → null; jenis ber-KIB; tanpa KIB → d
   ok('A12 gabung rekening BLUD: kembar kode dibuang (Master Akun menang), urut numerik', g.map(x => x.kode).join() === '5.1,5.2.2,5.10' && g[1].sumber === 'MASTER_AKUN')
 }
 
+ok('A13 saringan Modal untuk unduhan = adalahModal (item lama tanpa kategori ikut, 5.1 tidak)',
+  cocokSaringKategori({ kategori: null, kode_rekening: null }, { kategori: 'Modal' }) && !cocokSaringKategori({ kategori: null, kode_rekening: '5.1.02' }, { kategori: 'modal' })
+  && !cocokSaringKategori({ kategori: 'Barang dan Jasa' }, { kategori: 'Modal' }) && cocokSaringKategori({ kategori: 'Barang dan Jasa' }, { kategori: 'barang dan jasa' }))
+ok('A14 saringan jenis: nama jenis, data lama lewat kategori_aset', cocokSaringKategori({ jenis_kategori: 'ATK' }, { jenis_kategori: 'atk' }) && cocokSaringKategori({ kategori_aset: 'TANAH' }, { jenis_kategori: 'Tanah' }) && !cocokSaringKategori({ jenis_kategori: 'X' }, { jenis_kategori: 'ATK' }))
+ok('A15 golongan awal Tempatkan dari kelompok KIB', golonganDariKelompokKib('TANAH') === 'A' && golonganDariKelompokKib('ALKES & ALDOK') === 'B' && golonganDariKelompokKib('GEDUNG DAN BANGUNAN') === 'C'
+  && golonganDariKelompokKib('JALAN, IRIGASI, DAN JARINGAN') === 'D' && golonganDariKelompokKib('ASET TETAP LAINNYA') === 'E' && golonganDariKelompokKib('KONSTRUKSI DALAM PENGERJAAN (KDP)') === 'F' && golonganDariKelompokKib(null) === null)
+
 console.log('\nB. Bentuk kode (urutan kunci, satu aturan Modal)')
 {
   const d = tanpaKomentar(sumber('lib/data/buku-besar-aset.ts'))
@@ -76,6 +84,12 @@ console.log('\nB. Bentuk kode (urutan kunci, satu aturan Modal)')
   const sp = badan(tanpaKomentar(sumber('lib/data/bba-penawaran.ts')), 'export async function simpanPenawaran(')
   ok('B7 simpan surat: kategori hanya ditulis kalau dikirim (L87)', /if \(kat\.terisi\)\s*\{\s*setKat = sql`kategori_id/.test(sp))
   ok('B8 tinjauan Drive tidak mengirim teks kategori surat', !/kategori: sr\?\.kategori/.test(sumber('lib/data/bba-drive-balik.ts')))
+  ok('B9 kedua unduhan rencana menyaring lewat cocokSaringKategori (satu aturan)', badan(d, 'export async function rencanaUntukExcel(').includes('cocokSaringKategori(r, filter)')
+    && tanpaKomentar(sumber('lib/data/bba-laporan.ts')).includes('cocokSaringKategori(r, filter)'))
+  {
+    const at = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/_components/AksiTerima.tsx'))
+    ok('B10 Tempatkan: golongan awal = saran dari kelompok KIB, B hanya bila tak ada saran', /const golonganSaran = golonganDariKelompokKib\(p\.kelompok_kib\)/.test(at) && /useState\(\{ golongan: \(golonganSaran \?\? 'B'\) as Golongan/.test(at))
+  }
 }
 
 console.log('\nC. MySQL sungguhan (kotak pasir 2063)')
@@ -149,6 +163,8 @@ if (c) {
     ok(`C7 SYARAT_MODAL (SQL) = adalahModal (JS) pada ${bentuk.length} bentuk data`, beda.length === 0, JSON.stringify(beda))
     const sm = await B.listAset({ tahun: 2063, kategori: 'Modal', page: 1, limit: 100 })
     ok('C8 saringan Kategori=Modal memakai aturan yang sama', sm.rows.filter(r => r.uraian.startsWith('UJIKAT bentuk')).length === bentuk.filter(([a, b2, kd]) => adalahModal({ kategori: a, kategori_aset: b2, kode_rekening: kd })).length)
+    const ex = await B.rencanaUntukExcel(2063, { kategori: 'Modal' })
+    ok('C8b Excel daftar rencana Kategori=Modal = daftar layar (item lama tanpa kategori ikut)', ex.rows.filter(r => r.uraian.startsWith('UJIKAT bentuk')).length === sm.rows.filter(r => r.uraian.startsWith('UJIKAT bentuk')).length)
     await k.query('DELETE FROM buku_besar_aset WHERE id IN (?)', [id])
 
     await B.tandaiAnggaran({ item: [{ id: atk.id, expected_version: await versi(atk.id), anggaran: 'DIDANAI' }, { id: alkes.id, expected_version: await versi(alkes.id), anggaran: 'DIDANAI' }] }, userId)

@@ -9,7 +9,7 @@ import { fmtTanggal, batasCek, ringkasDimiliki, ringkasDimilikiPerBarang, type D
 import { KUNCI_PENGATURAN, bacaPengaturan, type PengaturanBba } from '@/lib/bba/pengaturan';
 import type { Golongan, Kondisi } from '@/lib/bba/kib';
 import {
-  KATEGORI_LAMA_KIB, POLA_KODE_OPERASI, adalahModal, deteksiKelompokKib, gabungRekeningBlud, normalisasiKategoriItem,
+  KATEGORI_LAMA_KIB, POLA_KODE_OPERASI, adalahModal, cocokSaringKategori, deteksiKelompokKib, gabungRekeningBlud, normalisasiKategoriItem,
   type InfoKategoriItem, type JenisKategoriItem,
   type MasterKategoriData, type RekeningBludItem,
 } from '@/lib/bba/kategori';
@@ -1177,14 +1177,7 @@ export async function rencanaUntukExcel(tahun: number, filter?: { kategori?: str
     sasaran.set(k, [...(sasaran.get(k) ?? []), `${String(s.nama ?? '')}${s.register ? ` reg. ${s.register}` : ''}`]);
   }
   let rows = rowsRaw.map(mapRow);
-  if (filter?.kategori?.trim()) {
-    const target = filter.kategori.trim().toLowerCase();
-    rows = rows.filter(r => (r.kategori ?? '').toLowerCase() === target);
-  }
-  if (filter?.jenis_kategori?.trim()) {
-    const targetJ = filter.jenis_kategori.trim().toLowerCase();
-    rows = rows.filter(r => (r.jenis_kategori ?? '').toLowerCase() === targetJ);
-  }
+  if (filter?.kategori || filter?.jenis_kategori) rows = rows.filter(r => cocokSaringKategori(r, filter));
   return { rows, dimiliki: ringkasDimilikiPerBarang(milik, batas), sasaran };
 }
 
