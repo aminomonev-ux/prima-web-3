@@ -3,7 +3,7 @@
 - **Modul:** Buku Besar Aset → menu **Penawaran** (`app/(dashboard)/buku-besar-aset/penawaran`)
 - **Acuan:** berkas pemilik *Matriks Inventarisasi Penawaran RSJD dr. AMINO.xlsx*, lembar 1 "Matriks Inventarisasi" (16 kolom A–P, tiga kelompok kepala), plus lembar "Petunjuk Pengisian" dan "Ringkasan & Dashboard".
 - **Berdiri di atas:** `CONCEPT-bba-revamp-alur.md` §5A (Penawaran per surat + Bandingkan + Ambil dari penawaran) dan `CONCEPT-bba-master-kategori.md` (Kategori → Jenis → Kode Rekening, `PilihKategori`).
-- **Status:** DRAF untuk diputuskan pemilik. Belum ada kode.
+- **Status:** DIPUTUSKAN 2026-11-27 (§9) lalu DIKERJAKAN — mig `docs/migrations/migration-bba-penawaran-matriks.sql` (**WAJIB dijalankan di server kantor sebelum kodenya dipasang**). Revisi sesudah keputusan: Master Rekanan DIBATALKAN (§4.1), status tindak lanjut dipasang, kategori Master + ketik manual, pajak per barang.
 - **Gambar:** `gambar/penawaran-revamp-1-daftar.png` (daftar matriks), `gambar/penawaran-revamp-2-form.png` (form pengisian). Baris surat diambil dari berkas Matriks pemilik; kode rekening, barang "Lisensi DICOM", dan isi spesifikasi/syarat di gambar hanya contoh ilustrasi.
 
 ---
@@ -22,8 +22,8 @@
 | B | Tgl Surat | `bba_penawaran.tgl_surat` | **Sama** |
 | C | No. Surat Rekanan | `nomor_surat` | **Sama**. Satu surat bisa membawa dua nomor (contoh baris 1 & 3, dipisah baris baru); tetap satu isian teks, baris baru diizinkan |
 | D | Jenis Surat (dropdown) | — | **Baru** `jenis_surat` — dropdown 6 pilihan Matriks + ketik sendiri (§4.3) |
-| E | Nama Rekanan / Vendor | `rekanan` teks + saran datalist | **Ditingkatkan**: Master Rekanan (§4.1). Teks tetap disimpan di surat sebagai potret |
-| F | PIC & Kontak | — | **Baru** `pic_kontak` di surat, terisi otomatis dari Master Rekanan, boleh diubah |
+| E | Nama Rekanan / Vendor | `rekanan` teks + saran datalist | **Ditingkatkan**: combobox dari nama rekanan yang pernah dicatat + nama dirapikan (§4.1) |
+| F | PIC & Kontak | — | **Baru** `pic_kontak` di surat, terisi otomatis dari surat terakhir rekanan itu, boleh diubah |
 | G | Kategori Belanja / Jasa (dropdown) | `kategori` + `jenis_kategori` + `kode_rekening` lewat `PilihKategori` | **Sama, ditingkatkan**: pakai Master Kategori 2 tingkat yang baru dipush, bukan daftar 6 kategori Matriks (§4.4) |
 | H | Nama Barang | `bba_penawaran_item.nama_barang` + `barang_id` | **Sama**, pemilihnya tetap Master Barang dan kini menyambung isian lain (§4.2) |
 | I | Merk | `merk_tipe` (gabung) | **Dipisah**: kolom baru `merk`; `merk_tipe` kini berarti *Tipe* (§3.2) |
@@ -77,15 +77,11 @@ Aturan `referensiSah` = harga > 0 **dan** (tautan aman **atau** berkas). Sekaran
 
 Prinsip: **memilih dari Master = mengisi form**. Yang menulis tetap satu tombol Simpan surat (L78). Isian yang terisi otomatis tetap bisa diubah, dan tanda "dari Master" hilang begitu diubah.
 
-### 4.1 Rekanan → Master Rekanan (baru)
-Konsep §5A.3 dulu menunda master rekanan "sampai ejaannya berantakan". Matriks sudah menunjukkan ejaan berantakan: "PT. Medal Darma Buana⏎" (baris baru di ujung), "PT. RIVER MARINE OFFSHORE" kapital semua, "PT." vs "PT". Kini PIC & kontak juga perlu tempat tinggal.
-
-- Tabel `bba_rekanan`: `nama` (unik setelah dirapikan), `pic_nama`, `telepon`, `email`, `alamat`, `catatan`. Tab baru **Master → Rekanan** (izin Master, sama dengan Barang).
-- Form: combobox **Rekanan** mencari nama/PIC/telepon. Memilih mengisi **PIC & Kontak**. Ketik nama yang belum ada → pilihan "+ Rekanan baru: PT …" (dibuat saat Simpan, di transaksi yang sama; pola `barang_baru`). Nama dirapikan dulu (`rapikanNamaRekanan`: buang spasi/baris baru ganda, "PT" → "PT."), jadi "PT Medal Darma Buana" tidak lahir dua kali.
-- Surat menyimpan `rekanan_id` **dan** teks `rekanan` + `pic_kontak` sebagai potret. Master yang diganti nama tidak mengubah surat lama, sama seperti referensi.
-- Centang kecil "Perbarui kontak di Master Rekanan" muncul kalau PIC/kontak diubah. Bawaan mati, supaya kontak sekali pakai tidak menimpa kontak tetap.
-- Migrasi mengisi `bba_rekanan` dari `DISTINCT` nama rekanan surat yang ada (sesudah dirapikan) lalu menautkan `rekanan_id`.
-- Bandingkan dan saringan memakai `rekanan_id` bila ada, supaya dua ejaan satu rekanan tidak jadi dua kolom.
+### 4.1 Rekanan → daftar dari menu Penawaran sendiri (tanpa master baru)
+Keputusan pemilik: **menu Penawaran itulah daftar rekanan**. Tidak ada tabel atau tab Master Rekanan — dua tempat mengetik nama yang sama hanya melahirkan double entry.
+- Combobox **Rekanan** mencari nama rekanan yang pernah dicatat di surat mana pun (`saranRekanan`: satu baris per nama yang sudah dirapikan, beserta PIC & kontak surat **terakhir**-nya). Memilih nama mengisi **PIC & Kontak** dari surat terakhir rekanan itu; tetap bisa diubah. Nama baru cukup diketik.
+- Nama dirapikan saat disimpan (`rapikanNamaRekanan`: baris baru & spasi ganda dibuang, "PT"/"CV" diberi titik), dan saran mencocokkan tanpa beda huruf/titik (`kunciRekanan`), jadi "PT Medal Darma Buana" dan "PT. Medal Darma Buana⏎" menjadi satu nama. Inilah yang menjaga kolom Bandingkan tidak pecah.
+- PIC & kontak disimpan per surat (`pic_kontak`), karena kontak bisa berganti antar surat.
 
 ### 4.2 Nama Barang → Master Barang
 Pemilih yang ada (`PilihBarang`) dipertahankan, ditambah sambungannya:
@@ -103,7 +99,7 @@ Daftar kategori Matriks ("Alkes Radiologi & Diagnostik", "Sistem IT & Integrasi 
 - Karena komponennya satu, peningkatan ini ikut ke form Rencana dan Master Barang.
 - Kategori tetap milik **surat** (bawaan untuk barang baru). Item yang barangnya punya kategori sendiri menampilkannya. Kategori per item tidak dibuat: satu SPH lazimnya satu jenis belanja, dan Master Barang sudah menjawab sisanya.
 
-### 4.5 Status Tindak Lanjut (usulan tambahan, keputusan pemilik)
+### 4.5 Status Tindak Lanjut
 `status_tindak_lanjut` per surat, enam nilai dari lembar Ringkasan: Menunggu Jadwal Presentasi · Menunggu Jadwal Demo · Perlu Telaah Teknis & Anggaran · Disetujui / Lanjut Proses · Arsip / Referensi Vendor · Ditolak / Tidak Sesuai. Warna lencana mengikuti petunjuk Matriks (kuning menunggu, biru telaah, hijau lanjut, abu arsip, merah ditolak), memakai token design system.
 - Bisa diubah dari menu ⋯ baris tanpa membuka form (satu PATCH kecil, angka kunci surat).
 - Status **tidak** mengubah aturan harga. Surat "Ditolak" tetap ada di Bandingkan, dengan tanda. Yang mengatur ikut-tidaknya harga tetap masa berlaku.
@@ -128,7 +124,7 @@ Daftar kategori Matriks ("Alkes Radiologi & Diagnostik", "Sistem IT & Integrasi 
 
 ### 5.2 Form pengisian (gambar 2)
 Modal sempit sekarang (980 px, item enam kotak sebaris) diganti **panel lebar** dengan tiga bagian bernomor sesuai kelompok Matriks, dan ringkasan di kanan:
-1. **Identitas surat & rekanan**: Rekanan (combobox Master) → PIC & kontak terisi, Jenis surat, Nomor, Tanggal, Berlaku s.d. (tanggal atau chip durasi), Berkas surat (seret-lepas PDF/foto, pratinjau kecil).
+1. **Identitas surat & rekanan**: Rekanan (combobox dari surat sebelumnya) → PIC & kontak terisi, Jenis surat, Nomor, Tanggal, Berlaku s.d. (tanggal atau chip durasi), Berkas surat (seret-lepas PDF/foto, pratinjau kecil).
 2. **Barang/jasa & spesifikasi**: tabel item ala lembar kerja (Nama barang (Master) · Merk · Tipe · Satuan · Harga · Pajak), Tab/Enter pindah sel, **tempel baris dari Excel** (Ctrl+V beberapa baris = beberapa item), baris bisa dibuka untuk Spesifikasi · Link e-katalog · Garansi. Keterangan kategori/kode rekening barang tampil kecil di bawah nama.
 3. **Harga & syarat komersial**: Kategori surat (Jenis Kategori searchable), Syarat & pengecualian, Status tindak lanjut.
 - **Panel kanan lengket**: total nilai, jumlah item berharga, centang kelengkapan (berkas terlampir · tiap item berharga punya link atau berkas = referensi sah · masa berlaku belum lewat), dan sebab tombol Simpan mati.
@@ -137,7 +133,7 @@ Modal sempit sekarang (980 px, item enam kotak sebaris) diganti **panel lebar** 
 
 ## 6. Impor & unduhan Excel
 
-- **Impor Matriks langsung.** Pembaca baru `bacaMatriksPenawaran` mengenali kepala Matriks (16 kolom, kepala bertingkat, baris TOTAL di bawah dilewati) dan **banyak surat per berkas**: baris dikelompokkan per (rekanan + nomor surat + tanggal). Pratinjau menampilkan per surat: rekanan dicocokkan ke Master Rekanan, barang ke Master Barang, jenis surat ke daftar, masa berlaku "1 Bulan"/"14 hari" diurai jadi tanggal, harga "-" = kosong. Simpan membaca ulang berkas yang sama di server (pola impor KIB, satu transaksi). Berkas Matriks pemilik jadi data kalibrasi uji.
+- **Impor Matriks langsung.** Pembaca baru `bacaMatriksPenawaran` mengenali kepala Matriks (16 kolom, kepala bertingkat, baris TOTAL di bawah dilewati) dan **banyak surat per berkas**: baris dikelompokkan per (rekanan + nomor surat + tanggal). Pratinjau menampilkan per surat: rekanan dicocokkan ke nama rekanan yang sudah ada (`kunciRekanan`), barang ke Master Barang, jenis surat ke daftar, masa berlaku "1 Bulan"/"14 hari" diurai jadi tanggal, harga "-" = kosong. Simpan membaca ulang berkas yang sama di server (pola impor KIB, satu transaksi). Berkas Matriks pemilik jadi data kalibrasi uji.
 - Templat lama "satu berkas = satu surat" tetap terbaca (`bacaPenawaranWorkbook`), supaya berkas yang sudah beredar tidak mati.
 - **Unduh Excel** lembar Penawaran mengikuti kolom Matriks A–P (+ Syarat, Status), kepala dua tingkat, baris TOTAL, lewat templat seragam `tulisTabelExcel` (kepala baris 7 tetap aturan PRIMA). Tombol **Unduh templat impor** = lembar yang sama tanpa isi, jadi unduhan bisa diimpor balik.
 
@@ -145,37 +141,35 @@ Modal sempit sekarang (980 px, item enam kotak sebaris) diganti **panel lebar** 
 
 | Tabel / kolom | Isi |
 |---|---|
-| `bba_rekanan` baru | `id`, `nama` VARCHAR(160) UNIQUE, `pic_nama` VARCHAR(120), `telepon` VARCHAR(60), `email` VARCHAR(120), `alamat` VARCHAR(255), `catatan` VARCHAR(500), `created_by/at`, `updated_at` |
-| `bba_penawaran` | + `rekanan_id` INT UNSIGNED NULL (FK `bba_rekanan` RESTRICT), + `pic_kontak` VARCHAR(255), + `jenis_surat` VARCHAR(80), + `masa_berlaku_teks` VARCHAR(60), + `status_tindak_lanjut` VARCHAR(40) NULL. `catatan` 500 → 1000 (syarat) |
-| `bba_penawaran_item` | + `merk` VARCHAR(80), + `status_pajak` ENUM('TERMASUK','BELUM','BEBAS','TIDAK_DISEBUT') NULL, + `tautan` VARCHAR(500), + `garansi` VARCHAR(120); `harga_satuan` → NULL-able |
+| `bba_penawaran` | + `jenis_surat` VARCHAR(80), + `pic_kontak` VARCHAR(255), + `masa_berlaku_teks` VARCHAR(60), + `status_tindak_lanjut` ENUM(MENUNGGU_PRESENTASI, MENUNGGU_DEMO, PERLU_TELAAH, LANJUT, ARSIP, DITOLAK) NULL; `catatan` 500 → 1000 (Syarat & pengecualian) |
+| `bba_penawaran_item` | + `merk` VARCHAR(80), + `status_pajak` ENUM(TERMASUK, BELUM, BEBAS, TIDAK_DISEBUT) NULL, + `tautan` VARCHAR(500), + `garansi` VARCHAR(120); `harga_satuan` → NULL-able |
 
-- Isi awal: `bba_rekanan` dari nama surat yang ada (dirapikan), `rekanan_id` ditautkan. Kolom baru lain kosong; surat lama tampil persis seperti sekarang.
-- Kolom/teks baru WAJIB lewat `ItemPenawaranSchema`/`KepalaPenawaranSchema`. Kunci yang tidak dikirim = jangan sentuh (L87), sebab tinjauan Drive balik dan tab lama mengirim bentuk lama.
-- `rekanan_id` dicek ada (`FOR SHARE`, L68). Hapus rekanan yang dipakai surat ditolak dengan jumlahnya. Gabungkan rekanan (dua ejaan) memindah surat, pola Gabungkan barang.
-- Wajib ditambahkan ke `docs/schema-mysql.sql`.
+- Tanpa tabel baru. Isi awal: kolom baru kosong, surat lama tampil persis seperti sebelumnya. `jenis_surat` kosong dianggap surat **berharga** (aturan lama: minimal satu item berharga).
+- Kolom baru lewat `ItemPenawaranSchema`/`KepalaPenawaranSchema`. Kunci kepala yang tidak dikirim = jangan sentuh (L87); tinjauan Drive balik dan tab lama mengirim bentuk lama.
 
-## 8. Tahap pengerjaan
+## 8. Menu lain yang tersambung ke Penawaran (diperiksa sebelum kode)
 
-| Tahap | Isi | Migrasi |
-|---|---|---|
-| 1 | Kolom item & surat baru + harga boleh kosong + `syaratSurat` + salinan tautan ke referensi + daftar matriks + unduhan Excel | ya |
-| 2 | Master Rekanan + combobox rekanan + PIC otomatis + Gabungkan rekanan | ya (bagian Rekanan) |
-| 3 | Form panel baru (tiga bagian, tabel item ala lembar kerja, tempel dari Excel, panel kanan) + `PilihKategori` searchable | tidak |
-| 4 | Impor Matriks banyak surat + templat baru | tidak |
-| 5 (pilihan) | Status tindak lanjut + kartu ringkas per status | ikut migrasi tahap 1 bila disetujui |
+Tidak ada modul di luar BBA (RIMA, Dashboard, Usulan, BLUD) yang membaca data Penawaran.
 
-Satu berkas migrasi untuk semuanya (dijalankan sekali di server kantor sebelum kode tahap 1 dipasang), supaya tidak ada tiga migrasi untuk satu menu.
+| Tempat | Disesuaikan |
+|---|---|
+| Modal Rencana → Referensi harga → **Ambil dari penawaran** | Item tanpa harga tidak ditawarkan (`itemPenawaran` menyaring di SQL). Salinan membawa `tautan` sebagai url referensi (sumber ditebak `tebakSumber`), merk + tipe digabung `gabungMerkTipe`. Status pajak ditampilkan |
+| **Bandingkan** | Item tanpa harga disaring; status pajak di tooltip sel |
+| **Unduh Excel** lembar Penawaran | Kolom mengikuti Matriks A–P + Syarat + Status tindak lanjut (`KOLOM_LAPORAN.penawaran`) |
+| **Salinan Drive + bawa balik** | `SPEK.penawaran` mengenali kolom baru; harga boleh kosong (tidak lagi wajib untuk baris baru); kunci kepala baru ikut ke surat; kolom yang tidak ada di potret lama dianggap "tidak berubah" (asal = PRIMA), bukan benturan |
+| **Impor Excel** | Membaca berkas Matriks (banyak surat per berkas); templat lama tetap terbaca |
+| Master Barang (hapus/gabung) · Master Kategori · Cetak | Tidak berubah (rujukan lewat `barang_id` / kategori tingkat surat) |
 
-## 9. Yang perlu diputuskan pemilik
+## 9. Keputusan pemilik (2026-11-27)
 
-1. **Status tindak lanjut** (§4.5): dipasang atau tidak? Rekomendasi: pasang. Lembar Ringkasan Matriks memang merekapnya, dan rumus di berkas itu sudah rusak.
-2. **Master Rekanan** (§4.1): setuju dibuat sekarang? Rekomendasi: ya. Tanpa itu PIC & kontak tidak punya sumber otomatis, dan ejaan rekanan akan memecah Bandingkan.
-3. **Kategori Matriks vs Master Kategori** (§4.4): setuju memakai Master Kategori 2 tingkat (yang baru dipush), bukan enam kategori Matriks? Rekomendasi: ya. Kalau enam kategori Matriks tetap dibutuhkan untuk laporan pimpinan, keenamnya bisa dimasukkan sebagai **Jenis Kategori** di bawah induk yang sesuai. Itu cukup diisi di Master, tanpa kode baru.
-4. **Status pajak per item atau per surat**? Rekomendasi: per item (Matriks per baris, dan Bandingkan harus adil antara harga termasuk/belum PPN), dengan tombol "samakan semua".
+1. Status tindak lanjut — **dipasang**.
+2. Master Rekanan — **tidak**. Menu Penawaran itulah daftar rekanan (§4.1).
+3. Kategori — memakai Master Kategori 2 tingkat dan **tetap bisa diketik manual** (jenis kategori teks tanpa id; server sudah menerimanya lewat `selesaikanKategori`).
+4. Status pajak — **per barang**, dengan tombol "samakan semua".
 
 ## 10. Uji yang direncanakan
 
-- `scripts/test-bba-penawaran.mts` diperluas: `syaratSurat`, harga kosong tidak ikut Bandingkan/Ambil, `gabungMerkTipe`, tautan tersalin + sumber EKATALOG + referensi sah tanpa berkas, durasi → tanggal (termasuk akhir bulan: 31 Jan + 1 bulan = 28/29 Feb), rapikan & cocokkan rekanan, L87 kolom tak dikirim.
+- `scripts/test-bba-penawaran.mts` diperluas: `syaratSurat`, harga kosong tidak ikut Bandingkan/Ambil, `gabungMerkTipe`, tautan tersalin + sumber EKATALOG + referensi sah tanpa berkas, durasi → tanggal (termasuk akhir bulan: 31 Jan + 1 bulan = 28/29 Feb), rapikan & cocokkan rekanan (`kunciRekanan`), saran PIC dari surat terakhir, L87 kolom tak dikirim.
 - Kalibrasi `bacaMatriksPenawaran` dengan berkas Matriks pemilik (7 surat, 3 berharga, total Rp 34.081.318.604 = baris TOTAL berkas).
-- Bagian MySQL kotak pasir: migrasi isi awal rekanan, FK rekanan, hapus/gabung rekanan, impor banyak surat satu transaksi.
+- Bagian MySQL kotak pasir: kolom baru tersimpan & terbaca, kolom kepala tak dikirim tidak dikosongkan, harga kosong tidak muncul di Ambil dari penawaran, impor banyak surat satu transaksi.
 - Uji mutasi untuk tiap aturan murni di atas.
