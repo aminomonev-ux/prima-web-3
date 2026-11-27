@@ -38,6 +38,7 @@ import {
   tahapRencana, kurangPertama, masukTabRencana, hitungTabRencana, TAB_RENCANA, LABEL_TAB_RENCANA, type TabRencana, type Kurang,
 } from '@/lib/bba/tahap';
 import BbaNav, { navDockBba, type PetaIzinLayar } from './_components/BbaNav';
+import type { MasterKategoriData } from '@/lib/bba/kategori';
 
 const SUMBER = ['BLUD', 'APBD', 'DAK', 'LAINNYA'] as const;
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -46,7 +47,7 @@ const fmtVol = (n: number) => n.toLocaleString('id-ID', { maximumFractionDigits:
 /** Rencana setahun dimuat utuh: tab tahap & angkanya dihitung di layar dari baris yang sama. */
 const BATAS_MUAT = 1000;
 
-type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialTahun: number; initialResult: BbaListResult; initialKpi: BbaKpi; kategori: string[];
+type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialTahun: number; initialResult: BbaListResult; initialKpi: BbaKpi; kategori: MasterKategoriData;
   /** Tab dari ?tab= (pita alur) — `null` = pilih sendiri dari isi. */
   initialTab: TabRencana | null;
   /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
@@ -90,6 +91,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [fSumber, setFSumber] = useState('');
   const [fOrigin, setFOrigin] = useState('');
   const [fJenis, setFJenis] = useState('');
+  const [fKat, setFKat] = useState('');
+  const [fJenisKat, setFJenisKat] = useState('');
   const [q, setQ] = useState('');
   /** Kata cari yang benar-benar dipakai muatan terakhir (q baru berlaku saat dimuat). */
   const [qDimuat, setQDimuat] = useState('');
@@ -118,17 +121,19 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   // Jawaban muatan bisa tiba tidak berurutan (ganti tahun saat muatan lama belum pulang) —
   // hanya muatan TERAKHIR yang boleh mengisi tabel, kalau tidak tabel menampilkan tahun lain.
   const nomorMuat = useRef(0);
-  const kunciSaringan = `${tahun}|${fSumber}|${fOrigin}|${fJenis}`;
+  const kunciSaringan = `${tahun}|${fSumber}|${fOrigin}|${fJenis}|${fKat}|${fJenisKat}`;
   const kunciTermuat = useRef(kunciSaringan);
   const load = useCallback(async () => {
     const nomor = ++nomorMuat.current;
-    kunciTermuat.current = `${tahun}|${fSumber}|${fOrigin}|${fJenis}`;
+    kunciTermuat.current = `${tahun}|${fSumber}|${fOrigin}|${fJenis}|${fKat}|${fJenisKat}`;
     setLoading(true);
     try {
       const params = new URLSearchParams({ tahun: String(tahun), page: '1', limit: String(BATAS_MUAT) });
       if (fSumber) params.set('sumber', fSumber);
       if (fOrigin) params.set('origin', fOrigin);
       if (fJenis)  params.set('jenis', fJenis);
+      if (fKat)    params.set('kategori', fKat);
+      if (fJenisKat) params.set('jenis_kategori', fJenisKat);
       if (q.trim()) params.set('q', q.trim());
       const d = await fetchJson<unknown>(`/api/buku-besar-aset?${params}`);
       if (nomor !== nomorMuat.current) return;
@@ -146,7 +151,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         if (r.kpi) setKpi(r.kpi);
       } else toast.error(d.message || 'Gagal memuat');
     } finally { if (nomor === nomorMuat.current) setLoading(false); }
-  }, [tahun, fSumber, fOrigin, fJenis, q]);
+  }, [tahun, fSumber, fOrigin, fJenis, fKat, fJenisKat, q]);
 
   /** Sesudah ada yang tertulis: tabel, tampilan Per Barang, dan pita alur ikut segar. */
   const muatUlang = () => { void load(); setSegarkanBarang(n => n + 1); };
@@ -324,7 +329,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const inp: React.CSSProperties = { border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 9px', fontSize: 13, color: c.text, background: c.input };
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 11, color: c.sub, textAlign: 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '8px 10px', fontSize: 12.5, color: c.text, borderBottom: `1px solid ${c.border}`, verticalAlign: 'middle' };
-  const adaSaringan = !!(fSumber || fOrigin || fJenis || q.trim() || fBukti);
+  const adaSaringan = !!(fSumber || fOrigin || fJenis || fKat || fJenisKat || q.trim() || fBukti);
+  const indukDipilih = kategori.induk.find(i => i.nama === fKat);
 
   // Ringkas bilah Simpan keputusan: berapa didanai (dan nilainya), berapa tidak.
   const perRow = new Map(rows.map(r => [r.id, r]));
@@ -422,6 +428,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
           <select value={fSumber} onChange={e => setFSumber(e.target.value)} style={inp} aria-label="Sumber dana"><option value="">Semua sumber</option>{SUMBER.map(s => <option key={s} value={s}>{s}</option>)}</select>
           <select value={fOrigin} onChange={e => setFOrigin(e.target.value)} style={inp} aria-label="Asal"><option value="">Semua asal</option><option value="MANUAL">Manual</option><option value="USULAN">Dari Usulan</option></select>
           <select value={fJenis} onChange={e => setFJenis(e.target.value)} style={inp} aria-label="Jenis rencana"><option value="">Semua jenis</option>{JENIS_RENCANA.map(j => <option key={j} value={j}>{LABEL_JENIS[j]}</option>)}<option value="KOSONG">Belum digolongkan</option></select>
+          <select value={fKat} onChange={e => { setFKat(e.target.value); setFJenisKat(''); }} style={inp} aria-label="Kategori"><option value="">Semua kategori</option>{kategori.induk.map(i => <option key={i.id} value={i.nama}>{i.nama}</option>)}</select>
+          {indukDipilih && <select value={fJenisKat} onChange={e => setFJenisKat(e.target.value)} style={{ ...inp, maxWidth: 260 }} aria-label="Jenis kategori"><option value="">Semua jenis kategori</option>{kategori.jenis.filter(j => j.kategori_id === indukDipilih.id).map(j => <option key={j.id} value={j.nama}>{j.kode_rekening ? `${j.kode_rekening} — ${j.nama}` : j.nama}</option>)}</select>}
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: c.sub, cursor: 'pointer' }}>
             <input type="checkbox" checked={fBukti} onChange={e => setFBukti(e.target.checked)} /> Bukti dukung belum lengkap
           </label>
@@ -447,7 +455,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       {tab === 'siap' ? (
         <LembarKeputusan rows={rowsTampil} pilihan={pilihan} c={c} bolehUbah={bolehRencana}
           onPilih={pilihAnggaran} onLengkapi={lengkapi} onBuka={r => bukaItem(r, 'data')}
-          atas={<KartuPagu tahun={tahun} rows={rows} pilihan={pilihan} c={c} tersaring={!!(fSumber || fOrigin || fJenis || qDimuat) || rows.length < total} />} />
+          atas={<KartuPagu tahun={tahun} rows={rows} pilihan={pilihan} c={c} tersaring={!!(fSumber || fOrigin || fJenis || fKat || fJenisKat || qDimuat) || rows.length < total} />} />
       ) : (
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>

@@ -46,19 +46,20 @@ const OriginSchema    = z.enum(['MANUAL', 'USULAN']);
 const KeputusanSchema = z.enum(['DISETUJUI', 'DITOLAK']);
 
 export const BbaQuerySchema = z.object({
-  tahun:     TahunSchema.optional(),
-  status:    StatusSchema.optional(),
-  sumber:    SumberSchema.optional(),
-  kategori:  z.string().max(64).optional(),
-  pj:        z.string().max(128).optional(),
-  origin:    OriginSchema.optional(),
-  keputusan: KeputusanSchema.optional(),
+  tahun:          TahunSchema.optional(),
+  status:         StatusSchema.optional(),
+  sumber:         SumberSchema.optional(),
+  kategori:       z.string().trim().max(100).optional(),
+  jenis_kategori: z.string().trim().max(255).optional(),
+  pj:             z.string().max(128).optional(),
+  origin:         OriginSchema.optional(),
+  keputusan:      KeputusanSchema.optional(),
   // Tahap D: 'KOSONG' = belum digolongkan (rencana lama)
-  jenis:     z.union([z.enum(JENIS_RENCANA), z.literal('KOSONG')]).optional(),
-  anggaran:  z.enum(ANGGARAN).optional(),
-  q:         z.string().max(120).optional(),
-  page:      z.coerce.number().int().min(1).default(1),
-  limit:     z.coerce.number().int().min(1).max(1000).default(50),
+  jenis:          z.union([z.enum(JENIS_RENCANA), z.literal('KOSONG')]).optional(),
+  anggaran:       z.enum(ANGGARAN).optional(),
+  q:              z.string().max(120).optional(),
+  page:           z.coerce.number().int().min(1).default(1),
+  limit:          z.coerce.number().int().min(1).max(1000).default(50),
 });
 
 // ─── Referensi harga & bukti dukung (CONCEPT-bba-perencanaan §4) ────────────
@@ -109,33 +110,43 @@ const AsetSasaranSchema = z.array(z.number().int().positive()).max(MAKS_ASET_SAS
   .refine(xs => new Set(xs).size === xs.length, 'Aset sasaran yang sama muncul dua kali').optional();
 
 export const BbaCreateSchema = z.object({
-  tahun_anggaran:   TahunSchema,
-  kode_rekening:    z.string().max(64).nullish(),
-  uraian:           z.string().min(1, 'Uraian wajib').max(2000),
-  kategori_aset:    z.string().max(64).nullish(),
-  barang_id:        BarangIdSchema.nullish(),
-  barang_baru:      NamaBarangSchema.nullish(),
-  sumber_anggaran:  SumberSchema.default('BLUD'),
-  vol:              z.number().min(0).default(0),
-  satuan:           z.string().max(32).nullish(),
-  harga:            z.number().min(0).default(0),
-  penanggung_jawab: z.string().max(128).nullish(),
-  keterangan:       z.string().max(4000).nullish(),
-  referensi:        ReferensiDaftarSchema,
-  jenis_rencana:    JenisRencanaSchema.nullish(),
-  alasan:           AlasanSchema.nullish(),
-  aset_sasaran:     AsetSasaranSchema,
+  tahun_anggaran:    TahunSchema,
+  kode_rekening:     z.string().trim().max(64).nullish(),
+  uraian:            z.string().min(1, 'Uraian wajib').max(2000),
+  kategori_aset:     z.string().trim().max(64).nullish(),
+  kategori_id:       z.number().int().positive().nullish(),
+  jenis_kategori_id: z.number().int().positive().nullish(),
+  kategori:          z.string().trim().max(100).nullish(),
+  jenis_kategori:    z.string().trim().max(255).nullish(),
+  kelompok_kib:      z.string().trim().max(128).nullish(),
+  barang_id:         BarangIdSchema.nullish(),
+  barang_baru:       NamaBarangSchema.nullish(),
+  sumber_anggaran:   SumberSchema.default('BLUD'),
+  vol:               z.number().min(0).default(0),
+  satuan:            z.string().max(32).nullish(),
+  harga:             z.number().min(0).default(0),
+  penanggung_jawab:  z.string().max(128).nullish(),
+  keterangan:        z.string().max(4000).nullish(),
+  referensi:         ReferensiDaftarSchema,
+  jenis_rencana:     JenisRencanaSchema.nullish(),
+  alasan:            AlasanSchema.nullish(),
+  aset_sasaran:      AsetSasaranSchema,
 }).refine(satuBarang, PESAN_SATU_BARANG);
 
 // Status TIDAK lagi diubah lewat sini — status proses lewat `ubahStatusProses`, status diterima turunan penerimaan (Tahap E).
 export const BbaUpdateSchema = z.object({
-  id:               z.number().int().positive(),
-  expected_version: z.number().int().min(0),
-  kode_rekening:    z.string().max(64).nullish(),
-  uraian:           z.string().min(1).max(2000).optional(),
-  kategori_aset:    z.string().max(64).nullish(),
+  id:                z.number().int().positive(),
+  expected_version:  z.number().int().min(0),
+  kode_rekening:     z.string().trim().max(64).nullish(),
+  uraian:            z.string().min(1).max(2000).optional(),
+  kategori_aset:     z.string().trim().max(64).nullish(),
+  kategori_id:       z.number().int().positive().nullish(),
+  jenis_kategori_id: z.number().int().positive().nullish(),
+  kategori:          z.string().trim().max(100).nullish(),
+  jenis_kategori:    z.string().trim().max(255).nullish(),
+  kelompok_kib:      z.string().trim().max(128).nullish(),
   // undefined = jangan sentuh, null = lepas tautan barang
-  barang_id:        BarangIdSchema.nullish(),
+  barang_id:         BarangIdSchema.nullish(),
   barang_baru:      NamaBarangSchema.nullish(),
   sumber_anggaran:  SumberSchema.optional(),
   vol:              z.number().min(0).optional(),
@@ -183,21 +194,75 @@ export const BbaImportUsulanSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('commit'),  tahun: TahunSchema }),
 ]);
 
-// ─── Master Kategori Aset ───────────────────────────────────────────────────
-export const KategoriCreateSchema = z.object({ nama: z.string().trim().min(1, 'Nama kategori wajib').max(128) });
-export const KategoriDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
+// ─── Master Kategori 2 Tingkat ──────────────────────────────────────────────
+export const JenisKategoriCreateSchema = z.object({
+  kategori_id:    z.coerce.number().int().positive().optional(),
+  kategori:       z.string().trim().min(1).max(100).optional(),
+  jenis_kategori: z.string().trim().min(1, 'Nama jenis kategori wajib').max(255),
+  kode_rekening:  z.string().trim().max(64).nullish(),
+  kelompok_kib:   z.string().trim().max(128).nullish(),
+}).refine(d => !!(d.kategori_id || d.kategori), 'Kategori induk wajib dipilih');
+
+export const JenisKategoriUpdateSchema = z.object({
+  id:             z.coerce.number().int().positive(),
+  kategori_id:    z.coerce.number().int().positive().optional(),
+  kategori:       z.string().trim().min(1).max(100).optional(),
+  jenis_kategori: z.string().trim().min(1, 'Nama jenis kategori wajib').max(255).optional(),
+  kode_rekening:  z.string().trim().max(64).nullish(),
+  kelompok_kib:   z.string().trim().max(128).nullish(),
+});
+
+export const KategoriPostSchema = z.discriminatedUnion('aksi', [
+  z.object({
+    aksi: z.literal('induk'),
+    nama: z.string().trim().min(1, 'Nama kategori induk wajib').max(100),
+  }),
+  z.object({
+    aksi: z.literal('kelompok_kib'),
+    nama: z.string().trim().min(1, 'Nama kelompok KIB wajib').max(128),
+  }),
+  z.object({
+    aksi:           z.literal('jenis'),
+    kategori_id:    z.coerce.number().int().positive().optional(),
+    kategori:       z.string().trim().min(1).max(100).optional(),
+    jenis_kategori: z.string().trim().min(1, 'Nama jenis kategori wajib').max(255),
+    kode_rekening:  z.string().trim().max(64).nullish(),
+    kelompok_kib:   z.string().trim().max(128).nullish(),
+  }).refine(d => !!(d.kategori_id || d.kategori), 'Kategori induk wajib dipilih'),
+]);
+
+export const KategoriDeleteSchema = z.object({
+  id:   z.coerce.number().int().positive(),
+  aksi: z.enum(['jenis', 'induk', 'kelompok_kib']).default('jenis'),
+});
+
+export const RekeningBludQuerySchema = z.object({
+  q: z.string().trim().max(100).default(''),
+});
 
 // ─── Master Barang (§5.1) ───────────────────────────────────────────────────
 export const BarangCreateSchema = z.object({
-  nama:          NamaBarangSchema,
-  kategori_aset: z.string().trim().max(64).nullish(),
-  satuan:        z.string().trim().max(32).nullish(),
+  nama:              NamaBarangSchema,
+  kategori_aset:     z.string().trim().max(64).nullish(),
+  kategori_id:       z.number().int().positive().nullish(),
+  jenis_kategori_id: z.number().int().positive().nullish(),
+  kategori:          z.string().trim().max(100).nullish(),
+  jenis_kategori:    z.string().trim().max(255).nullish(),
+  kode_rekening:     z.string().trim().max(64).nullish(),
+  kelompok_kib:      z.string().trim().max(128).nullish(),
+  satuan:            z.string().trim().max(32).nullish(),
 });
 export const BarangUpdateSchema = z.object({
-  id:            BarangIdSchema,
-  nama:          NamaBarangSchema.optional(),
-  kategori_aset: z.string().trim().max(64).nullish(),
-  satuan:        z.string().trim().max(32).nullish(),
+  id:                BarangIdSchema,
+  nama:              NamaBarangSchema.optional(),
+  kategori_aset:     z.string().trim().max(64).nullish(),
+  kategori_id:       z.number().int().positive().nullish(),
+  jenis_kategori_id: z.number().int().positive().nullish(),
+  kategori:          z.string().trim().max(100).nullish(),
+  jenis_kategori:    z.string().trim().max(255).nullish(),
+  kode_rekening:     z.string().trim().max(64).nullish(),
+  kelompok_kib:      z.string().trim().max(128).nullish(),
+  satuan:            z.string().trim().max(32).nullish(),
 });
 export const BarangDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
 export const BarangGabungSchema = z.object({ dari: BarangIdSchema, ke: BarangIdSchema })
@@ -241,6 +306,9 @@ export type BuktiCreateInput     = z.infer<typeof BuktiCreateSchema>;
 export type LokasiUpdateInput    = z.infer<typeof LokasiUpdateSchema>;
 export type AnggaranInput        = z.infer<typeof AnggaranSchema>;
 export type SalinTahunLaluInput  = z.infer<typeof SalinTahunLaluSchema>;
-export type BarangCreateInput    = z.infer<typeof BarangCreateSchema>;
-export type BarangUpdateInput    = z.infer<typeof BarangUpdateSchema>;
-export type BarangTautkanInput   = z.infer<typeof BarangTautkanSchema>;
+export type BarangCreateInput      = z.infer<typeof BarangCreateSchema>;
+export type BarangUpdateInput      = z.infer<typeof BarangUpdateSchema>;
+export type BarangTautkanInput     = z.infer<typeof BarangTautkanSchema>;
+export type JenisKategoriCreateInput = z.infer<typeof JenisKategoriCreateSchema>;
+export type JenisKategoriUpdateInput = z.infer<typeof JenisKategoriUpdateSchema>;
+export type KategoriPostInput      = z.infer<typeof KategoriPostSchema>;

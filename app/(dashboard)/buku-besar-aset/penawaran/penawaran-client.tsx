@@ -22,15 +22,17 @@ import PilihBarang, { type PilihanBarang } from '../_components/PilihBarang';
 import { unggahBerkas, unduhBerkas } from '../_components/ModalItem';
 import MenuBaris from '../_components/MenuBaris';
 import { TombolUnduhBuku } from '../_components/UnduhBuku';
+import PilihKategori, { type NilaiKategori } from '../_components/PilihKategori';
+import { pilihanDariBaris, type MasterKategoriData } from '@/lib/bba/kategori';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 
-type Props = { username: string; role: string; themePreference: 'dark' | 'light'; beku: InfoBeku; izin: PetaIzinLayar; awal: SuratPenawaran[]; rekanan: string[]; barang: BarangRingan[] };
+type Props = { username: string; role: string; themePreference: 'dark' | 'light'; beku: InfoBeku; izin: PetaIzinLayar; awal: SuratPenawaran[]; rekanan: string[]; barang: BarangRingan[]; kategori: MasterKategoriData };
 type SaringBerlaku = 'BERLAKU' | 'SEMUA' | 'KEDALUWARSA';
 type BukaSurat = { surat: SuratPenawaran | null } | null;
 
-export default function PenawaranClient({ username, role, themePreference, beku, izin, awal, rekanan: rekananAwal, barang: barangAwal }: Props) {
+export default function PenawaranClient({ username, role, themePreference, beku, izin, awal, rekanan: rekananAwal, barang: barangAwal, kategori }: Props) {
   const bolehUbah = bolehUbahPenawaran(izin);
   const [surat, setSurat] = useState(awal);
   const [rekanan, setRekanan] = useState(rekananAwal);
@@ -38,6 +40,7 @@ export default function PenawaranClient({ username, role, themePreference, beku,
   const [tampilan, setTampilan] = useState<'SURAT' | 'BANDING'>('SURAT');
   const [q, setQ] = useState('');
   const [saring, setSaring] = useState<SaringBerlaku>('BERLAKU');
+  const [fKat, setFKat] = useState('');
   const [terbuka, setTerbuka] = useState<Set<number>>(new Set());
   const [buka, setBuka] = useState<BukaSurat>(null);
   const [impor, setImpor] = useState(false);
@@ -55,7 +58,7 @@ export default function PenawaranClient({ username, role, themePreference, beku,
     if (b.ok) setBarang(((b as unknown as { data: BarangRingan[] }).data ?? []).map(x => ({ id: x.id, nama: x.nama })));
   }
 
-  const tampilSurat = surat.filter(s => saring === 'SEMUA' || (saring === 'BERLAKU') === masihBerlaku(s.berlaku_sampai, hariIni));
+  const tampilSurat = surat.filter(s => (saring === 'SEMUA' || (saring === 'BERLAKU') === masihBerlaku(s.berlaku_sampai, hariIni)) && (!fKat || s.kategori === fKat));
   const banding = useMemo(() => bandingkanPenawaran(surat.flatMap(s => s.item), hariIni), [surat, hariIni]);
 
   async function hapus(s: SuratPenawaran) {
@@ -95,7 +98,8 @@ export default function PenawaranClient({ username, role, themePreference, beku,
             <span style={{ flex: 1 }} />
             {tampilan === 'SURAT' && <>
               <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void muat(); }} placeholder="Cari rekanan, nomor, barang…" aria-label="Cari penawaran" style={{ ...inp, minWidth: 200 }} />
-              <select value={saring} onChange={e => setSaring(e.target.value as SaringBerlaku)} style={inp} aria-label="Masa berlaku">
+            <select value={fKat} onChange={e => setFKat(e.target.value)} style={inp} aria-label="Kategori"><option value="">Semua kategori</option>{kategori.induk.map(i => <option key={i.id} value={i.nama}>{i.nama}</option>)}</select>
+            <select value={saring} onChange={e => setSaring(e.target.value as SaringBerlaku)} style={inp} aria-label="Masa berlaku">
                 <option value="BERLAKU">Masih berlaku</option><option value="SEMUA">Semua</option><option value="KEDALUWARSA">Kedaluwarsa</option>
               </select>
             </>}
@@ -115,7 +119,7 @@ export default function PenawaranClient({ username, role, themePreference, beku,
                         <tr style={{ opacity: berlaku ? 1 : .65 }}>
                           <td style={td}><button type="button" aria-label={lebar ? 'Tutup item' : 'Buka item'} aria-expanded={lebar} onClick={() => setTerbuka(t => { const x = new Set(t); if (x.has(s.id)) x.delete(s.id); else x.add(s.id); return x; })}
                             style={{ background: 'none', border: 'none', color: c.sub, cursor: 'pointer', padding: 0 }}>{lebar ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</button></td>
-                          <td style={td}><b>{s.rekanan}</b><div style={{ fontSize: 11, color: c.sub }}>{[s.nomor_surat ? `No. ${s.nomor_surat}` : null, s.kategori].filter(Boolean).join(' · ') || '—'}</div></td>
+                          <td style={td}><b>{s.rekanan}</b><div style={{ fontSize: 11, color: c.sub }}>{[s.nomor_surat ? `No. ${s.nomor_surat}` : null, s.kategori, s.jenis_kategori, s.kode_rekening].filter(Boolean).join(' · ') || '—'}</div></td>
                           <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtTanggal(s.tgl_surat)}</td>
                           <td style={{ ...td, whiteSpace: 'nowrap', color: berlaku ? c.text : '#BA7517' }}>{s.berlaku_sampai ? fmtTanggal(s.berlaku_sampai) : '—'}{!berlaku && ' · kedaluwarsa'}</td>
                           <td style={{ ...td, fontFamily: MONO, textAlign: 'right' }}>{s.item.length}</td>
@@ -151,8 +155,8 @@ export default function PenawaranClient({ username, role, themePreference, beku,
             <Bandingkan c={c} banding={banding} onBukaSurat={id => { const s = surat.find(x => x.id === id); if (s) { setTampilan('SURAT'); setSaring('SEMUA'); setTerbuka(new Set([id])); } }} />
           )}
 
-          {buka && <ModalSurat c={c} awal={buka.surat} rekanan={rekanan} barang={barang} onTutup={() => setBuka(null)} onTersimpan={() => { setBuka(null); void muat(); }} />}
-          {impor && <ModalImporPenawaran c={c} rekanan={rekanan} onTutup={() => setImpor(false)} onTersimpan={() => { setImpor(false); void muat(); }} />}
+          {buka && <ModalSurat c={c} awal={buka.surat} rekanan={rekanan} barang={barang} kategori={kategori} onTutup={() => setBuka(null)} onTersimpan={() => { setBuka(null); void muat(); }} />}
+          {impor && <ModalImporPenawaran c={c} rekanan={rekanan} kategori={kategori} onTutup={() => setImpor(false)} onTersimpan={() => { setImpor(false); void muat(); }} />}
         </>);
       }}
     </BbaShell>
@@ -210,10 +214,21 @@ type IsianItem = { id: number | null; barang: PilihanBarang; nama_barang: string
 const itemKosong = (): IsianItem => ({ id: null, barang: null, nama_barang: '', merk_tipe: '', spesifikasi: '', satuan: '', harga: 0 });
 const isianDariItem = (i: ItemPenawaran): IsianItem => ({ id: i.id, barang: i.barang_id ? { id: i.barang_id, nama: i.barang_nama ?? i.nama_barang } : null, nama_barang: i.nama_barang, merk_tipe: i.merk_tipe ?? '', spesifikasi: i.spesifikasi ?? '', satuan: i.satuan ?? '', harga: i.harga_satuan });
 
-type Kepala = { rekanan: string; nomor_surat: string; tgl_surat: string; berlaku_sampai: string; kategori: string; file_id: string | null; nama_berkas: string | null; catatan: string };
-const kepalaBody = (k: Kepala) => ({ rekanan: k.rekanan.trim(), nomor_surat: k.nomor_surat.trim() || null, tgl_surat: k.tgl_surat, berlaku_sampai: k.berlaku_sampai || null, kategori: k.kategori.trim() || null, file_id: k.file_id, catatan: k.catatan.trim() || null });
+type Kepala = {
+  rekanan: string; nomor_surat: string; tgl_surat: string; berlaku_sampai: string; file_id: string | null; nama_berkas: string | null; catatan: string;
+  kat: NilaiKategori; katAsal: NilaiKategori | null; teksKategori: string | null;
+};
+/** L87: kategori hanya dikirim kalau berubah — surat lama yang cuma punya teks kategori tidak dikosongkan diam-diam. */
+const kepalaBody = (k: Kepala) => {
+  const berubah = k.katAsal ? JSON.stringify(k.kat) !== JSON.stringify(k.katAsal) : !!k.kat.kategori_id || !!k.kat.kode_rekening.trim();
+  return {
+    rekanan: k.rekanan.trim(), nomor_surat: k.nomor_surat.trim() || null, tgl_surat: k.tgl_surat, berlaku_sampai: k.berlaku_sampai || null,
+    file_id: k.file_id, catatan: k.catatan.trim() || null,
+    ...(berubah ? { kategori_id: k.kat.kategori_id, jenis_kategori_id: k.kat.jenis_kategori_id, kode_rekening: k.kat.kode_rekening.trim() || null } : {}),
+  };
+};
 
-function IsianKepala({ c, k, setK, rekanan }: { c: WarnaBba; k: Kepala; setK: (k: Kepala) => void; rekanan: string[] }) {
+function IsianKepala({ c, k, setK, rekanan, kategori }: { c: WarnaBba; k: Kepala; setK: (k: Kepala) => void; rekanan: string[]; kategori: MasterKategoriData }) {
   const inp: React.CSSProperties = { border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 9px', fontSize: 13, color: c.text, background: c.input, width: '100%', boxSizing: 'border-box' };
   const label: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: c.sub };
   const [unggah, setUnggah] = useState(false);
@@ -224,7 +239,6 @@ function IsianKepala({ c, k, setK, rekanan }: { c: WarnaBba; k: Kepala; setK: (k
       <label style={label}>Nomor surat<input value={k.nomor_surat} maxLength={120} onChange={e => setK({ ...k, nomor_surat: e.target.value })} style={inp} /></label>
       <label style={label}>Tanggal surat *<input type="date" value={k.tgl_surat} onChange={e => setK({ ...k, tgl_surat: e.target.value })} style={inp} /></label>
       <label style={label}>Berlaku s.d.<input type="date" value={k.berlaku_sampai} min={k.tgl_surat} onChange={e => setK({ ...k, berlaku_sampai: e.target.value })} style={inp} /></label>
-      <label style={label}>Kategori<input value={k.kategori} maxLength={80} placeholder="alkes, komputer, mebel…" onChange={e => setK({ ...k, kategori: e.target.value })} style={inp} /></label>
       <label style={label}>Berkas surat (PDF/foto)
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.text }}>
           {k.file_id ? <><Paperclip size={12} />{k.nama_berkas ?? 'terlampir'} <button type="button" onClick={() => setK({ ...k, file_id: null, nama_berkas: null })} style={{ background: 'none', border: 'none', color: '#E24B4A', cursor: 'pointer', fontSize: 11.5 }}>lepas</button></>
@@ -233,17 +247,22 @@ function IsianKepala({ c, k, setK, rekanan }: { c: WarnaBba; k: Kepala; setK: (k
         </span>
         <span style={{ fontSize: 10.5 }}>Tanpa berkas, referensi yang disalin dari surat ini belum dihitung sah.</span>
       </label>
+      <div style={{ gridColumn: '1 / -1' }}><PilihKategori c={c} master={kategori} inp={inp} nilai={k.kat} teksLama={k.teksKategori} onChange={kat => setK({ ...k, kat })} /></div>
     </div>
   );
 }
 
-const kepalaDari = (s: SuratPenawaran | null): Kepala => ({
+const kepalaDari = (s: SuratPenawaran | null, master: MasterKategoriData): Kepala => {
+  const kat: NilaiKategori = { ...(s ? pilihanDariBaris(master, s) : { kategori_id: null, jenis_kategori_id: null }), kode_rekening: s?.kode_rekening ?? '' };
+  return {
   rekanan: s?.rekanan ?? '', nomor_surat: s?.nomor_surat ?? '', tgl_surat: s?.tgl_surat ?? tanggalHariIniWIB(), berlaku_sampai: s?.berlaku_sampai ?? '',
-  kategori: s?.kategori ?? '', file_id: s?.file_id ?? null, nama_berkas: s?.file_id ? 'berkas tersimpan' : null, catatan: s?.catatan ?? '',
-});
+  file_id: s?.file_id ?? null, nama_berkas: s?.file_id ? 'berkas tersimpan' : null, catatan: s?.catatan ?? '',
+  kat, katAsal: s ? kat : null, teksKategori: s?.jenis_kategori ?? s?.kategori ?? null,
+  };
+};
 
-function ModalSurat({ c, awal, rekanan, barang, onTutup, onTersimpan }: { c: WarnaBba; awal: SuratPenawaran | null; rekanan: string[]; barang: BarangRingan[]; onTutup: () => void; onTersimpan: () => void }) {
-  const [k, setK] = useState<Kepala>(kepalaDari(awal));
+function ModalSurat({ c, awal, rekanan, barang, kategori, onTutup, onTersimpan }: { c: WarnaBba; awal: SuratPenawaran | null; rekanan: string[]; barang: BarangRingan[]; kategori: MasterKategoriData; onTutup: () => void; onTersimpan: () => void }) {
+  const [k, setK] = useState<Kepala>(() => kepalaDari(awal, kategori));
   const [item, setItem] = useState<IsianItem[]>(awal ? awal.item.map(isianDariItem) : [itemKosong()]);
   const [sibuk, setSibuk] = useState(false);
   const inp: React.CSSProperties = { border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 9px', fontSize: 12.5, color: c.text, background: c.input, width: '100%', boxSizing: 'border-box' };
@@ -273,7 +292,7 @@ function ModalSurat({ c, awal, rekanan, barang, onTutup, onTersimpan }: { c: War
   return (
     <Bingkai c={c} judul={awal ? 'Ubah surat penawaran' : 'Catat surat penawaran'} lebar={980} onTutup={onTutup}
       kaki={<><PrimaButton variant="ghost" onClick={onTutup}>Batal</PrimaButton><PrimaButton menulis variant="primary" disabled={sibuk || !!sebab} data-tooltip={sebab ?? undefined} onClick={() => void simpan()}>{sibuk ? 'Menyimpan…' : 'Simpan'}</PrimaButton></>}>
-      <IsianKepala c={c} k={k} setK={setK} rekanan={rekanan} />
+      <IsianKepala c={c} k={k} setK={setK} rekanan={rekanan} kategori={kategori} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {item.map((it, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1.4fr) minmax(140px, 1fr) minmax(160px, 1.2fr) 80px 150px 30px', gap: 8, alignItems: 'start', padding: 8, border: `1px solid ${c.border}`, borderRadius: 8 }}>
@@ -297,10 +316,10 @@ function ModalSurat({ c, awal, rekanan, barang, onTutup, onTersimpan }: { c: War
 
 type PratinjauImpor = { item: Array<{ baris: number; nama_barang: string; merk_tipe: string | null; satuan: string | null; harga_satuan: number; barang_id: number | null; barang_nama: string | null }>; dilewati: string[] };
 
-function ModalImporPenawaran({ c, rekanan, onTutup, onTersimpan }: { c: WarnaBba; rekanan: string[]; onTutup: () => void; onTersimpan: () => void }) {
+function ModalImporPenawaran({ c, rekanan, kategori, onTutup, onTersimpan }: { c: WarnaBba; rekanan: string[]; kategori: MasterKategoriData; onTutup: () => void; onTersimpan: () => void }) {
   const [berkas, setBerkas] = useState<File | null>(null);
   const [pr, setPr] = useState<PratinjauImpor | null>(null);
-  const [k, setK] = useState<Kepala>(kepalaDari(null));
+  const [k, setK] = useState<Kepala>(() => kepalaDari(null, kategori));
   const [sibuk, setSibuk] = useState(false);
   async function kirim(step: 'pratinjau' | 'simpan') {
     if (!berkas) return;
@@ -328,7 +347,7 @@ function ModalImporPenawaran({ c, rekanan, onTutup, onTersimpan }: { c: WarnaBba
         <PrimaButton variant="ghost" size="sm" disabled={!berkas || sibuk} onClick={() => void kirim('pratinjau')}>Baca berkas</PrimaButton>
       </div>
       {pr && (<>
-        <IsianKepala c={c} k={k} setK={setK} rekanan={rekanan} />
+        <IsianKepala c={c} k={k} setK={setK} rekanan={rekanan} kategori={kategori} />
         <div style={{ fontSize: 12.5, marginBottom: 6 }}><b>{pr.item.length} item terbaca</b> · {pr.item.filter(i => i.barang_id).length} cocok dengan Master Barang, sisanya &ldquo;belum ditautkan&rdquo; (bisa ditautkan sesudahnya).</div>
         <div style={{ border: `1px solid ${c.border}`, borderRadius: 8, maxHeight: 260, overflow: 'auto' }}>
           {pr.item.map(i => (

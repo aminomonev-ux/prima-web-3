@@ -15,6 +15,7 @@ export interface BarisRencanaExcel {
   sub_bidang: string | null; penanggung_jawab: string | null; vol: number; satuan: string | null; harga: number;
   nilai_rencana: number; anggaran: Anggaran; anggaran_nilai: number | null; jenis_rencana: JenisRencana | null;
   alasan: string | null; status: BbaStatus; usulan_keputusan: string | null;
+  kategori?: string | null; jenis_kategori?: string | null; kode_rekening?: string | null; kelompok_kib?: string | null;
 }
 
 const KOLOM: [judul: string, lebar: number, jenis: JenisKolom][] = [
@@ -22,6 +23,7 @@ const KOLOM: [judul: string, lebar: number, jenis: JenisKolom][] = [
   ['Satuan', 9, 'teks'], ['Harga Satuan', 15, 'rupiah'], ['Nilai Rencana', 17, 'rupiah'], ['Anggaran', 13, 'teks'], ['Nilai Didanai', 17, 'rupiah'],
   ['Dimiliki', 9, 'angka'], ['Baik', 7, 'angka'], ['Rusak Ringan', 9, 'angka'], ['Rusak Berat', 9, 'angka'],
   ['Aset Sasaran', 30, 'teks'], ['Alasan', 40, 'teks'], ['Status', 16, 'teks'],
+  ['Kategori', 16, 'teks'], ['Jenis Kategori', 26, 'teks'], ['Kode Rekening', 20, 'kode'], ['Kelompok KIB', 24, 'teks'],
 ];
 
 /** Usulan DITOLAK tidak ikut — catatan sejarah, bukan rencana. Urutan kelompok = urutan jenis di konsep, "belum digolongkan" terakhir. */
@@ -52,6 +54,7 @@ export function tulisDaftarRencana(
         i + 1, x.canonical_id, x.uraian, x.barang_nama ?? '', x.sub_bidang || x.penanggung_jawab || '', x.vol, x.satuan ?? '', x.harga,
         x.nilai_rencana, LABEL_ANGGARAN[x.anggaran], didanai || '', d?.jumlah ?? '', d?.kondisi.baik ?? '', d?.kondisi.rusak_ringan ?? '', d?.kondisi.rusak_berat ?? '',
         (sasaran.get(x.id) ?? []).join('; '), x.alasan ?? '', LABEL_STATUS[x.status],
+        x.kategori ?? '', x.jenis_kategori ?? '', x.kode_rekening ?? '', x.kelompok_kib ?? '',
       ] });
     });
     const sub: (string | number)[] = kosong();

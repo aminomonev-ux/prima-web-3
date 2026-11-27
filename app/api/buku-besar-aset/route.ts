@@ -8,6 +8,7 @@ import {
   BbaVersionConflictError, BbaNotFoundError, BbaUsulanLockedError,
   BbaRealisasiRangeError, BbaStatusMismatchError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError,
   BbaRiwayatTerkunciError, BbaReferensiBekuError, BbaSasaranBekuError, BbaSasaranTidakDikenalError,
+  BbaKategoriTidakDikenalError, BbaKategoriBekuError,
 } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from './_guard';
 
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
     status:   searchParams.get('status')   ?? undefined,
     sumber:   searchParams.get('sumber')   ?? undefined,
     kategori:  searchParams.get('kategori')  ?? undefined,
+    jenis_kategori: searchParams.get('jenis_kategori') ?? undefined,
     pj:        searchParams.get('pj')        ?? undefined,
     origin:    searchParams.get('origin')    ?? undefined,
     keputusan: searchParams.get('keputusan') ?? undefined,
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
   try {
     hasil = await createAset(parsed.data, g.session.userId);
   } catch (err) {
-    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaSasaranTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaSasaranTidakDikenalError || err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
   const { id, canonical_id } = hasil;
@@ -84,9 +86,10 @@ export async function PATCH(req: NextRequest) {
     if (err instanceof BbaRealisasiRangeError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaStatusMismatchError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
-    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaSasaranTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaSasaranTidakDikenalError || err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaReferensiBekuError)   return NextResponse.json({ ok: false, code: 'REFERENSI_BEKU', message: err.message }, { status: 409 });
     if (err instanceof BbaSasaranBekuError)     return NextResponse.json({ ok: false, code: 'SASARAN_BEKU', message: err.message }, { status: 409 });
+    if (err instanceof BbaKategoriBekuError)    return NextResponse.json({ ok: false, code: 'KATEGORI_BEKU', message: err.message }, { status: 409 });
     throw err;
   }
   const ref = parsed.data.referensi !== undefined ? ` referensi=${parsed.data.referensi.length}` : '';

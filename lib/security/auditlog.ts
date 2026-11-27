@@ -17,6 +17,7 @@ export type AuditEventType =
   | 'BBA_IMPORT_USULAN'
   | 'BBA_DELETE'
   | 'BBA_KATEGORI_ADD'
+  | 'BBA_KATEGORI_UPDATE'
   | 'BBA_KATEGORI_DELETE'
   | 'BBA_BUKTI_ADD'
   | 'BBA_BUKTI_DELETE'

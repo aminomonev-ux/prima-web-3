@@ -3,19 +3,22 @@
 // hanya jejak), jadi surat boleh disunting/dihapus tanpa mengubah catatan sejarah rencana.
 import { sql, queryMany, withTransaction, bulkInsert, escapeLike } from '@/lib/data/db';
 import type { ItemPenawaran } from '@/lib/bba/penawaran';
-import { pastikanBerkasBba, tentukanBarang, BbaVersionConflictError, BbaNotFoundError } from '@/lib/data/buku-besar-aset';
+import { normalisasiKategoriItem } from '@/lib/bba/kategori';
+import { pastikanBerkasBba, tentukanBarang, selesaikanKategori, BbaVersionConflictError, BbaNotFoundError } from '@/lib/data/buku-besar-aset';
 import type { PenawaranSimpanInput } from './bba-penawaran-schemas';
 
 export interface SuratPenawaran {
-  id: number; rekanan: string; nomor_surat: string | null; tgl_surat: string; berlaku_sampai: string | null; kategori: string | null;
+  id: number; rekanan: string; nomor_surat: string | null; tgl_surat: string; berlaku_sampai: string | null;
+  kategori_id: number | null; jenis_kategori_id: number | null; kategori: string | null; jenis_kategori: string | null;
+  kode_rekening: string | null; kelompok_kib: string | null;
   file_id: string | null; catatan: string | null; version: number; oleh: string | null;
   item: Array<ItemPenawaran & { dipakai: number }>;
 }
 
 const KOLOM_ITEM = sql`
   i.id, i.penawaran_id, w.rekanan, w.nomor_surat, DATE_FORMAT(w.tgl_surat, '%Y-%m-%d') AS tgl_surat,
-  DATE_FORMAT(w.berlaku_sampai, '%Y-%m-%d') AS berlaku_sampai, w.file_id, i.barang_id, g.nama AS barang_nama, i.nama_barang,
-  i.merk_tipe, i.spesifikasi, i.satuan, i.harga_satuan
+  DATE_FORMAT(w.berlaku_sampai, '%Y-%m-%d') AS berlaku_sampai, w.kategori, w.jenis_kategori, w.kode_rekening, w.file_id,
+  i.barang_id, g.nama AS barang_nama, i.nama_barang, i.merk_tipe, i.spesifikasi, i.satuan, i.harga_satuan
 `;
 const DARI_ITEM = sql`FROM bba_penawaran_item i JOIN bba_penawaran w ON w.id = i.penawaran_id LEFT JOIN bba_barang g ON g.id = i.barang_id`;
 
@@ -25,16 +28,28 @@ const petakanItem = (r: Record<string, unknown>): ItemPenawaran => ({
   barang_id: r.barang_id == null ? null : Number(r.barang_id), barang_nama: (r.barang_nama as string | null) ?? null,
   nama_barang: String(r.nama_barang ?? ''), merk_tipe: (r.merk_tipe as string | null) ?? null, spesifikasi: (r.spesifikasi as string | null) ?? null,
   satuan: (r.satuan as string | null) ?? null, harga_satuan: Number(r.harga_satuan ?? 0),
+  kategori: (r.kategori as string | null) ?? null, jenis_kategori: (r.jenis_kategori as string | null) ?? null, kode_rekening: (r.kode_rekening as string | null) ?? null,
 });
 
-/** Daftar surat + itemnya; `q` mencocokkan rekanan, nomor surat, atau nama barang. Masa berlaku disaring di layar (aturan murni). */
-export async function listPenawaran(q?: string): Promise<SuratPenawaran[]> {
+/** Daftar surat + itemnya; `q` mencocokkan rekanan, nomor surat, kode rekening, kategori, atau nama barang. */
+export async function listPenawaran(q?: string, filter?: { kategori?: string; jenis_kategori?: string }): Promise<SuratPenawaran[]> {
   const term = q?.trim() ? `%${escapeLike(q.trim())}%` : null;
+  let where = sql`WHERE 1=1`;
+  if (term) {
+    where = sql`${where} AND (w.rekanan LIKE ${term} OR w.nomor_surat LIKE ${term} OR w.kode_rekening LIKE ${term} OR w.kategori LIKE ${term} OR w.jenis_kategori LIKE ${term} OR EXISTS (SELECT 1 FROM bba_penawaran_item x WHERE x.penawaran_id = w.id AND x.nama_barang LIKE ${term}))`;
+  }
+  if (filter?.kategori?.trim()) {
+    where = sql`${where} AND w.kategori = ${filter.kategori.trim()}`;
+  }
+  if (filter?.jenis_kategori?.trim()) {
+    where = sql`${where} AND w.jenis_kategori = ${filter.jenis_kategori.trim()}`;
+  }
   const surat = await queryMany<Record<string, unknown>>(sql`
     SELECT w.id, w.rekanan, w.nomor_surat, DATE_FORMAT(w.tgl_surat, '%Y-%m-%d') AS tgl_surat, DATE_FORMAT(w.berlaku_sampai, '%Y-%m-%d') AS berlaku_sampai,
-           w.kategori, w.file_id, w.catatan, w.version, u.username AS oleh
+           w.kategori_id, w.jenis_kategori_id, w.kategori, w.jenis_kategori, w.kode_rekening, w.kelompok_kib,
+           w.file_id, w.catatan, w.version, u.username AS oleh
     FROM bba_penawaran w LEFT JOIN users u ON u.id = COALESCE(w.updated_by, w.created_by)
-    ${term ? sql`WHERE w.rekanan LIKE ${term} OR w.nomor_surat LIKE ${term} OR EXISTS (SELECT 1 FROM bba_penawaran_item x WHERE x.penawaran_id = w.id AND x.nama_barang LIKE ${term})` : sql``}
+    ${where}
     ORDER BY w.tgl_surat DESC, w.id DESC
   `);
   if (surat.length === 0) return [];
@@ -45,11 +60,23 @@ export async function listPenawaran(q?: string): Promise<SuratPenawaran[]> {
   `);
   const per = new Map<number, Array<ItemPenawaran & { dipakai: number }>>();
   for (const r of items) { const it = { ...petakanItem(r), dipakai: Number(r.dipakai ?? 0) }; per.set(it.penawaran_id, [...(per.get(it.penawaran_id) ?? []), it]); }
-  return surat.map(s => ({
-    id: Number(s.id), rekanan: String(s.rekanan ?? ''), nomor_surat: (s.nomor_surat as string | null) ?? null, tgl_surat: (s.tgl_surat as string | null) ?? '', // DATE_FORMAT di SQL
-    berlaku_sampai: (s.berlaku_sampai as string | null) ?? null, kategori: (s.kategori as string | null) ?? null, file_id: (s.file_id as string | null) ?? null,
-    catatan: (s.catatan as string | null) ?? null, version: Number(s.version ?? 0), oleh: (s.oleh as string | null) ?? null, item: per.get(Number(s.id)) ?? [],
-  }));
+  return surat.map(s => {
+    const kat = normalisasiKategoriItem({
+      kategori: (s.kategori as string | null) ?? null,
+      jenis_kategori: (s.jenis_kategori as string | null) ?? null,
+      kode_rekening: (s.kode_rekening as string | null) ?? null,
+      kelompok_kib: (s.kelompok_kib as string | null) ?? null,
+    });
+    return {
+      id: Number(s.id), rekanan: String(s.rekanan ?? ''), nomor_surat: (s.nomor_surat as string | null) ?? null, tgl_surat: (s.tgl_surat as string | null) ?? '', // DATE_FORMAT di SQL
+      berlaku_sampai: (s.berlaku_sampai as string | null) ?? null,
+      kategori_id: s.kategori_id == null ? null : Number(s.kategori_id),
+      jenis_kategori_id: s.jenis_kategori_id == null ? null : Number(s.jenis_kategori_id),
+      kategori: kat.kategori, jenis_kategori: kat.jenis_kategori, kode_rekening: kat.kode_rekening, kelompok_kib: kat.kelompok_kib,
+      file_id: (s.file_id as string | null) ?? null,
+      catatan: (s.catatan as string | null) ?? null, version: Number(s.version ?? 0), oleh: (s.oleh as string | null) ?? null, item: per.get(Number(s.id)) ?? [],
+    };
+  });
 }
 
 /** Semua item (Bandingkan) atau item satu barang (Ambil dari penawaran di modal rencana). */
@@ -72,26 +99,46 @@ export async function simpanPenawaran(input: PenawaranSimpanInput, userId: numbe
   return withTransaction(async ({ tx, conn }) => {
     const k = input.kepala;
     await pastikanBerkasBba(tx, [k.file_id]);
+    const kat = await selesaikanKategori(tx, {
+      kategori_id: k.kategori_id, jenis_kategori_id: k.jenis_kategori_id,
+      kategori: k.kategori, jenis_kategori: k.jenis_kategori,
+      kode_rekening: k.kode_rekening, kelompok_kib: k.kelompok_kib,
+    });
+    const kodeRek = k.kode_rekening !== undefined ? (k.kode_rekening?.trim() || null) : kat.kode_rekening;
     let id = input.id ?? 0;
     if (id) {
       const ada = await tx`SELECT version FROM bba_penawaran WHERE id = ${id} FOR UPDATE` as Array<{ version: number }>;
       if (ada.length === 0) throw new BbaNotFoundError();
       if (Number(ada[0].version) !== input.expected_version) throw new BbaVersionConflictError();
+      // L87: kategori/kode yang tidak dikirim (tab lama, tinjauan Drive) = jangan sentuh, bukan kosongkan.
+      let setKat = sql``;
+      if (kat.terisi) {
+        setKat = sql`kategori_id = ${kat.kategori_id}, jenis_kategori_id = ${kat.jenis_kategori_id},
+          kategori = ${kat.kategori || null}, jenis_kategori = ${kat.jenis_kategori || null}, kelompok_kib = ${kat.kelompok_kib || null}, `;
+      }
+      if (k.kode_rekening !== undefined || kat.terisi) setKat = sql`${setKat}kode_rekening = ${kodeRek}, `;
       await tx`
         UPDATE bba_penawaran SET rekanan = ${k.rekanan}, nomor_surat = ${k.nomor_surat || null}, tgl_surat = ${k.tgl_surat}, berlaku_sampai = ${k.berlaku_sampai || null},
-          kategori = ${k.kategori || null}, file_id = ${k.file_id || null}, catatan = ${k.catatan || null}, version = version + 1, updated_by = ${userId}
+          ${setKat}file_id = ${k.file_id || null}, catatan = ${k.catatan || null}, version = version + 1, updated_by = ${userId}
         WHERE id = ${id}
       `;
     } else {
       const res = await tx`
-        INSERT INTO bba_penawaran (rekanan, nomor_surat, tgl_surat, berlaku_sampai, kategori, file_id, catatan, created_by, updated_by)
-        VALUES (${k.rekanan}, ${k.nomor_surat || null}, ${k.tgl_surat}, ${k.berlaku_sampai || null}, ${k.kategori || null}, ${k.file_id || null}, ${k.catatan || null}, ${userId}, ${userId})
+        INSERT INTO bba_penawaran (rekanan, nomor_surat, tgl_surat, berlaku_sampai, kategori_id, jenis_kategori_id, kategori, jenis_kategori, kode_rekening, kelompok_kib, file_id, catatan, created_by, updated_by)
+        VALUES (${k.rekanan}, ${k.nomor_surat || null}, ${k.tgl_surat}, ${k.berlaku_sampai || null}, ${kat.kategori_id}, ${kat.jenis_kategori_id}, ${kat.kategori || null}, ${kat.jenis_kategori || null}, ${kodeRek}, ${kat.kelompok_kib || null}, ${k.file_id || null}, ${k.catatan || null}, ${userId}, ${userId})
       ` as unknown as Array<{ insertId: number }>;
       id = Number(res[0]?.insertId ?? 0);
     }
     // Barang tiap item: yang ada diperiksa (L68), yang baru dibuat/dipakai yang senama — di transaksi ini.
     const barang: Array<number | null> = [];
-    for (const it of input.item) barang.push((await tentukanBarang(tx, { barang_id: it.barang_id, barang_baru: it.barang_baru, satuan: it.satuan }, userId)) ?? null);
+    for (const it of input.item) barang.push((await tentukanBarang(tx, {
+      barang_id: it.barang_id, barang_baru: it.barang_baru, satuan: it.satuan,
+      ...(kat.terisi ? {
+        kategori_id: kat.kategori_id, jenis_kategori_id: kat.jenis_kategori_id,
+        kategori: kat.kategori, jenis_kategori: kat.jenis_kategori,
+        kode_rekening: kodeRek, kelompok_kib: kat.kelompok_kib, kategori_aset: kat.kategori_aset,
+      } : {}),
+    }, userId)) ?? null);
     const lama = new Set((await tx`SELECT id FROM bba_penawaran_item WHERE penawaran_id = ${id}` as Array<{ id: number }>).map(x => Number(x.id)));
     const dipertahankan = new Set(input.item.map(it => it.id).filter((x): x is number => !!x && lama.has(x)));
     const dibuang = [...lama].filter(x => !dipertahankan.has(x));

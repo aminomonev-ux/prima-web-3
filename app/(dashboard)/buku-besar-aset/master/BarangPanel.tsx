@@ -13,17 +13,28 @@ import { fetchJson } from '@/lib/shared/api';
 import { rapikanNamaBarang } from '@/lib/bba/barang';
 import Link from 'next/link';
 import type { BbaBarang, PemakaiBarang } from '@/lib/data/buku-besar-aset';
+import { pilihanDariBaris, type MasterKategoriData } from '@/lib/bba/kategori';
+import PilihKategori, { type NilaiKategori } from '../_components/PilihKategori';
 
 type Warna = { card: string; text: string; sub: string; border: string; rowOdd: string; input: string };
-type Isian = { nama: string; kategori_aset: string; satuan: string };
-const kosong: Isian = { nama: '', kategori_aset: '', satuan: '' };
+type Isian = { nama: string; satuan: string; kat: NilaiKategori };
+const katKosong: NilaiKategori = { kategori_id: null, jenis_kategori_id: null, kode_rekening: '' };
+const kosong: Isian = { nama: '', satuan: '', kat: katKosong };
+/** L87: kategori hanya dikirim kalau berubah — barang lama yang cuma punya teks kategori tidak dikosongkan diam-diam. */
+const bodyBarang = (isi: Isian, nama: string, asal?: NilaiKategori) => ({
+  nama, satuan: isi.satuan,
+  ...(!asal || JSON.stringify(asal) !== JSON.stringify(isi.kat)
+    ? { kategori_id: isi.kat.kategori_id, jenis_kategori_id: isi.kat.jenis_kategori_id, kode_rekening: isi.kat.kode_rekening.trim() || null }
+    : {}),
+});
+const ringkasKategori = (r: BbaBarang) => [r.kategori, r.jenis_kategori ?? r.kategori_aset, r.kode_rekening].filter(Boolean).join(' › ');
 
-type Props = { c: Warna; awal: BbaBarang[]; kategori: string[]; bolehUbah: boolean };
+type Props = { c: Warna; awal: BbaBarang[]; kategori: MasterKategoriData; bolehUbah: boolean };
 
 export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
   const [rows, setRows] = useState<BbaBarang[]>(awal);
   const [baru, setBaru] = useState<Isian>(kosong);
-  const [ubah, setUbah] = useState<{ id: number } & Isian | null>(null);
+  const [ubah, setUbah] = useState<{ id: number; asal: NilaiKategori } & Isian | null>(null);
   const [gabung, setGabung] = useState<{ dari: BbaBarang; ke: number | null } | null>(null);
   const [cari, setCari] = useState('');
   const [sibuk, setSibuk] = useState(false);
@@ -40,7 +51,7 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
     if (!nama) { toast.error('Nama barang wajib diisi'); return; }
     setSibuk(true);
     try {
-      const d = await fetchJson<unknown>('/api/buku-besar-aset/barang', { method: 'POST', body: JSON.stringify({ ...baru, nama }) });
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/barang', { method: 'POST', body: JSON.stringify(bodyBarang(baru, nama)) });
       if (!d.ok) { toast.error(d.message || 'Gagal menambah'); return; }
       toast.success('Barang ditambahkan'); setBaru(kosong); void muat();
     } finally { setSibuk(false); }
@@ -52,7 +63,7 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
     if (!nama) { toast.error('Nama barang wajib diisi'); return; }
     setSibuk(true);
     try {
-      const d = await fetchJson<unknown>('/api/buku-besar-aset/barang', { method: 'PATCH', body: JSON.stringify({ ...ubah, nama }) });
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/barang', { method: 'PATCH', body: JSON.stringify({ id: ubah.id, ...bodyBarang(ubah, nama, ubah.asal) }) });
       if (!d.ok) { toast.error(d.message || 'Gagal menyimpan'); return; }
       toast.success('Tersimpan'); setUbah(null); void muat();
     } finally { setSibuk(false); }
@@ -116,12 +127,11 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
           </div>
         </div>
       )}
-      <datalist id="bba-kategori-barang">{kategori.map(k => <option key={k} value={k} />)}</datalist>
       {bolehUbah && <div className="bba-mb-form" style={{ marginBottom: 14 }}>
         <input value={baru.nama} onChange={e => setBaru({ ...baru, nama: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') void tambah(); }} placeholder="Nama barang baru…" maxLength={160} style={inp} aria-label="Nama barang" />
-        <input value={baru.kategori_aset} onChange={e => setBaru({ ...baru, kategori_aset: e.target.value })} list="bba-kategori-barang" placeholder="Kategori (opsional)" maxLength={64} style={inp} aria-label="Kategori" />
         <input value={baru.satuan} onChange={e => setBaru({ ...baru, satuan: e.target.value })} placeholder="Satuan" maxLength={32} style={inp} aria-label="Satuan" />
         <PrimaButton variant="purple" onClick={() => void tambah()} disabled={sibuk}>+ Tambah</PrimaButton>
+        <div style={{ gridColumn: '1 / -1' }}><PilihKategori c={c} master={kategori} inp={inp} nilai={baru.kat} onChange={kat => setBaru({ ...baru, kat })} /></div>
       </div>}
       {rows.length > 8 && <input value={cari} onChange={e => setCari(e.target.value)} placeholder="Cari barang…" style={{ ...inp, width: '100%', marginBottom: 10 }} aria-label="Cari barang" />}
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
@@ -133,8 +143,8 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
                 <td style={td} colSpan={3}>
                   <div className="bba-mb-form">
                     <input value={ubah.nama} onChange={e => setUbah({ ...ubah, nama: e.target.value })} maxLength={160} style={inp} aria-label="Nama barang" />
-                    <input value={ubah.kategori_aset} onChange={e => setUbah({ ...ubah, kategori_aset: e.target.value })} list="bba-kategori-barang" placeholder="Kategori" maxLength={64} style={inp} aria-label="Kategori" />
                     <input value={ubah.satuan} onChange={e => setUbah({ ...ubah, satuan: e.target.value })} placeholder="Satuan" maxLength={32} style={inp} aria-label="Satuan" />
+                    <div style={{ gridColumn: '1 / -1' }}><PilihKategori c={c} master={kategori} inp={inp} nilai={ubah.kat} teksLama={r.jenis_kategori ?? r.kategori_aset} onChange={kat => setUbah({ ...ubah, kat })} /></div>
                   </div>
                 </td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -148,11 +158,11 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
               <tr key={r.id} style={{ background: i % 2 ? c.rowOdd : 'transparent' }}>
                 <td style={td} colSpan={3}>
                   <b>{r.nama}</b>
-                  <div style={{ color: c.sub, fontSize: 11.5 }}>{[r.kategori_aset, r.satuan, `${r.jumlah_item} item`, r.jumlah_pendataan ? `${r.jumlah_pendataan} pendataan` : '', r.jumlah_aset ? `${r.jumlah_aset} aset` : ''].filter(Boolean).join(' · ')}</div>
+                  <div style={{ color: c.sub, fontSize: 11.5 }}>{[ringkasKategori(r), r.satuan, `${r.jumlah_item} item`, r.jumlah_pendataan ? `${r.jumlah_pendataan} pendataan` : '', r.jumlah_aset ? `${r.jumlah_aset} aset` : ''].filter(Boolean).join(' · ')}</div>
                 </td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', width: 1 }}>
                   {bolehUbah && <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                    <Tip label="Ubah"><EditButton onClick={() => setUbah({ id: r.id, nama: r.nama, kategori_aset: r.kategori_aset ?? '', satuan: r.satuan ?? '' })} /></Tip>
+                    <Tip label="Ubah"><EditButton onClick={() => { const kat = { ...pilihanDariBaris(kategori, r), kode_rekening: r.kode_rekening ?? '' }; setUbah({ id: r.id, nama: r.nama, satuan: r.satuan ?? '', kat, asal: kat }); }} /></Tip>
                     <PrimaButton variant="ghost" size="sm" disabled={rows.length < 2} onClick={() => setGabung({ dari: r, ke: null })}>Gabungkan…</PrimaButton>
                     <Tip label={r.jumlah_item + r.jumlah_pendataan + r.jumlah_aset > 0 ? 'Masih dipakai — tekan untuk melihat pemakainya' : 'Hapus'}><DeleteButton iconSize={12} onClick={() => void hapus(r)} /></Tip>
                   </div>}
@@ -182,7 +192,7 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
         </div>
       )}
       <style>{`
-.bba-mb-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) 110px auto; gap: 8px; }
+.bba-mb-form { display: grid; grid-template-columns: minmax(0, 2fr) 110px auto; gap: 8px; }
 @media (max-width: 640px) { .bba-mb-form { grid-template-columns: 1fr 1fr; } .bba-mb-form > :first-child { grid-column: 1 / -1; } }
 `}</style>
     </div>

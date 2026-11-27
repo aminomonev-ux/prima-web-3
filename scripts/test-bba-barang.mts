@@ -142,7 +142,7 @@ ok('C7 ubahStatusProses: penerimaan dihitung & pagar diperiksa di bawah kunci, S
 ok('C8 ubahStatusProses: tgl_proses diisi saat DIPROSES, dikosongkan saat kembali Direncanakan, dipertahankan saat diterima',
   bReal.includes("const tglProses = input.status === 'DIPROSES' ? (input.tgl_proses ?? cur.tgl_proses ?? null)") && bReal.includes(": input.status === 'DIRENCANAKAN' ? null : cur.tgl_proses;"))
 const bImpor = badan(data, 'export async function commitImportUsulan(', '// ─── Master Kategori Aset')
-ok('C9 tarik usulan: tautan otomatis nama SAMA, kolom barang_id ikut bulkInsert', bImpor.includes('barangBernamaSama(c.nama_barang, daftarBarang)?.id ?? null') && bImpor.includes("'uraian', 'barang_id', 'sumber_anggaran'"))
+ok('C9 tarik usulan: tautan otomatis nama SAMA, kolom barang_id ikut bulkInsert', bImpor.includes('barangBernamaSama(c.nama_barang, barangList)?.id ?? null') && bImpor.includes("'barang_id', 'sumber_anggaran'"))
 const bGabung = badan(data, 'export async function gabungBarang(', 'export async function tautkanBarang(')
 ok('C10 gabung: kunci kedua barang, item pindah + versi naik, BARU hapus asal', bGabung.includes('FOR UPDATE') && bGabung.includes('version = version + 1')
   && bGabung.indexOf('UPDATE buku_besar_aset SET barang_id') < bGabung.indexOf('DELETE FROM bba_barang'))

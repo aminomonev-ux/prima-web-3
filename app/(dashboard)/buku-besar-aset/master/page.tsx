@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import { sql, queryOne } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
-import { listKategori, listBarang, listLokasi } from '@/lib/data/buku-besar-aset';
+import { listKategoriLengkap, listBarang, listLokasi } from '@/lib/data/buku-besar-aset';
 import MasterClient from './master-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
@@ -28,7 +28,7 @@ export default async function BukuBesarAsetMasterPage({ searchParams }: { search
 
   const { peta } = await izinLayarBba('master');
   const beku = await bekuLayarModul('buku_besar_aset');
-  const [initialKategori, initialBarang, initialLokasi] = await Promise.all([listKategori(), listBarang(), listLokasi()]);
+  const [initialKategori, initialBarang, initialLokasi] = await Promise.all([listKategoriLengkap(), listBarang(), listLokasi()]);
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (

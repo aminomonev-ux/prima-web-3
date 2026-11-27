@@ -98,7 +98,12 @@ export const AsetExcelSchema = z.discriminatedUnion('jenis', [
   z.object({ jenis: z.literal('REKAP') }),
   z.object({ jenis: z.literal('BI') }),
   z.object({ jenis: z.literal('KERJA') }),
-  z.object({ jenis: z.literal('RENCANA'), tahun: z.coerce.number().int().min(2020).max(2100) }),
+  z.object({
+    jenis: z.literal('RENCANA'),
+    tahun: z.coerce.number().int().min(2020).max(2100),
+    kategori: z.string().trim().max(100).optional(),
+    jenis_kategori: z.string().trim().max(255).optional(),
+  }),
 ]);
 
 export type CatatKondisiInput = z.infer<typeof CatatKondisiSchema>;

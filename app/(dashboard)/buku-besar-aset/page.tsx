@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import { sql, queryOne } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
-import { listAset, getAsetKpi, listKategori } from '@/lib/data/buku-besar-aset';
+import { listAset, getAsetKpi, listKategoriLengkap } from '@/lib/data/buku-besar-aset';
 import BukuBesarAsetClient from './buku-besar-aset-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
@@ -37,7 +37,7 @@ export default async function BukuBesarAsetPage({ searchParams }: { searchParams
   const tabCari = typeof cari.tab === 'string' && (TAB_RENCANA as readonly string[]).includes(cari.tab) ? cari.tab as TabRencana : null;
   const [initial, kategori, initialKpi] = await Promise.all([
     listAset({ tahun, page: 1, limit: 1000 }),
-    listKategori(),
+    listKategoriLengkap(),
     getAsetKpi({ tahun, page: 1, limit: 1000 }),
   ]);
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
@@ -52,7 +52,7 @@ export default async function BukuBesarAsetPage({ searchParams }: { searchParams
         initialResult={initial}
         initialKpi={initialKpi}
         initialTab={tabCari}
-        kategori={kategori.map(k => k.nama)}
+        kategori={kategori}
         beku={beku}
         izin={peta}
       />

@@ -40,6 +40,7 @@ async function susunBahan(tahun: number, rows: BbaRow[], penawaran?: ItemPenawar
     id: r.id, canonical_id: r.canonical_id, uraian: r.uraian, barang_nama: r.barang_nama, sumber_anggaran: r.sumber_anggaran, vol: r.vol, satuan: r.satuan,
     harga: r.harga, nilai_rencana: r.nilai_rencana, anggaran: r.anggaran, anggaran_nilai: r.anggaran_nilai, jenis_rencana: r.jenis_rencana, tgl_proses: r.tgl_proses,
     vol_realisasi: r.vol_realisasi, nilai_realisasi: r.nilai_realisasi, usulan_no: r.usulan_no, alasan: r.alasan,
+    kategori: r.kategori, jenis_kategori: r.jenis_kategori, kode_rekening: r.kode_rekening, kelompok_kib: r.kelompok_kib,
     status: r.status, usulan_keputusan: r.usulan_keputusan, barang_id: r.barang_id, ref: r.ref, belum_dicatat: r.belum_dicatat,
   }));
   const penerimaan = Object.values(per).flat().map(p => ({ id: p.id, rencana_id: p.rencana_id, tgl: p.tgl, vol: p.vol, harga_satuan: p.harga_satuan, nilai: p.nilai, merk_tipe: p.merk_tipe, penyedia: p.penyedia, catatan: p.catatan, pindahan: p.pindahan, ditempatkan: p.ditempatkan }));
@@ -53,8 +54,29 @@ async function tulisBuku(b: BahanBukuRencana, aktif: LembarBuku): Promise<Buffer
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-export async function bukuRencanaBuffer(tahun: number, aktif: LembarBuku = 'Ringkasan'): Promise<{ buffer: Buffer; nama: string; sidik: string }> {
-  const b = await bahanBukuRencana(tahun);
+export async function bukuRencanaBuffer(
+  tahun: number,
+  aktif: LembarBuku = 'Ringkasan',
+  filter?: { kategori?: string; jenis_kategori?: string },
+): Promise<{ buffer: Buffer; nama: string; sidik: string }> {
+  const dasar = await bahanBukuRencana(tahun);
+  const cocokKat = <T extends { kategori?: string | null; jenis_kategori?: string | null }>(x: T) => {
+    if (filter?.kategori && (x.kategori ?? '').toLowerCase() !== filter.kategori.toLowerCase()) return false;
+    if (filter?.jenis_kategori && (x.jenis_kategori ?? '').toLowerCase() !== filter.jenis_kategori.toLowerCase()) return false;
+    return true;
+  };
+  const b: BahanBukuRencana = (filter?.kategori || filter?.jenis_kategori)
+    ? (() => {
+        const rencana = dasar.rencana.filter(cocokKat);
+        const ids = new Set(rencana.map(r => r.id));
+        return {
+          ...dasar,
+          rencana,
+          penerimaan: dasar.penerimaan.filter(p => ids.has(p.rencana_id)),
+          penawaran: dasar.penawaran.filter(cocokKat),
+        };
+      })()
+    : dasar;
   return { buffer: await tulisBuku(b, aktif), nama: namaBerkasBukuRencana(tahun), sidik: sidikBahan(b) };
 }
 

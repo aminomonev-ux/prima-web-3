@@ -8,6 +8,11 @@ import { toDateStr, tanggalHariIniWIB, waktuSekarangWIB } from '@/lib/shared/wak
 import { fmtTanggal, batasCek, ringkasDimiliki, ringkasDimilikiPerBarang, type Dimiliki } from '@/lib/bba/kondisi';
 import { KUNCI_PENGATURAN, bacaPengaturan, type PengaturanBba } from '@/lib/bba/pengaturan';
 import type { Golongan, Kondisi } from '@/lib/bba/kib';
+import {
+  KATEGORI_LAMA_KIB, POLA_KODE_OPERASI, adalahModal, deteksiKelompokKib, gabungRekeningBlud, normalisasiKategoriItem,
+  type InfoKategoriItem, type JenisKategoriItem,
+  type MasterKategoriData, type RekeningBludItem,
+} from '@/lib/bba/kategori';
 import { alasanTakBisaUbahAnggaran, bolehDitandai, ANGGARAN, type JenisRencana, type Anggaran } from '@/lib/bba/rencana';
 import { semuaKurang, KALIMAT_KURANG } from '@/lib/bba/tahap';
 import type { DibeliLalu } from '@/lib/bba/penerimaan';
@@ -26,6 +31,7 @@ import {
 import type {
   BbaStatus, BbaCreateInput, BbaUpdateInput, BbaProsesInput, BbaQuery, ReferensiInput, BuktiCreateInput,
   BarangCreateInput, BarangUpdateInput, BarangTautkanInput, LokasiUpdateInput, AnggaranInput, SalinTahunLaluInput,
+  JenisKategoriCreateInput, JenisKategoriUpdateInput,
 } from './buku-besar-aset-schemas';
 
 export class BbaVersionConflictError extends Error {
@@ -110,6 +116,21 @@ export class BbaSasaranBekuError extends Error {
     this.name = 'BbaSasaranBekuError';
   }
 }
+export class BbaKategoriTidakDikenalError extends Error {
+  constructor(msg = 'Kategori atau kelompok KIB tidak ditemukan di Master Kategori.') { super(msg); this.name = 'BbaKategoriTidakDikenalError'; }
+}
+export class BbaKategoriDipakaiError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'BbaKategoriDipakaiError'; }
+}
+export class BbaKategoriBekuError extends Error {
+  constructor(status: BbaStatus, modal: boolean) {
+    super(`Item berstatus ${LABEL_STATUS[status]} — kategorinya tidak bisa dipindah ${modal ? 'dari Modal ke kategori lain' : 'ke Modal'}, karena kategori Modal yang menentukan barang masuk antrean Buku Aset. Jenis kategori lain di bawah kategori yang sama tetap boleh dipilih.`);
+    this.name = 'BbaKategoriBekuError';
+  }
+}
+export class BbaKategoriKembarError extends Error {
+  constructor(msg = 'Kategori tersebut sudah ada di Master Kategori.') { super(msg); this.name = 'BbaKategoriKembarError'; }
+}
 
 // A3: status & angka realisasi tidak boleh saling bertentangan
 function assertStatusConsistent(status: BbaStatus, vol: number, volReal: number, nilaiReal: number): void {
@@ -134,6 +155,11 @@ export interface BbaRow {
   kode_rekening: string | null;
   uraian: string;
   kategori_aset: string | null;
+  kategori_id: number | null;
+  jenis_kategori_id: number | null;
+  kategori: string | null;
+  jenis_kategori: string | null;
+  kelompok_kib: string | null;
   barang_id: number | null;
   barang_nama: string | null;
   sumber_anggaran: 'BLUD' | 'APBD' | 'DAK' | 'LAINNYA';
@@ -175,9 +201,17 @@ export interface BbaRow {
   jumlah_bukti: number;
 }
 
+/** Cermin SQL `adalahModal` (lib/bba/kategori.ts) untuk alias `b` — dipakai saringan, `belum_dicatat`, dan antrean Buku Aset. */
+export const SYARAT_MODAL = sql`(CASE
+  WHEN COALESCE(TRIM(b.kategori), '') <> '' THEN LOWER(TRIM(b.kategori)) = 'modal'
+  WHEN COALESCE(TRIM(b.kategori_aset), '') <> '' THEN UPPER(TRIM(b.kategori_aset)) IN (${[...KATEGORI_LAMA_KIB, 'ALKES']})
+  ELSE COALESCE(TRIM(b.kode_rekening), '') NOT REGEXP ${POLA_KODE_OPERASI}
+END)`;
+
 export const SELECT_COLS = sql`
   b.id, b.canonical_id, b.tahun_anggaran, b.origin, b.usulan_item_id, b.usulan_no,
   b.usulan_keputusan, b.ditolak_oleh, b.sub_bidang, b.kode_rekening, b.uraian, b.kategori_aset,
+  b.kategori_id, b.jenis_kategori_id, b.kategori, b.jenis_kategori, b.kelompok_kib,
   b.barang_id, g.nama AS barang_nama,
   b.sumber_anggaran, b.vol, b.satuan, b.harga, b.nilai_rencana, b.status,
   DATE_FORMAT(b.tgl_proses, '%Y-%m-%d') AS tgl_proses,
@@ -192,6 +226,7 @@ export const SELECT_COLS = sql`
       SELECT COUNT(*) FROM bba_rencana_aset rr JOIN bba_aset ga ON ga.id = rr.aset_id AND ga.status = 'AKTIF'
       WHERE rr.rencana_id = b.id AND NOT EXISTS (SELECT 1 FROM bba_aset_riwayat rw WHERE rw.aset_id = ga.id AND rw.jenis = 'REHAB'
         AND JSON_UNQUOTE(JSON_EXTRACT(rw.sesudah, '$.rencana')) = b.canonical_id))
+    WHEN NOT ${SYARAT_MODAL} THEN 0
     ELSE (
       SELECT COALESCE(SUM(GREATEST(0, FLOOR(pn.vol + 0.005) - (SELECT COUNT(*) FROM bba_aset ta WHERE ta.penerimaan_id = pn.id))), 0)
       FROM bba_penerimaan pn WHERE pn.rencana_id = b.id AND pn.pindahan = 0)
@@ -211,6 +246,15 @@ export const FROM_JOIN = sql`FROM buku_besar_aset b LEFT JOIN usulan_items ui ON
 export function mapRow(r: Record<string, unknown>): BbaRow {
   const nilai_rencana   = Number(r.nilai_rencana ?? 0);
   const nilai_realisasi = Number(r.nilai_realisasi ?? 0);
+  const kat = normalisasiKategoriItem({
+    kategori_id: r.kategori_id == null ? null : Number(r.kategori_id),
+    jenis_kategori_id: r.jenis_kategori_id == null ? null : Number(r.jenis_kategori_id),
+    kategori: (r.kategori as string | null) ?? null,
+    jenis_kategori: (r.jenis_kategori as string | null) ?? null,
+    kode_rekening: (r.kode_rekening as string | null) ?? null,
+    kelompok_kib: (r.kelompok_kib as string | null) ?? null,
+    kategori_aset: (r.kategori_aset as string | null) ?? null,
+  });
   return {
     id: Number(r.id), canonical_id: String(r.canonical_id ?? ''),
     tahun_anggaran: Number(r.tahun_anggaran),
@@ -220,8 +264,13 @@ export function mapRow(r: Record<string, unknown>): BbaRow {
     usulan_keputusan: r.usulan_keputusan as BbaRow['usulan_keputusan'],
     ditolak_oleh: r.ditolak_oleh as BbaRow['ditolak_oleh'],
     sub_bidang: r.sub_bidang as string | null,
-    kode_rekening: r.kode_rekening as string | null, uraian: String(r.uraian ?? ''),
+    kode_rekening: kat.kode_rekening, uraian: String(r.uraian ?? ''),
     kategori_aset: r.kategori_aset as string | null,
+    kategori_id: r.kategori_id == null ? null : Number(r.kategori_id),
+    jenis_kategori_id: r.jenis_kategori_id == null ? null : Number(r.jenis_kategori_id),
+    kategori: kat.kategori,
+    jenis_kategori: kat.jenis_kategori,
+    kelompok_kib: kat.kelompok_kib,
     barang_id: r.barang_id == null ? null : Number(r.barang_id), barang_nama: r.barang_nama as string | null,
     sumber_anggaran: (r.sumber_anggaran ?? 'BLUD') as BbaRow['sumber_anggaran'],
     vol: Number(r.vol ?? 0), satuan: r.satuan as string | null, harga: Number(r.harga ?? 0),
@@ -292,7 +341,16 @@ function buildWhere(f: BbaQuery) {
   if (f.tahun)     where = sql`${where} AND b.tahun_anggaran = ${f.tahun}`;
   if (f.status)    where = sql`${where} AND b.status = ${f.status}`;
   if (f.sumber)    where = sql`${where} AND b.sumber_anggaran = ${f.sumber}`;
-  if (f.kategori)  where = sql`${where} AND b.kategori_aset = ${f.kategori}`;
+  if (f.kategori) {
+    if (f.kategori.trim().toLowerCase() === 'modal') {
+      where = sql`${where} AND ${SYARAT_MODAL}`;
+    } else {
+      where = sql`${where} AND b.kategori = ${f.kategori}`;
+    }
+  }
+  if (f.jenis_kategori) {
+    where = sql`${where} AND (b.jenis_kategori = ${f.jenis_kategori} OR (b.jenis_kategori IS NULL AND b.kategori_aset = ${f.jenis_kategori}))`;
+  }
   if (f.pj)        where = sql`${where} AND b.penanggung_jawab = ${f.pj}`;
   if (f.origin)    where = sql`${where} AND b.origin = ${f.origin}`;
   if (f.keputusan) where = sql`${where} AND b.usulan_keputusan = ${f.keputusan}`;
@@ -301,7 +359,7 @@ function buildWhere(f: BbaQuery) {
   if (f.anggaran)  where = sql`${where} AND b.anggaran = ${f.anggaran}`;
   if (f.q) {
     const term = `%${escapeLike(f.q)}%`;
-    where = sql`${where} AND (b.uraian LIKE ${term} OR b.kode_rekening LIKE ${term} OR b.canonical_id LIKE ${term} OR b.usulan_no LIKE ${term})`;
+    where = sql`${where} AND (b.uraian LIKE ${term} OR b.kode_rekening LIKE ${term} OR b.canonical_id LIKE ${term} OR b.usulan_no LIKE ${term} OR b.kategori LIKE ${term} OR b.jenis_kategori LIKE ${term})`;
   }
   return where;
 }
@@ -510,19 +568,178 @@ async function pastikanBarang(q: Penanya, ids: number[]): Promise<void> {
   if (rows.length !== unik.length) throw new BbaBarangTidakDikenalError();
 }
 
+/** L68 soft-FK: validasi & selesaikan struktur kategori 2 tingkat + kelompok_kib di dalam transaksi. */
+export async function selesaikanKategori(
+  q: Penanya,
+  input: InfoKategoriItem,
+): Promise<{
+  terisi: boolean;
+  kategori_id: number | null;
+  jenis_kategori_id: number | null;
+  kategori: string | null;
+  jenis_kategori: string | null;
+  kode_rekening: string | null;
+  kelompok_kib: string | null;
+  kategori_aset: string | null;
+}> {
+  const adaField =
+    input.kategori_id !== undefined ||
+    input.jenis_kategori_id !== undefined ||
+    input.kategori !== undefined ||
+    input.jenis_kategori !== undefined ||
+    input.kelompok_kib !== undefined ||
+    input.kategori_aset !== undefined;
+  if (!adaField) {
+    return {
+      terisi: false,
+      kategori_id: null,
+      jenis_kategori_id: null,
+      kategori: null,
+      jenis_kategori: null,
+      kode_rekening: null,
+      kelompok_kib: null,
+      kategori_aset: null,
+    };
+  }
+
+  let kategori_id: number | null = null;
+  let jenis_kategori_id: number | null = null;
+  let kategori: string | null = null;
+  let jenis_kategori: string | null = input.jenis_kategori?.trim() || null;
+  let kode_rekening: string | null = input.kode_rekening?.trim() || null;
+  let kelompok_kib: string | null = input.kelompok_kib?.trim() || null;
+  const lama = input.kategori_aset?.trim() || null;
+
+  if (input.jenis_kategori_id) {
+    const rows = await q`
+      SELECT k.id, k.kategori_id, i.nama AS kategori_nama, k.nama AS jenis_nama, k.kode_rekening, k.kelompok_kib
+        FROM bba_kategori_aset k
+        JOIN bba_kategori_induk i ON i.id = k.kategori_id
+       WHERE k.id = ${input.jenis_kategori_id}
+       LIMIT 1 FOR SHARE
+    ` as Array<Record<string, unknown>>;
+    if (rows.length === 0) {
+      throw new BbaKategoriTidakDikenalError('Jenis kategori tidak ditemukan — mungkin baru saja dihapus. Pilih ulang jenis kategorinya.');
+    }
+    const r = rows[0];
+    if (input.kategori_id && Number(r.kategori_id) !== input.kategori_id) {
+      throw new BbaKategoriTidakDikenalError('Jenis kategori tidak sesuai dengan kategori induk yang dipilih.');
+    }
+    kategori_id = Number(r.kategori_id);
+    kategori = String(r.kategori_nama);
+    jenis_kategori_id = Number(r.id);
+    jenis_kategori = String(r.jenis_nama);
+    if (input.kode_rekening === undefined) kode_rekening = r.kode_rekening ? String(r.kode_rekening) : null;
+    if (input.kelompok_kib === undefined) kelompok_kib = r.kelompok_kib ? String(r.kelompok_kib) : null;
+  } else if (input.kategori_id) {
+    const rows = await q`SELECT id, nama FROM bba_kategori_induk WHERE id = ${input.kategori_id} LIMIT 1 FOR SHARE` as Array<Record<string, unknown>>;
+    if (rows.length === 0) throw new BbaKategoriTidakDikenalError('Kategori induk tidak ditemukan di Master Kategori.');
+    kategori_id = Number(rows[0].id);
+    kategori = String(rows[0].nama);
+  } else if (input.kategori?.trim()) {
+    const rows = await q`SELECT id, nama FROM bba_kategori_induk WHERE LOWER(TRIM(nama)) = LOWER(TRIM(${input.kategori.trim()})) LIMIT 1 FOR SHARE` as Array<Record<string, unknown>>;
+    if (rows.length === 0) throw new BbaKategoriTidakDikenalError(`Kategori "${input.kategori.trim()}" tidak ditemukan di Master Kategori.`);
+    kategori_id = Number(rows[0].id);
+    kategori = String(rows[0].nama);
+  } else if (lama) {
+    const cocokJenis = await q`
+      SELECT k.id, k.kategori_id, i.nama AS kategori_nama, k.nama AS jenis_nama, k.kode_rekening, k.kelompok_kib
+        FROM bba_kategori_aset k
+        JOIN bba_kategori_induk i ON i.id = k.kategori_id
+       WHERE LOWER(TRIM(k.nama)) = LOWER(TRIM(${lama}))
+       ORDER BY (LOWER(TRIM(i.nama)) = 'modal') DESC, k.id ASC
+       LIMIT 1 FOR SHARE
+    ` as Array<Record<string, unknown>>;
+    if (cocokJenis.length > 0) {
+      const r = cocokJenis[0];
+      kategori_id = Number(r.kategori_id);
+      kategori = String(r.kategori_nama);
+      jenis_kategori_id = Number(r.id);
+      jenis_kategori = String(r.jenis_nama);
+      if (input.kode_rekening === undefined) kode_rekening = r.kode_rekening ? String(r.kode_rekening) : null;
+      if (input.kelompok_kib === undefined) kelompok_kib = r.kelompok_kib ? String(r.kelompok_kib) : null;
+    } else if (KATEGORI_LAMA_KIB.has(lama.toUpperCase())) {
+      const modalRow = await q`SELECT id, nama FROM bba_kategori_induk WHERE LOWER(TRIM(nama)) = 'modal' LIMIT 1 FOR SHARE` as Array<Record<string, unknown>>;
+      kategori_id = modalRow.length ? Number(modalRow[0].id) : null;
+      kategori = modalRow.length ? String(modalRow[0].nama) : 'Modal';
+      jenis_kategori = lama;
+      kelompok_kib = kelompok_kib || lama.toUpperCase();
+    } else {
+      // Nilai bebas lama (mis. 'ALKES' di data/uji kompatibilitas) dipertahankan apa adanya.
+      return {
+        terisi: true,
+        kategori_id: null,
+        jenis_kategori_id: null,
+        kategori: null,
+        jenis_kategori: null,
+        kode_rekening,
+        kelompok_kib: null,
+        kategori_aset: lama.slice(0, 64),
+      };
+    }
+  }
+
+  // Jika induk terisi + jenis_kategori dikirim sebagai teks tanpa jenis_kategori_id, tautkan bila ada yang cocok namanya.
+  if (kategori_id && !jenis_kategori_id && jenis_kategori) {
+    const m = await q`
+      SELECT id, nama, kode_rekening, kelompok_kib
+        FROM bba_kategori_aset
+       WHERE kategori_id = ${kategori_id} AND LOWER(TRIM(nama)) = LOWER(TRIM(${jenis_kategori}))
+       ORDER BY id ASC LIMIT 1 FOR SHARE
+    ` as Array<Record<string, unknown>>;
+    if (m.length > 0) {
+      jenis_kategori_id = Number(m[0].id);
+      jenis_kategori = String(m[0].nama);
+      if (input.kode_rekening === undefined && !kode_rekening) kode_rekening = m[0].kode_rekening ? String(m[0].kode_rekening) : null;
+      if (input.kelompok_kib === undefined && !kelompok_kib) kelompok_kib = m[0].kelompok_kib ? String(m[0].kelompok_kib) : null;
+    }
+  }
+
+  const adalahKatModal = kategori?.toLowerCase() === 'modal';
+  if (!adalahKatModal) {
+    kelompok_kib = null;
+  } else {
+    if (!kelompok_kib) {
+      kelompok_kib = deteksiKelompokKib(kode_rekening, jenis_kategori);
+    }
+    if (kelompok_kib) {
+      const kibRow = await q`SELECT nama FROM bba_kelompok_kib WHERE LOWER(TRIM(nama)) = LOWER(TRIM(${kelompok_kib})) LIMIT 1 FOR SHARE` as Array<Record<string, unknown>>;
+      if (kibRow.length === 0) {
+        throw new BbaKategoriTidakDikenalError(`Kelompok KIB "${kelompok_kib}" tidak ditemukan di Master Kategori.`);
+      }
+      kelompok_kib = String(kibRow[0].nama);
+    }
+  }
+
+  const kategori_aset = (kelompok_kib || jenis_kategori || kategori || lama || null)?.slice(0, 64) || null;
+  return { terisi: true, kategori_id, jenis_kategori_id, kategori, jenis_kategori, kode_rekening, kelompok_kib, kategori_aset };
+}
+
 /** Pakai barang yang bernama sama (kolasi ci) atau buat baru — dalam transaksi pemanggil. */
-async function barangDariNama(q: Penanya, namaMentah: string, userId: number, bawaan: { kategori_aset?: string | null; satuan?: string | null } = {}): Promise<number> {
+async function barangDariNama(
+  q: Penanya,
+  namaMentah: string,
+  userId: number,
+  bawaan: InfoKategoriItem & { satuan?: string | null } = {},
+): Promise<number> {
   const nama = rapikanNamaBarang(namaMentah);
+  const kat = await selesaikanKategori(q, bawaan);
   const res = await q`
-    INSERT INTO bba_barang (nama, kategori_aset, satuan, created_by)
-    VALUES (${nama}, ${bawaan.kategori_aset || null}, ${bawaan.satuan || null}, ${userId})
+    INSERT INTO bba_barang (nama, kategori_aset, kategori_id, jenis_kategori_id, kategori, jenis_kategori, kode_rekening, kelompok_kib, satuan, created_by)
+    VALUES (${nama}, ${kat.kategori_aset || bawaan.kategori_aset || null}, ${kat.kategori_id}, ${kat.jenis_kategori_id},
+            ${kat.kategori}, ${kat.jenis_kategori}, ${bawaan.kode_rekening?.trim() || kat.kode_rekening}, ${kat.kelompok_kib},
+            ${bawaan.satuan || null}, ${userId})
     ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
   ` as unknown as Array<{ insertId: number }>;
   return Number(res[0]?.insertId ?? 0);
 }
 
 /** `undefined` = jangan sentuh, `null` = lepas, angka = barang terpilih/baru. Dipakai juga kartu aset (bba-aset.ts). */
-export async function tentukanBarang(q: Penanya, input: { barang_id?: number | null; barang_baru?: string | null; kategori_aset?: string | null; satuan?: string | null }, userId: number): Promise<number | null | undefined> {
+export async function tentukanBarang(
+  q: Penanya,
+  input: { barang_id?: number | null; barang_baru?: string | null; satuan?: string | null } & InfoKategoriItem,
+  userId: number,
+): Promise<number | null | undefined> {
   if (input.barang_baru) return barangDariNama(q, input.barang_baru, userId, input);
   if (input.barang_id) { await pastikanBarang(q, [input.barang_id]); return input.barang_id; }
   return input.barang_id === null ? null : undefined;
@@ -530,14 +747,38 @@ export async function tentukanBarang(q: Penanya, input: { barang_id?: number | n
 
 export async function createAset(input: BbaCreateInput, userId: number): Promise<{ id: number; canonical_id: string }> {
   return withTransaction(async ({ tx, conn }) => {
-    const barangId = (await tentukanBarang(tx, input, userId)) ?? null;
+    const kat = await selesaikanKategori(tx, {
+      kategori_id: input.kategori_id,
+      jenis_kategori_id: input.jenis_kategori_id,
+      kategori: input.kategori,
+      jenis_kategori: input.jenis_kategori,
+      kode_rekening: input.kode_rekening,
+      kelompok_kib: input.kelompok_kib,
+      kategori_aset: input.kategori_aset,
+    });
+    const kodeRek = input.kode_rekening !== undefined ? (input.kode_rekening?.trim() || null) : kat.kode_rekening;
+    const barangId = (await tentukanBarang(tx, {
+      barang_id: input.barang_id,
+      barang_baru: input.barang_baru,
+      satuan: input.satuan,
+      ...(kat.terisi ? {
+        kategori_id: kat.kategori_id,
+        jenis_kategori_id: kat.jenis_kategori_id,
+        kategori: kat.kategori,
+        jenis_kategori: kat.jenis_kategori,
+        kode_rekening: kodeRek,
+        kelompok_kib: kat.kelompok_kib,
+        kategori_aset: kat.kategori_aset,
+      } : { kategori_aset: input.kategori_aset, kode_rekening: kodeRek }),
+    }, userId)) ?? null;
     const res = await tx`
       INSERT INTO buku_besar_aset
-        (canonical_id, tahun_anggaran, kode_rekening, uraian, kategori_aset, barang_id, jenis_rencana, alasan, sumber_anggaran,
-         vol, satuan, harga, nilai_rencana, status, penanggung_jawab, keterangan, created_by, updated_by)
+        (canonical_id, tahun_anggaran, kode_rekening, uraian, kategori_aset, kategori_id, jenis_kategori_id, kategori, jenis_kategori, kelompok_kib,
+         barang_id, jenis_rencana, alasan, sumber_anggaran, vol, satuan, harga, nilai_rencana, status, penanggung_jawab, keterangan, created_by, updated_by)
       VALUES
-        ('', ${input.tahun_anggaran}, ${input.kode_rekening ?? null}, ${input.uraian}, ${input.kategori_aset ?? null}, ${barangId},
-         ${input.jenis_rencana ?? null}, ${input.alasan || null}, ${input.sumber_anggaran},
+        ('', ${input.tahun_anggaran}, ${kodeRek}, ${input.uraian}, ${kat.terisi ? kat.kategori_aset : (input.kategori_aset ?? null)},
+         ${kat.kategori_id}, ${kat.jenis_kategori_id}, ${kat.kategori}, ${kat.jenis_kategori}, ${kat.kelompok_kib},
+         ${barangId}, ${input.jenis_rencana ?? null}, ${input.alasan || null}, ${input.sumber_anggaran},
          ${input.vol}, ${input.satuan ?? null}, ${input.harga}, ${input.vol * input.harga}, 'DIRENCANAKAN', ${input.penanggung_jawab ?? null}, ${input.keterangan ?? null}, ${userId}, ${userId})
     ` as unknown as Array<{ insertId: number }>;
     const id = Number(res[0]?.insertId ?? 0);
@@ -593,9 +834,8 @@ export async function updateAset(input: BbaUpdateInput, userId: number): Promise
   const nilaiRencana = cur.origin === 'USULAN' ? cur.nilai_rencana : volBaru * (input.harga ?? cur.harga);
   // A5: undefined = pertahankan, null = kosongkan — jangan dilipat ke COALESCE. version CAS (L48).
   let set = sql`nilai_rencana = ${nilaiRencana}, version = version + 1, updated_by = ${userId}`;
-  if (input.kode_rekening !== undefined)    set = sql`${set}, kode_rekening = ${input.kode_rekening}`;
+  if (input.kode_rekening !== undefined)    set = sql`${set}, kode_rekening = ${input.kode_rekening?.trim() || null}`;
   if (input.uraian !== undefined)           set = sql`${set}, uraian = ${input.uraian}`;
-  if (input.kategori_aset !== undefined)    set = sql`${set}, kategori_aset = ${input.kategori_aset}`;
   if (input.sumber_anggaran !== undefined)  set = sql`${set}, sumber_anggaran = ${input.sumber_anggaran}`;
   if (input.vol !== undefined)              set = sql`${set}, vol = ${input.vol}`;
   if (input.satuan !== undefined)           set = sql`${set}, satuan = ${input.satuan}`;
@@ -607,12 +847,57 @@ export async function updateAset(input: BbaUpdateInput, userId: number): Promise
   // Referensi & tautan barang ikut Simpan item yang SAMA (satu tombol, satu transaksi, satu CAS — §4.1/§5.1/L78).
   // CAS gagal → barang baru yang barusan dibuat ikut batal (rollback).
   await withTransaction(async ({ tx, conn }) => {
-    // Versi diperiksa DULU di bawah kunci: modal basi (mis. barangnya baru digabung orang lain)
+    // Kategori dikunci (FOR SHARE) SEBELUM baris item: urutan master → pemakai sama dengan hapus/ubah jenis kategori.
+    const kat = await selesaikanKategori(tx, {
+      kategori_id: input.kategori_id,
+      jenis_kategori_id: input.jenis_kategori_id,
+      kategori: input.kategori,
+      jenis_kategori: input.jenis_kategori,
+      kode_rekening: input.kode_rekening,
+      kelompok_kib: input.kelompok_kib,
+      kategori_aset: input.kategori_aset,
+    });
+    // Versi diperiksa di bawah kunci: modal basi (mis. barangnya baru digabung orang lain)
     // harus dapat 409 lalu memuat ulang, bukan "barang tidak ditemukan" — dan tanpa sempat membuat barang.
     const kini = await tx`SELECT version FROM buku_besar_aset WHERE id = ${input.id} FOR UPDATE` as Array<{ version: number }>;
     if (Number(kini[0]?.version) !== input.expected_version) throw new BbaVersionConflictError();
-    const barangId = await tentukanBarang(tx, { ...input, kategori_aset: input.kategori_aset ?? cur.kategori_aset, satuan: input.satuan ?? cur.satuan }, userId);
-    const setAkhir = barangId === undefined ? set : sql`${set}, barang_id = ${barangId}`;
+    // Modal/bukan menentukan antrean Buku Aset: sesudah barang diterima, berpindah sisi membuat unit yang
+    // menunggu register lenyap dari antrean (atau muncul untuk belanja habis pakai).
+    if (kat.terisi && sasaranBeku(cur.status) && adalahModal(kat) !== adalahModal(cur)) {
+      throw new BbaKategoriBekuError(cur.status, adalahModal(cur));
+    }
+    let setKat = set;
+    if (kat.terisi) {
+      setKat = sql`${setKat}, kategori_id = ${kat.kategori_id}, jenis_kategori_id = ${kat.jenis_kategori_id},
+        kategori = ${kat.kategori}, jenis_kategori = ${kat.jenis_kategori}, kelompok_kib = ${kat.kelompok_kib},
+        kategori_aset = ${kat.kategori_aset}`;
+      if (input.kode_rekening === undefined && kat.kode_rekening !== null) {
+        setKat = sql`${setKat}, kode_rekening = ${kat.kode_rekening}`;
+      }
+    }
+    const barangId = await tentukanBarang(tx, {
+      barang_id: input.barang_id,
+      barang_baru: input.barang_baru,
+      satuan: input.satuan ?? cur.satuan,
+      ...(kat.terisi ? {
+        kategori_id: kat.kategori_id,
+        jenis_kategori_id: kat.jenis_kategori_id,
+        kategori: kat.kategori,
+        jenis_kategori: kat.jenis_kategori,
+        kode_rekening: input.kode_rekening !== undefined ? (input.kode_rekening?.trim() || null) : (kat.kode_rekening ?? cur.kode_rekening),
+        kelompok_kib: kat.kelompok_kib,
+        kategori_aset: kat.kategori_aset,
+      } : {
+        kategori_id: cur.kategori_id,
+        jenis_kategori_id: cur.jenis_kategori_id,
+        kategori: cur.kategori,
+        jenis_kategori: cur.jenis_kategori,
+        kode_rekening: input.kode_rekening ?? cur.kode_rekening,
+        kelompok_kib: cur.kelompok_kib,
+        kategori_aset: cur.kategori_aset,
+      }),
+    }, userId);
+    const setAkhir = barangId === undefined ? setKat : sql`${setKat}, barang_id = ${barangId}`;
     const res = await tx`
       UPDATE buku_besar_aset SET ${setAkhir}
       WHERE id = ${input.id} AND version = ${input.expected_version}
@@ -769,11 +1054,13 @@ export async function salinTahunLalu(input: SalinTahunLaluInput, userId: number)
     const salin = semua.filter(r => sah.has(r.id));
     if (salin.length === 0) return { disalin: 0, dilewati: semua.length };
     await bulkInsert('buku_besar_aset', [
-      'canonical_id', 'tahun_anggaran', 'origin', 'sub_bidang', 'kode_rekening', 'uraian', 'kategori_aset', 'barang_id',
+      'canonical_id', 'tahun_anggaran', 'origin', 'sub_bidang', 'kode_rekening', 'uraian', 'kategori_aset',
+      'kategori_id', 'jenis_kategori_id', 'kategori', 'jenis_kategori', 'kelompok_kib', 'barang_id',
       'jenis_rencana', 'alasan', 'sumber_anggaran', 'vol', 'satuan', 'harga', 'nilai_rencana', 'status', 'anggaran',
       'penanggung_jawab', 'keterangan', 'asal_rencana_id', 'created_by', 'updated_by',
     ], salin.map(r => [
-      r.canonical_id, input.tahun, 'MANUAL', r.sub_bidang, r.kode_rekening, r.uraian, r.kategori_aset, r.barang_id,
+      r.canonical_id, input.tahun, 'MANUAL', r.sub_bidang, r.kode_rekening, r.uraian, r.kategori_aset,
+      r.kategori_id, r.jenis_kategori_id, r.kategori, r.jenis_kategori, r.kelompok_kib, r.barang_id,
       r.jenis_rencana, r.alasan, r.sumber_anggaran, r.vol, r.satuan, r.harga, r.vol * r.harga, 'DIRENCANAKAN', 'BELUM',
       r.penanggung_jawab, r.keterangan, r.id, userId, userId,
     ]), conn);
@@ -873,8 +1160,8 @@ export async function pembelianSebelumnya(barangId: number, kecualiId?: number):
 
 export interface RencanaExcel { rows: BbaRow[]; dimiliki: Map<number, Dimiliki>; sasaran: Map<number, string[]> }
 
-export async function rencanaUntukExcel(tahun: number): Promise<RencanaExcel> {
-  const [rows, milik, batas, sas] = await Promise.all([
+export async function rencanaUntukExcel(tahun: number, filter?: { kategori?: string; jenis_kategori?: string }): Promise<RencanaExcel> {
+  const [rowsRaw, milik, batas, sas] = await Promise.all([
     queryMany<Record<string, unknown>>(sql`SELECT ${SELECT_COLS} ${FROM_JOIN} WHERE b.tahun_anggaran = ${tahun} ORDER BY b.canonical_id`),
     ambilDimiliki(),
     batasCekSekarang(),
@@ -889,7 +1176,16 @@ export async function rencanaUntukExcel(tahun: number): Promise<RencanaExcel> {
     const k = Number(s.rencana_id);
     sasaran.set(k, [...(sasaran.get(k) ?? []), `${String(s.nama ?? '')}${s.register ? ` reg. ${s.register}` : ''}`]);
   }
-  return { rows: rows.map(mapRow), dimiliki: ringkasDimilikiPerBarang(milik, batas), sasaran };
+  let rows = rowsRaw.map(mapRow);
+  if (filter?.kategori?.trim()) {
+    const target = filter.kategori.trim().toLowerCase();
+    rows = rows.filter(r => (r.kategori ?? '').toLowerCase() === target);
+  }
+  if (filter?.jenis_kategori?.trim()) {
+    const targetJ = filter.jenis_kategori.trim().toLowerCase();
+    rows = rows.filter(r => (r.jenis_kategori ?? '').toLowerCase() === targetJ);
+  }
+  return { rows, dimiliki: ringkasDimilikiPerBarang(milik, batas), sasaran };
 }
 
 // ─── Import Belanja Modal dari Usulan Kebutuhan ─────────────────────────────
@@ -902,6 +1198,7 @@ export interface BbaImportCandidate {
   usulan_no: string;
   sub_bidang: string;
   pengusul: string;
+  jenis_belanja: string;
   nama_barang: string;
   uraian: string;
   vol: number;
@@ -914,7 +1211,7 @@ export interface BbaImportCandidate {
 
 function candidateQuery(tahun: number) {
   return sql`
-    SELECT ui.id AS usulan_item_id, ui.no_usulan, ui.sub_bidang, ui.pengusul,
+    SELECT ui.id AS usulan_item_id, ui.no_usulan, ui.sub_bidang, ui.pengusul, ui.jenis_belanja,
            ui.nama_barang, ui.spesifikasi, ui.satuan, ui.status,
            ui.kasubag_putusan, ui.kabag_putusan, ui.kabag_by,
            COALESCE(ui.kasubag_qty,   ui.admin_qty,   ui.qty)       AS vol_final,
@@ -949,6 +1246,7 @@ function mapCandidate(r: Record<string, unknown>): BbaImportCandidate {
     usulan_no: String(r.no_usulan ?? ''),
     sub_bidang: String(r.sub_bidang ?? ''),
     pengusul: String(r.pengusul ?? ''),
+    jenis_belanja: String(r.jenis_belanja ?? ''),
     nama_barang: String(r.nama_barang ?? ''),
     uraian: spesifikasi ? `${String(r.nama_barang ?? '')} — ${spesifikasi}` : String(r.nama_barang ?? ''),
     vol, satuan: String(r.satuan ?? 'unit'), harga, nilai_rencana, keputusan, ditolak_oleh,
@@ -968,17 +1266,54 @@ export async function commitImportUsulan(tahun: number, userId: number): Promise
     if (cands.length === 0) return { inserted: 0, tertaut: 0 };
     // §5.1: nama_barang yang (sesudah dirapikan) sama dengan nama barang di Master tertaut
     // otomatis; sisanya NULL — ditautkan lewat spanduk "belum ditautkan". Tidak membuat barang baru.
-    const daftarBarang = (await tx`SELECT id, nama FROM bba_barang FOR SHARE` as Array<{ id: number; nama: string }>).map(b => ({ id: Number(b.id), nama: String(b.nama) }));
-    const barangPer = cands.map(c => barangBernamaSama(c.nama_barang, daftarBarang)?.id ?? null);
+    const [daftarBarang, modalRows, jenisModalRows] = await Promise.all([
+      tx`SELECT id, nama FROM bba_barang FOR SHARE` as Promise<Array<{ id: number; nama: string }>>,
+      tx`SELECT id, nama FROM bba_kategori_induk WHERE LOWER(TRIM(nama)) = 'modal' LIMIT 1 FOR SHARE` as Promise<Array<{ id: number; nama: string }>>,
+      tx`
+        SELECT k.id, k.nama, k.kode_rekening, k.kelompok_kib
+        FROM bba_kategori_aset k JOIN bba_kategori_induk i ON i.id = k.kategori_id
+        WHERE LOWER(TRIM(i.nama)) = 'modal'
+        ORDER BY k.urutan ASC, k.id ASC FOR SHARE
+      ` as Promise<Array<{ id: number; nama: string; kode_rekening: string | null; kelompok_kib: string | null }>>,
+    ]);
+    const barangList = daftarBarang.map(b => ({ id: Number(b.id), nama: String(b.nama) }));
+    const barangPer = cands.map(c => barangBernamaSama(c.nama_barang, barangList)?.id ?? null);
+    const modalId = modalRows[0]?.id ? Number(modalRows[0].id) : null;
+    const modalNama = modalRows[0]?.nama ? String(modalRows[0].nama) : 'Modal';
+    const petakanKategoriUsulan = (c: BbaImportCandidate) => {
+      const kibTerdeteksi = deteksiKelompokKib(null, `${c.jenis_belanja} ${c.uraian}`);
+      const jenisMatch = jenisModalRows.find(j =>
+        (kibTerdeteksi && (j.kelompok_kib?.toUpperCase() === kibTerdeteksi || j.nama.toUpperCase() === kibTerdeteksi))
+        || j.nama.toLowerCase() === c.jenis_belanja.toLowerCase(),
+      );
+      const jenisNama = jenisMatch?.nama ?? kibTerdeteksi ?? null;
+      const kib = jenisMatch?.kelompok_kib ?? kibTerdeteksi ?? null;
+      const kode = jenisMatch?.kode_rekening ?? null;
+      const katAset = (kib || jenisNama || modalNama).slice(0, 64);
+      return {
+        kategori_id: modalId,
+        jenis_kategori_id: jenisMatch ? Number(jenisMatch.id) : null,
+        kategori: modalNama,
+        jenis_kategori: jenisNama,
+        kode_rekening: kode,
+        kelompok_kib: kib,
+        kategori_aset: katAset,
+      };
+    };
+    const katPer = cands.map(petakanKategoriUsulan);
     const { affectedRows } = await bulkInsert('buku_besar_aset', [
       'canonical_id', 'tahun_anggaran', 'origin', 'usulan_item_id', 'usulan_no',
-      'usulan_keputusan', 'ditolak_oleh', 'sub_bidang', 'uraian', 'barang_id', 'sumber_anggaran',
+      'usulan_keputusan', 'ditolak_oleh', 'sub_bidang', 'kode_rekening', 'uraian', 'kategori_aset',
+      'kategori_id', 'jenis_kategori_id', 'kategori', 'jenis_kategori', 'kelompok_kib',
+      'barang_id', 'sumber_anggaran',
       'vol', 'satuan', 'harga', 'nilai_rencana', 'status', 'penanggung_jawab',
       'created_by', 'updated_by',
     ], cands.map((c, i) => [
       // uq_im_canonical_tahun: '' ganda di tahun sama = duplicate → placeholder unik per baris.
       `TMP-${c.usulan_item_id}`, tahun, 'USULAN', c.usulan_item_id, c.usulan_no,
-      c.keputusan, c.ditolak_oleh, c.sub_bidang, c.uraian, barangPer[i], 'BLUD',
+      c.keputusan, c.ditolak_oleh, c.sub_bidang, katPer[i].kode_rekening, c.uraian, katPer[i].kategori_aset,
+      katPer[i].kategori_id, katPer[i].jenis_kategori_id, katPer[i].kategori, katPer[i].jenis_kategori, katPer[i].kelompok_kib,
+      barangPer[i], 'BLUD',
       c.vol, c.satuan, c.harga, c.nilai_rencana,
       c.keputusan === 'DISETUJUI' ? 'DIRENCANAKAN' : 'TIDAK_TEREALISASI', c.sub_bidang,
       userId, userId,
@@ -990,53 +1325,305 @@ export async function commitImportUsulan(tahun: number, userId: number): Promise
 }
 
 // ─── Master Kategori Aset ───────────────────────────────────────────────────
-export interface KategoriAset { id: number; nama: string; urutan: number }
+export type KategoriAset = JenisKategoriItem;
+
+export async function listKategoriLengkap(): Promise<MasterKategoriData> {
+  const [indukRows, kibRows, jenisRows] = await Promise.all([
+    queryMany<Record<string, unknown>>(sql`SELECT id, nama, bawaan, urutan FROM bba_kategori_induk ORDER BY urutan ASC, nama ASC LIMIT 100`),
+    queryMany<Record<string, unknown>>(sql`SELECT id, nama, bawaan, urutan FROM bba_kelompok_kib ORDER BY urutan ASC, nama ASC LIMIT 100`),
+    queryMany<Record<string, unknown>>(sql`
+      SELECT k.id, k.kategori_id, i.nama AS kategori_nama, k.nama, k.kode_rekening, k.kelompok_kib, k.urutan
+        FROM bba_kategori_aset k
+        JOIN bba_kategori_induk i ON i.id = k.kategori_id
+       ORDER BY i.urutan ASC, k.urutan ASC, k.nama ASC LIMIT 1000
+    `),
+  ]);
+  return {
+    induk: indukRows.map(r => ({
+      id: Number(r.id), nama: String(r.nama ?? ''), bawaan: Number(r.bawaan ?? 0) === 1, urutan: Number(r.urutan ?? 0),
+    })),
+    kelompok_kib: kibRows.map(r => ({
+      id: Number(r.id), nama: String(r.nama ?? ''), bawaan: Number(r.bawaan ?? 0) === 1, urutan: Number(r.urutan ?? 0),
+    })),
+    jenis: jenisRows.map(r => ({
+      id: Number(r.id),
+      kategori_id: Number(r.kategori_id),
+      kategori: String(r.kategori_nama ?? ''),
+      nama: String(r.nama ?? ''),
+      jenis_kategori: String(r.nama ?? ''),
+      kode_rekening: (r.kode_rekening as string | null) ?? null,
+      kelompok_kib: (r.kelompok_kib as string | null) ?? null,
+      urutan: Number(r.urutan ?? 0),
+    })),
+  };
+}
 
 export async function listKategori(): Promise<KategoriAset[]> {
-  const rows = await queryMany<Record<string, unknown>>(sql`SELECT id, nama, urutan FROM bba_kategori_aset ORDER BY urutan ASC, nama ASC LIMIT 500`);
-  return rows.map(r => ({ id: Number(r.id), nama: String(r.nama ?? ''), urutan: Number(r.urutan ?? 0) }));
+  return (await listKategoriLengkap()).jenis;
 }
 
-export async function createKategori(nama: string): Promise<{ id: number }> {
-  const mx = await queryOne<{ m: number }>(sql`SELECT COALESCE(MAX(urutan), 0) AS m FROM bba_kategori_aset`);
-  const urutan = Number(mx?.m ?? 0) + 1;
-  const res = await sql`INSERT INTO bba_kategori_aset (nama, urutan) VALUES (${nama}, ${urutan})` as unknown as Array<{ insertId: number }>;
-  return { id: Number(res[0]?.insertId ?? 0) };
+export async function createKategoriInduk(namaMentah: string): Promise<{ id: number; nama: string }> {
+  const nama = namaMentah.trim();
+  return withTransaction(async ({ tx }) => {
+    const dup = await tx`SELECT id FROM bba_kategori_induk WHERE LOWER(TRIM(nama)) = LOWER(TRIM(${nama})) LIMIT 1 FOR UPDATE` as Array<{ id: number }>;
+    if (dup.length > 0) throw new BbaKategoriKembarError(`Kategori induk "${nama}" sudah ada.`);
+    const mx = await tx`SELECT COALESCE(MAX(urutan), 0) AS m FROM bba_kategori_induk` as Array<{ m: number }>;
+    const urutan = Number(mx[0]?.m ?? 0) + 1;
+    const res = await tx`INSERT INTO bba_kategori_induk (nama, bawaan, urutan) VALUES (${nama}, 0, ${urutan})` as unknown as Array<{ insertId: number }>;
+    return { id: Number(res[0]?.insertId ?? 0), nama };
+  });
 }
 
-export async function deleteKategori(id: number): Promise<boolean> {
-  const res = await sql`DELETE FROM bba_kategori_aset WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
-  return (res[0]?.affectedRows ?? 0) > 0;
+export async function deleteKategoriInduk(id: number): Promise<boolean> {
+  return withTransaction(async ({ tx }) => {
+    const rows = await tx`SELECT id, nama, bawaan FROM bba_kategori_induk WHERE id = ${id} LIMIT 1 FOR UPDATE` as Array<{ id: number; nama: string; bawaan: number }>;
+    if (rows.length === 0) return false;
+    if (Number(rows[0].bawaan) === 1) throw new BbaKategoriDipakaiError(`Kategori induk bawaan "${rows[0].nama}" tidak dapat dihapus.`);
+    const anak = await tx`SELECT COUNT(*) AS n FROM bba_kategori_aset WHERE kategori_id = ${id}` as Array<{ n: number }>;
+    if (Number(anak[0]?.n ?? 0) > 0) throw new BbaKategoriDipakaiError(`Kategori "${rows[0].nama}" masih memiliki ${anak[0].n} jenis kategori.`);
+    // Tanpa ini item yang memegang id induk ini gagal disimpan ("Kategori induk tidak ditemukan") begitu layarnya mengirim id itu lagi.
+    await lepasTautanKategori(tx, 'kategori_id', id);
+    const res = await tx`DELETE FROM bba_kategori_induk WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
+    return (res[0]?.affectedRows ?? 0) > 0;
+  });
+}
+
+export async function createKelompokKib(namaMentah: string): Promise<{ id: number; nama: string }> {
+  const nama = namaMentah.trim();
+  return withTransaction(async ({ tx }) => {
+    const dup = await tx`SELECT id FROM bba_kelompok_kib WHERE LOWER(TRIM(nama)) = LOWER(TRIM(${nama})) LIMIT 1 FOR UPDATE` as Array<{ id: number }>;
+    if (dup.length > 0) throw new BbaKategoriKembarError(`Kelompok KIB "${nama}" sudah ada.`);
+    const mx = await tx`SELECT COALESCE(MAX(urutan), 0) AS m FROM bba_kelompok_kib` as Array<{ m: number }>;
+    const urutan = Number(mx[0]?.m ?? 0) + 1;
+    const res = await tx`INSERT INTO bba_kelompok_kib (nama, bawaan, urutan) VALUES (${nama}, 0, ${urutan})` as unknown as Array<{ insertId: number }>;
+    return { id: Number(res[0]?.insertId ?? 0), nama };
+  });
+}
+
+export async function deleteKelompokKib(id: number): Promise<boolean> {
+  return withTransaction(async ({ tx }) => {
+    const rows = await tx`SELECT id, nama, bawaan FROM bba_kelompok_kib WHERE id = ${id} LIMIT 1 FOR UPDATE` as Array<{ id: number; nama: string; bawaan: number }>;
+    if (rows.length === 0) return false;
+    if (Number(rows[0].bawaan) === 1) throw new BbaKategoriDipakaiError(`Kelompok KIB bawaan "${rows[0].nama}" tidak dapat dihapus.`);
+    // Item/barang/penawaran menyimpan teks kelompok KIB; menghapusnya membuat Simpan berikutnya ditolak "tidak ditemukan".
+    const nama = String(rows[0].nama);
+    const [pakai] = await tx`
+      SELECT (SELECT COUNT(*) FROM bba_kategori_aset WHERE kelompok_kib = ${nama}) AS jenis,
+             (SELECT COUNT(*) FROM bba_barang WHERE kelompok_kib = ${nama}) AS barang,
+             (SELECT COUNT(*) FROM buku_besar_aset WHERE kelompok_kib = ${nama}) AS item,
+             (SELECT COUNT(*) FROM bba_penawaran WHERE kelompok_kib = ${nama}) AS surat
+    ` as Array<{ jenis: number; barang: number; item: number; surat: number }>;
+    const sebut = [[pakai.jenis, 'jenis kategori'], [pakai.barang, 'barang'], [pakai.item, 'rencana'], [pakai.surat, 'surat penawaran']]
+      .filter(([n]) => Number(n) > 0).map(([n, l]) => `${n} ${l}`);
+    if (sebut.length) throw new BbaKategoriDipakaiError(`Kelompok KIB "${nama}" masih dipakai ${sebut.join(', ')}.`);
+    const res = await tx`DELETE FROM bba_kelompok_kib WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
+    return (res[0]?.affectedRows ?? 0) > 0;
+  });
+}
+
+async function selesaikanIndukDanKibJenis(
+  tx: Penanya,
+  input: { kategori_id?: number; kategori?: string; jenis_kategori?: string; kode_rekening?: string | null; kelompok_kib?: string | null },
+  defaultNama?: string,
+): Promise<{ kategori_id: number; kategori: string; kode_rekening: string | null; kelompok_kib: string | null }> {
+  const indukRows = input.kategori_id
+    ? await tx`SELECT id, nama FROM bba_kategori_induk WHERE id = ${input.kategori_id} LIMIT 1 FOR SHARE`
+    : await tx`SELECT id, nama FROM bba_kategori_induk WHERE LOWER(TRIM(nama)) = LOWER(TRIM(${input.kategori ?? ''})) LIMIT 1 FOR SHARE`;
+  const induk = (indukRows as Array<{ id: number; nama: string }>)[0];
+  if (!induk) throw new BbaKategoriTidakDikenalError('Kategori induk tidak ditemukan di Master Kategori.');
+
+  const kategori = String(induk.nama);
+  const kode = input.kode_rekening?.trim() || null;
+  const namaJenis = input.jenis_kategori?.trim() || defaultNama || '';
+  let kib: string | null = null;
+  if (kategori.toLowerCase() === 'modal') {
+    kib = input.kelompok_kib !== undefined
+      ? (input.kelompok_kib?.trim() || null)
+      : deteksiKelompokKib(kode, namaJenis);
+    if (kib) {
+      const kibRow = await tx`SELECT nama FROM bba_kelompok_kib WHERE LOWER(TRIM(nama)) = LOWER(TRIM(${kib})) LIMIT 1 FOR SHARE` as Array<{ nama: string }>;
+      if (kibRow.length === 0) throw new BbaKategoriTidakDikenalError(`Kelompok KIB "${kib}" tidak ditemukan di Master Kategori.`);
+      kib = String(kibRow[0].nama);
+    }
+  }
+  return { kategori_id: Number(induk.id), kategori, kode_rekening: kode, kelompok_kib: kib };
+}
+
+export async function createJenisKategori(input: JenisKategoriCreateInput): Promise<JenisKategoriItem> {
+  return withTransaction(async ({ tx }) => {
+    const nama = input.jenis_kategori.trim();
+    const { kategori_id, kategori, kode_rekening, kelompok_kib } = await selesaikanIndukDanKibJenis(tx, input, nama);
+    const dup = await tx`
+      SELECT id FROM bba_kategori_aset
+       WHERE kategori_id = ${kategori_id} AND LOWER(TRIM(nama)) = LOWER(TRIM(${nama})) AND COALESCE(kode_rekening, '') = ${kode_rekening ?? ''}
+       LIMIT 1 FOR UPDATE
+    ` as Array<{ id: number }>;
+    if (dup.length > 0) throw new BbaKategoriKembarError(`Jenis kategori "${nama}" sudah ada di kategori ${kategori}.`);
+    const mx = await tx`SELECT COALESCE(MAX(urutan), 0) AS m FROM bba_kategori_aset WHERE kategori_id = ${kategori_id}` as Array<{ m: number }>;
+    const urutan = Number(mx[0]?.m ?? 0) + 1;
+    const res = await tx`
+      INSERT INTO bba_kategori_aset (kategori_id, nama, kode_rekening, kelompok_kib, urutan)
+      VALUES (${kategori_id}, ${nama}, ${kode_rekening}, ${kelompok_kib}, ${urutan})
+    ` as unknown as Array<{ insertId: number }>;
+    const id = Number(res[0]?.insertId ?? 0);
+    return { id, kategori_id, kategori, nama, jenis_kategori: nama, kode_rekening, kelompok_kib, urutan };
+  });
+}
+
+export async function updateJenisKategori(input: JenisKategoriUpdateInput): Promise<JenisKategoriItem | null> {
+  return withTransaction(async ({ tx }) => {
+    const curRows = await tx`
+      SELECT k.id, k.kategori_id, i.nama AS kategori_nama, k.nama, k.kode_rekening, k.kelompok_kib, k.urutan
+        FROM bba_kategori_aset k JOIN bba_kategori_induk i ON i.id = k.kategori_id
+       WHERE k.id = ${input.id} LIMIT 1 FOR UPDATE
+    ` as Array<Record<string, unknown>>;
+    if (curRows.length === 0) return null;
+    const cur = curRows[0];
+    const nama = input.jenis_kategori !== undefined ? input.jenis_kategori.trim() : String(cur.nama);
+    const { kategori_id, kategori, kode_rekening, kelompok_kib } = await selesaikanIndukDanKibJenis(tx, {
+      kategori_id: input.kategori_id ?? (input.kategori ? undefined : Number(cur.kategori_id)),
+      kategori: input.kategori,
+      jenis_kategori: nama,
+      kode_rekening: input.kode_rekening !== undefined ? input.kode_rekening : (cur.kode_rekening as string | null),
+      kelompok_kib: input.kelompok_kib !== undefined ? input.kelompok_kib : (cur.kelompok_kib as string | null),
+    }, nama);
+    const dup = await tx`
+      SELECT id FROM bba_kategori_aset
+       WHERE kategori_id = ${kategori_id} AND LOWER(TRIM(nama)) = LOWER(TRIM(${nama})) AND COALESCE(kode_rekening, '') = ${kode_rekening ?? ''} AND id <> ${input.id}
+       LIMIT 1 FOR UPDATE
+    ` as Array<{ id: number }>;
+    if (dup.length > 0) throw new BbaKategoriKembarError(`Jenis kategori "${nama}" sudah ada di kategori ${kategori}.`);
+    await tx`
+      UPDATE bba_kategori_aset
+         SET kategori_id = ${kategori_id}, nama = ${nama}, kode_rekening = ${kode_rekening}, kelompok_kib = ${kelompok_kib}
+       WHERE id = ${input.id}
+    `;
+    // Pindah induk menentukan Modal/bukan (antrean Buku Aset) — keputusan itu milik tiap item, jadi tautannya dilepas.
+    // Ganti nama cuma label: ikut menjalar supaya saringan per jenis tidak terbelah dua ejaan.
+    if (kategori_id !== Number(cur.kategori_id)) {
+      await lepasTautanKategori(tx, 'jenis_kategori_id', input.id);
+    } else if (nama !== String(cur.nama)) {
+      await tx`UPDATE buku_besar_aset SET jenis_kategori = ${nama}, updated_at = updated_at WHERE jenis_kategori_id = ${input.id}`;
+      await tx`UPDATE bba_barang SET jenis_kategori = ${nama} WHERE jenis_kategori_id = ${input.id}`;
+      await tx`UPDATE bba_penawaran SET jenis_kategori = ${nama}, updated_at = updated_at WHERE jenis_kategori_id = ${input.id}`;
+    }
+    return {
+      id: input.id, kategori_id, kategori, nama, jenis_kategori: nama, kode_rekening, kelompok_kib,
+      urutan: Number(cur.urutan ?? 0),
+    };
+  });
+}
+
+/** Soft-FK dilepas, teks riwayat di baris item/barang/penawaran tetap. Label bukan suntingan isi → `updated_at` & `version` tetap. */
+async function lepasTautanKategori(tx: Penanya, kolom: 'kategori_id' | 'jenis_kategori_id', id: number): Promise<void> {
+  if (kolom === 'kategori_id') {
+    await tx`UPDATE buku_besar_aset SET kategori_id = NULL, updated_at = updated_at WHERE kategori_id = ${id}`;
+    await tx`UPDATE bba_barang SET kategori_id = NULL WHERE kategori_id = ${id}`;
+    await tx`UPDATE bba_penawaran SET kategori_id = NULL, updated_at = updated_at WHERE kategori_id = ${id}`;
+  } else {
+    await tx`UPDATE buku_besar_aset SET jenis_kategori_id = NULL, updated_at = updated_at WHERE jenis_kategori_id = ${id}`;
+    await tx`UPDATE bba_barang SET jenis_kategori_id = NULL WHERE jenis_kategori_id = ${id}`;
+    await tx`UPDATE bba_penawaran SET jenis_kategori_id = NULL, updated_at = updated_at WHERE jenis_kategori_id = ${id}`;
+  }
+}
+
+// Urutan kunci SELURUH jalur kategori: baris master DULU, baru baris pemakai (item/barang/penawaran) —
+// penulis item/barang/penawaran memanggil `selesaikanKategori` (FOR SHARE master) sebelum menyentuh barisnya.
+export async function deleteJenisKategori(id: number): Promise<boolean> {
+  return withTransaction(async ({ tx }) => {
+    const ada = await tx`SELECT id FROM bba_kategori_aset WHERE id = ${id} FOR UPDATE` as Array<{ id: number }>;
+    if (ada.length === 0) return false;
+    await lepasTautanKategori(tx, 'jenis_kategori_id', id);
+    await tx`DELETE FROM bba_kategori_aset WHERE id = ${id}`;
+    return true;
+  });
+}
+
+/** Pencarian gabungan Master Akun + Kode Besar BLUD tanpa duplikasi kode rekening. */
+export async function cariRekeningBlud(q: string): Promise<RekeningBludItem[]> {
+  const bersih = q.trim();
+  const term = bersih ? `%${escapeLike(bersih)}%` : null;
+  const [akunRows, kbRows] = await Promise.all([
+    queryMany<{ kode: string; uraian: string }>(term
+      ? sql`SELECT kode, uraian FROM master_akun WHERE kode LIKE ${term} OR uraian LIKE ${term} ORDER BY urutan ASC, kode ASC LIMIT ${sqlInt(250)}`
+      : sql`SELECT kode, uraian FROM master_akun ORDER BY urutan ASC, kode ASC LIMIT ${sqlInt(250)}`),
+    queryMany<{ kode: string; uraian: string }>(term
+      ? sql`SELECT kode, uraian FROM kode_besar WHERE kode LIKE ${term} OR uraian LIKE ${term} ORDER BY urutan ASC, kode ASC LIMIT ${sqlInt(250)}`
+      : sql`SELECT kode, uraian FROM kode_besar ORDER BY urutan ASC, kode ASC LIMIT ${sqlInt(250)}`),
+  ]);
+  return gabungRekeningBlud(
+    akunRows.map(r => ({ kode: String(r.kode ?? ''), uraian: String(r.uraian ?? '') })),
+    kbRows.map(r => ({ kode: String(r.kode ?? ''), uraian: String(r.uraian ?? '') })),
+  );
 }
 
 // ─── Master Barang (CONCEPT-bba-perencanaan §5) ─────────────────────────────
-export interface BbaBarang { id: number; nama: string; kategori_aset: string | null; satuan: string | null; jumlah_item: number; jumlah_pendataan: number; jumlah_aset: number }
+export interface BbaBarang {
+  id: number;
+  nama: string;
+  kategori_aset: string | null;
+  kategori_id: number | null;
+  jenis_kategori_id: number | null;
+  kategori: string | null;
+  jenis_kategori: string | null;
+  kode_rekening: string | null;
+  kelompok_kib: string | null;
+  satuan: string | null;
+  jumlah_item: number;
+  jumlah_pendataan: number;
+  jumlah_aset: number;
+}
 
 const kodeGalat = (e: unknown) => (e as { code?: string }).code;
 
 export async function listBarang(): Promise<BbaBarang[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT g.id, g.nama, g.kategori_aset, g.satuan,
+    SELECT g.id, g.nama, g.kategori_aset, g.kategori_id, g.jenis_kategori_id, g.kategori, g.jenis_kategori, g.kode_rekening, g.kelompok_kib, g.satuan,
            (SELECT COUNT(*) FROM buku_besar_aset b WHERE b.barang_id = g.id) AS jumlah_item,
            (SELECT COUNT(*) FROM bba_eksisting e WHERE e.barang_id = g.id) AS jumlah_pendataan,
            (SELECT COUNT(*) FROM bba_aset a WHERE a.barang_id = g.id) AS jumlah_aset
     FROM bba_barang g ORDER BY g.nama ASC LIMIT 2000
   `);
-  return rows.map(r => ({
-    id: Number(r.id), nama: String(r.nama ?? ''), kategori_aset: r.kategori_aset as string | null,
-    satuan: r.satuan as string | null, jumlah_item: Number(r.jumlah_item ?? 0), jumlah_pendataan: Number(r.jumlah_pendataan ?? 0),
-    jumlah_aset: Number(r.jumlah_aset ?? 0),
-  }));
+  return rows.map(r => {
+    const kat = normalisasiKategoriItem({
+      kategori: r.kategori as string | null,
+      jenis_kategori: r.jenis_kategori as string | null,
+      kode_rekening: r.kode_rekening as string | null,
+      kelompok_kib: r.kelompok_kib as string | null,
+      kategori_aset: r.kategori_aset as string | null,
+    });
+    return {
+      id: Number(r.id), nama: String(r.nama ?? ''), kategori_aset: r.kategori_aset as string | null,
+      kategori_id: r.kategori_id == null ? null : Number(r.kategori_id),
+      jenis_kategori_id: r.jenis_kategori_id == null ? null : Number(r.jenis_kategori_id),
+      kategori: kat.kategori, jenis_kategori: kat.jenis_kategori, kode_rekening: kat.kode_rekening, kelompok_kib: kat.kelompok_kib,
+      satuan: r.satuan as string | null, jumlah_item: Number(r.jumlah_item ?? 0), jumlah_pendataan: Number(r.jumlah_pendataan ?? 0),
+      jumlah_aset: Number(r.jumlah_aset ?? 0),
+    };
+  });
 }
 
 export async function createBarang(input: BarangCreateInput, userId: number): Promise<{ id: number; nama: string }> {
   const nama = rapikanNamaBarang(input.nama);
   try {
-    const res = await sql`
-      INSERT INTO bba_barang (nama, kategori_aset, satuan, created_by)
-      VALUES (${nama}, ${input.kategori_aset || null}, ${input.satuan || null}, ${userId})
-    ` as unknown as Array<{ insertId: number }>;
-    return { id: Number(res[0]?.insertId ?? 0), nama };
+    return await withTransaction(async ({ tx }) => {
+      const kat = await selesaikanKategori(tx, {
+        kategori_id: input.kategori_id,
+        jenis_kategori_id: input.jenis_kategori_id,
+        kategori: input.kategori,
+        jenis_kategori: input.jenis_kategori,
+        kode_rekening: input.kode_rekening,
+        kelompok_kib: input.kelompok_kib,
+        kategori_aset: input.kategori_aset,
+      });
+      const kodeRek = input.kode_rekening !== undefined ? (input.kode_rekening?.trim() || null) : kat.kode_rekening;
+      const res = await tx`
+        INSERT INTO bba_barang (nama, kategori_aset, kategori_id, jenis_kategori_id, kategori, jenis_kategori, kode_rekening, kelompok_kib, satuan, created_by)
+        VALUES (${nama}, ${kat.terisi ? kat.kategori_aset : (input.kategori_aset || null)}, ${kat.kategori_id}, ${kat.jenis_kategori_id},
+                ${kat.kategori}, ${kat.jenis_kategori}, ${kodeRek}, ${kat.kelompok_kib}, ${input.satuan || null}, ${userId})
+      ` as unknown as Array<{ insertId: number }>;
+      return { id: Number(res[0]?.insertId ?? 0), nama };
+    });
   } catch (e) {
     if (kodeGalat(e) === 'ER_DUP_ENTRY') throw new BbaBarangKembarError(nama);
     throw e;
@@ -1044,13 +1631,31 @@ export async function createBarang(input: BarangCreateInput, userId: number): Pr
 }
 
 export async function updateBarang(input: BarangUpdateInput): Promise<boolean> {
-  let set = sql`id = id`;
-  if (input.nama !== undefined)          set = sql`${set}, nama = ${rapikanNamaBarang(input.nama)}`;
-  if (input.kategori_aset !== undefined) set = sql`${set}, kategori_aset = ${input.kategori_aset || null}`;
-  if (input.satuan !== undefined)        set = sql`${set}, satuan = ${input.satuan || null}`;
   try {
-    const res = await sql`UPDATE bba_barang SET ${set} WHERE id = ${input.id}` as unknown as Array<{ affectedRows?: number }>;
-    return (res[0]?.affectedRows ?? 0) > 0;
+    return await withTransaction(async ({ tx }) => {
+      const kat = await selesaikanKategori(tx, {
+        kategori_id: input.kategori_id,
+        jenis_kategori_id: input.jenis_kategori_id,
+        kategori: input.kategori,
+        jenis_kategori: input.jenis_kategori,
+        kode_rekening: input.kode_rekening,
+        kelompok_kib: input.kelompok_kib,
+        kategori_aset: input.kategori_aset,
+      });
+      let set = sql`id = id`;
+      if (input.nama !== undefined) set = sql`${set}, nama = ${rapikanNamaBarang(input.nama)}`;
+      if (input.satuan !== undefined) set = sql`${set}, satuan = ${input.satuan || null}`;
+      if (input.kode_rekening !== undefined) set = sql`${set}, kode_rekening = ${input.kode_rekening?.trim() || null}`;
+      if (kat.terisi) {
+        set = sql`${set}, kategori_aset = ${kat.kategori_aset}, kategori_id = ${kat.kategori_id}, jenis_kategori_id = ${kat.jenis_kategori_id},
+          kategori = ${kat.kategori}, jenis_kategori = ${kat.jenis_kategori}, kelompok_kib = ${kat.kelompok_kib}`;
+        if (input.kode_rekening === undefined && kat.kode_rekening !== null) {
+          set = sql`${set}, kode_rekening = ${kat.kode_rekening}`;
+        }
+      }
+      const res = await tx`UPDATE bba_barang SET ${set} WHERE id = ${input.id}` as unknown as Array<{ affectedRows?: number }>;
+      return (res[0]?.affectedRows ?? 0) > 0;
+    });
   } catch (e) {
     if (kodeGalat(e) === 'ER_DUP_ENTRY') throw new BbaBarangKembarError(rapikanNamaBarang(input.nama));
     throw e;
@@ -1131,8 +1736,20 @@ export async function tautkanBarang(input: BarangTautkanInput, userId: number): 
   return withTransaction(async ({ tx }) => {
     await pastikanBarang(tx, input.pasangan.flatMap(p => p.barang_id ? [p.barang_id] : []));
     const asetIds = input.pasangan.map(p => p.aset_id);
-    const info = await tx`SELECT id, kategori_aset, satuan FROM buku_besar_aset WHERE id IN (${asetIds})` as Array<{ id: number; kategori_aset: string | null; satuan: string | null }>;
-    const infoPer = new Map(info.map(r => [Number(r.id), r]));
+    const info = await tx`
+      SELECT id, kategori_aset, kategori_id, jenis_kategori_id, kategori, jenis_kategori, kode_rekening, kelompok_kib, satuan
+      FROM buku_besar_aset WHERE id IN (${asetIds})
+    ` as Array<Record<string, unknown>>;
+    const infoPer = new Map(info.map(r => [Number(r.id), {
+      kategori_aset: (r.kategori_aset as string | null) ?? null,
+      kategori_id: r.kategori_id == null ? null : Number(r.kategori_id),
+      jenis_kategori_id: r.jenis_kategori_id == null ? null : Number(r.jenis_kategori_id),
+      kategori: (r.kategori as string | null) ?? null,
+      jenis_kategori: (r.jenis_kategori as string | null) ?? null,
+      kode_rekening: (r.kode_rekening as string | null) ?? null,
+      kelompok_kib: (r.kelompok_kib as string | null) ?? null,
+      satuan: (r.satuan as string | null) ?? null,
+    }]));
     const baru = new Map<string, number>();
     const perBarang = new Map<number, number[]>();
     for (const p of input.pasangan) {
@@ -1201,11 +1818,15 @@ async function ambilDimiliki(barangId?: number): Promise<BahanDimiliki[]> {
 }
 
 export type BarisPerBarang = RingkasBarang & {
-  id: number; nama: string; kategori_aset: string | null; satuan: string | null;
+  id: number; nama: string; kategori_aset: string | null; kategori: string | null; jenis_kategori: string | null; kode_rekening: string | null; kelompok_kib: string | null; satuan: string | null;
   /** null = belum ada register Buku Aset yang ditautkan ke barang ini. */
   dimiliki: Dimiliki | null;
 };
-export interface BelumDitautkan { id: number; canonical_id: string; uraian: string; kategori_aset: string | null; satuan: string | null; nilai_rencana: number }
+export interface BelumDitautkan {
+  id: number; canonical_id: string; uraian: string; kategori_aset: string | null;
+  kategori: string | null; jenis_kategori: string | null; kode_rekening: string | null;
+  satuan: string | null; nilai_rencana: number;
+}
 export interface PerBarangTahun {
   tahun: number;
   rows: BarisPerBarang[];
@@ -1218,7 +1839,7 @@ export async function perBarangTahun(tahun: number): Promise<PerBarangTahun> {
     queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_BAHAN} FROM buku_besar_aset WHERE tahun_anggaran <= ${tahun} AND (barang_id IS NOT NULL OR tahun_anggaran = ${tahun})`),
     listBarang(),
     queryMany<Record<string, unknown>>(sql`
-      SELECT id, canonical_id, uraian, kategori_aset, satuan, nilai_rencana FROM buku_besar_aset
+      SELECT id, canonical_id, uraian, kategori_aset, kategori, jenis_kategori, kode_rekening, satuan, nilai_rencana FROM buku_besar_aset
       WHERE tahun_anggaran = ${tahun} AND barang_id IS NULL AND (usulan_keputusan IS NULL OR usulan_keputusan <> 'DITOLAK')
       ORDER BY canonical_id ASC LIMIT 500
     `),
@@ -1229,12 +1850,25 @@ export async function perBarangTahun(tahun: number): Promise<PerBarangTahun> {
   const milikPer = ringkasDimilikiPerBarang(dimiliki, batas);
   // Barang yang hanya punya register di Buku Aset (dibeli sebelum PRIMA) ikut tampil.
   const rows = barang.filter(b => perBarang.has(b.id) || milikPer.has(b.id))
-    .map(b => ({ id: b.id, nama: b.nama, kategori_aset: b.kategori_aset, satuan: b.satuan, ...(perBarang.get(b.id) ?? ringkasKosong()), dimiliki: milikPer.get(b.id) ?? null }))
+    .map(b => ({
+      id: b.id, nama: b.nama, kategori_aset: b.kategori_aset, kategori: b.kategori, jenis_kategori: b.jenis_kategori,
+      kode_rekening: b.kode_rekening, kelompok_kib: b.kelompok_kib, satuan: b.satuan,
+      ...(perBarang.get(b.id) ?? ringkasKosong()), dimiliki: milikPer.get(b.id) ?? null,
+    }))
     .sort((a, b) => b.rencana_tahun - a.rencana_tahun || a.nama.localeCompare(b.nama, 'id'));
-  const daftar = belumRows.map(r => ({
-    id: Number(r.id), canonical_id: String(r.canonical_id ?? ''), uraian: String(r.uraian ?? ''),
-    kategori_aset: r.kategori_aset as string | null, satuan: r.satuan as string | null, nilai_rencana: Number(r.nilai_rencana ?? 0),
-  }));
+  const daftar = belumRows.map(r => {
+    const kat = normalisasiKategoriItem({
+      kategori: r.kategori as string | null,
+      jenis_kategori: r.jenis_kategori as string | null,
+      kode_rekening: r.kode_rekening as string | null,
+      kategori_aset: r.kategori_aset as string | null,
+    });
+    return {
+      id: Number(r.id), canonical_id: String(r.canonical_id ?? ''), uraian: String(r.uraian ?? ''),
+      kategori_aset: r.kategori_aset as string | null, kategori: kat.kategori, jenis_kategori: kat.jenis_kategori, kode_rekening: kat.kode_rekening,
+      satuan: r.satuan as string | null, nilai_rencana: Number(r.nilai_rencana ?? 0),
+    };
+  });
   return { tahun, rows, belum: { ...belum, daftar } };
 }
 
@@ -1247,8 +1881,18 @@ export interface DetailBarang {
 
 /** Kartu barang: angka tahun T + riwayat per tahun + rata-rata referensi per tahun + yang dimiliki. */
 export async function detailBarang(id: number, tahun: number): Promise<DetailBarang | null> {
-  const barang = await queryOne<Record<string, unknown>>(sql`SELECT id, nama, kategori_aset, satuan FROM bba_barang WHERE id = ${id} LIMIT 1`);
+  const barang = await queryOne<Record<string, unknown>>(sql`
+    SELECT id, nama, kategori_aset, kategori_id, jenis_kategori_id, kategori, jenis_kategori, kode_rekening, kelompok_kib, satuan
+    FROM bba_barang WHERE id = ${id} LIMIT 1
+  `);
   if (!barang) return null;
+  const kat = normalisasiKategoriItem({
+    kategori: barang.kategori as string | null,
+    jenis_kategori: barang.jenis_kategori as string | null,
+    kode_rekening: barang.kode_rekening as string | null,
+    kelompok_kib: barang.kelompok_kib as string | null,
+    kategori_aset: barang.kategori_aset as string | null,
+  });
   const [bahanRows, refRows, dimiliki, batas] = await Promise.all([
     queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_BAHAN} FROM buku_besar_aset WHERE barang_id = ${id}`),
     queryMany<Record<string, unknown>>(sql`
@@ -1267,7 +1911,13 @@ export async function detailBarang(id: number, tahun: number): Promise<DetailBar
   const perRuang = new Map<number | null, BahanDimiliki[]>();
   for (const a of dimiliki) perRuang.set(a.lokasi_id, [...(perRuang.get(a.lokasi_id) ?? []), a]);
   return {
-    barang: { id: Number(barang.id), nama: String(barang.nama ?? ''), kategori_aset: barang.kategori_aset as string | null, satuan: barang.satuan as string | null },
+    barang: {
+      id: Number(barang.id), nama: String(barang.nama ?? ''), kategori_aset: barang.kategori_aset as string | null,
+      kategori_id: barang.kategori_id == null ? null : Number(barang.kategori_id),
+      jenis_kategori_id: barang.jenis_kategori_id == null ? null : Number(barang.jenis_kategori_id),
+      kategori: kat.kategori, jenis_kategori: kat.jenis_kategori, kode_rekening: kat.kode_rekening, kelompok_kib: kat.kelompok_kib,
+      satuan: barang.satuan as string | null,
+    },
     ringkas, riwayat: riwayatPerTahun(bahan, refs),
     dimiliki: ringkasDimiliki(dimiliki, batas),
     dimiliki_per_ruang: [...perRuang].map(([lokasi_id, xs]) => ({ lokasi_id, lokasi: xs[0].lokasi_nama, ringkas: ringkasDimiliki(xs, batas) }))

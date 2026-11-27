@@ -211,7 +211,7 @@ export async function terapkanDriveBalik(p: PilihanTerapkan, userId: number, izi
       if (!Object.keys(v).length) continue;
       await coba(u.label, async () => {
         const isian: Record<string, unknown> = { id: pu.id, expected_version: versiKini.get(pu.id)! };
-        for (const k of ['uraian', 'satuan', 'alasan'] as const) if (k in v) isian[k] = s(v[k]);
+        for (const k of ['uraian', 'satuan', 'alasan', 'kode_rekening'] as const) if (k in v) isian[k] = s(v[k]);
         // Sel angka yang dikosongkan bukan "nol" — tidak diubah, disebut.
         let catatan = '';
         for (const [k, kol] of [['vol', 'vol'], ['harga', 'harga']] as const) {
@@ -242,7 +242,7 @@ export async function terapkanDriveBalik(p: PilihanTerapkan, userId: number, izi
         const bar = barang(v.barang);
         const z = BbaCreateSchema.safeParse({
           tahun_anggaran: pratinjau.tahun, uraian: s(v.uraian), sumber_anggaran: v.sumber ?? 'BLUD', vol: n(v.vol) ?? 0, harga: n(v.harga) ?? 0,
-          satuan: s(v.satuan), alasan: s(v.alasan), jenis_rencana: v.jenis ?? null, ...(bar ?? {}),
+          satuan: s(v.satuan), alasan: s(v.alasan), kode_rekening: s(v.kode_rekening), jenis_rencana: v.jenis ?? null, ...(bar ?? {}),
         });
         if (!z.success) throw new Error(z.error.issues[0].message);
         const r = await createAset(z.data, userId);
@@ -361,7 +361,8 @@ async function terapkanPenawaran(p: PilihanTerapkan, t: Tinjauan, surat: SuratPe
       const kepala = {
         rekanan: s(r.kepala.rekanan ?? sr?.rekanan), nomor_surat: s('nomor' in r.kepala ? r.kepala.nomor : sr?.nomor_surat ?? null),
         tgl_surat: s(r.kepala.tgl_surat ?? sr?.tgl_surat), berlaku_sampai: s('berlaku' in r.kepala ? r.kepala.berlaku : sr?.berlaku_sampai ?? null),
-        kategori: sr?.kategori ?? null, file_id: sr?.file_id ?? null, catatan: sr?.catatan ?? null,
+        // Kategori sengaja tidak dikirim: tinjauan Drive tidak mengubahnya, dan undefined = jangan sentuh (L87).
+        file_id: sr?.file_id ?? null, catatan: sr?.catatan ?? null,
       };
       const z = PenawaranSimpanSchema.safeParse({ id: sr?.id ?? null, expected_version: sr?.version ?? null, kepala, item });
       if (!z.success) throw new Error(z.error.issues[0].message);

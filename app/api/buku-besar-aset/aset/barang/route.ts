@@ -3,7 +3,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { TautkanBarangAsetSchema } from '@/lib/data/bba-aset-schemas';
 import { tautkanBarangAset, AsetVersiError, AsetTidakAdaError, AsetDitolakError } from '@/lib/data/bba-aset';
-import { BbaBarangTidakDikenalError, BbaBarangKembarError } from '@/lib/data/buku-besar-aset';
+import { BbaBarangTidakDikenalError, BbaBarangKembarError, BbaKategoriTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from '../../_guard';
 
 // Tautkan banyak register ke satu barang (Master Barang) — supaya Per Barang & kartu barang tahu
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof AsetVersiError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
     if (err instanceof AsetDitolakError) return NextResponse.json({ ok: false, code: 'DITOLAK', message: err.message, alasan: err.alasan }, { status: 400 });
     if (err instanceof AsetTidakAdaError) return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
-    if (err instanceof BbaBarangTidakDikenalError || err instanceof BbaBarangKembarError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBarangTidakDikenalError || err instanceof BbaBarangKembarError || err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
 }

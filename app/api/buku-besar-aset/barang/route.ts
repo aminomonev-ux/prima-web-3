@@ -5,7 +5,7 @@ import {
 } from '@/lib/data/buku-besar-aset-schemas';
 import {
   listBarang, createBarang, updateBarang, hapusBarang, perBarangTahun, detailBarang,
-  BbaBarangKembarError, BbaBarangDipakaiError,
+  BbaBarangKembarError, BbaBarangDipakaiError, BbaKategoriTidakDikenalError,
 } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from '../_guard';
 
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, id, nama });
   } catch (err) {
     if (err instanceof BbaBarangKembarError) return NextResponse.json({ ok: false, message: err.message }, { status: 409 });
+    if (err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
 }
@@ -61,6 +62,7 @@ export async function PATCH(req: NextRequest) {
     if (!ok) return NextResponse.json({ ok: false, message: 'Barang tidak ditemukan.' }, { status: 404 });
   } catch (err) {
     if (err instanceof BbaBarangKembarError) return NextResponse.json({ ok: false, message: err.message }, { status: 409 });
+    if (err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
   await writeAuditLog({ req, eventType: 'BBA_BARANG_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA barang update id=${parsed.data.id}${parsed.data.nama ? ` nama="${parsed.data.nama}"` : ''}` });

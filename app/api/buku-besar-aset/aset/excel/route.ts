@@ -65,7 +65,7 @@ async function susun(wb: import('exceljs').Workbook, p: AsetExcelInput, tanggal:
       return { nama: `Buku-Aset-PRIMA-${tanggal}.xlsx`, register: aset.length };
     }
     case 'RENCANA': {
-      const { rows, dimiliki, sasaran } = await rencanaUntukExcel(p.tahun);
+      const { rows, dimiliki, sasaran } = await rencanaUntukExcel(p.tahun, { kategori: p.kategori, jenis_kategori: p.jenis_kategori });
       tulisDaftarRencana(wb, p.tahun, rows, dimiliki, sasaran);
       return { nama: `Daftar-Rencana-${p.tahun}-${tanggal}.xlsx`, register: rows.length };
     }

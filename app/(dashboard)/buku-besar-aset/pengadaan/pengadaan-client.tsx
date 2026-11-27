@@ -21,6 +21,7 @@ import { ModalTandaiDipesan, ModalCatatDatang, langkahMundur } from '../_compone
 import PanelRiwayat from '../_components/PanelRiwayat';
 import { TombolUnduhBuku } from '../_components/UnduhBuku';
 import GarisTahap from '../_components/GarisTahap';
+import type { MasterKategoriData } from '@/lib/bba/kategori';
 import MenuBaris, { type ButirMenu } from '../_components/MenuBaris';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -30,7 +31,7 @@ const fmtAngka = (n: number) => n.toLocaleString('id-ID', { maximumFractionDigit
 
 type Props = {
   username: string; role: string; themePreference: 'dark' | 'light'; beku: InfoBeku; izin: PetaIzinLayar;
-  awal: PengadaanTahun; kategori: string[]; bolehKoreksiMundur: boolean; tabAwal: TabPengadaan | null;
+  awal: PengadaanTahun; kategori: MasterKategoriData; bolehKoreksiMundur: boolean; tabAwal: TabPengadaan | null;
 };
 type Buka = { jenis: 'pesan' | 'datang' | 'riwayat'; id: number } | { jenis: 'item'; id: number; tab: TabItem };
 
@@ -40,6 +41,7 @@ export default function PengadaanClient({ username, role, themePreference, beku,
   const [data, setData] = useState<PengadaanTahun>(awal);
   const [tahun, setTahun] = useState(String(awal.tahun));
   const [q, setQ] = useState('');
+  const [fKat, setFKat] = useState('');
   const [tab, setTab] = useState<TabPengadaan>(tabAwal ?? (awal.rows.some(r => tabDari(r) === 'siap') || !awal.rows.length ? 'siap' : 'dipesan'));
   const [memuat, setMemuat] = useState(false);
   const [buka, setBuka] = useState<Buka | null>(null);
@@ -66,8 +68,8 @@ export default function PengadaanClient({ username, role, themePreference, beku,
     return per;
   }, [data.rows]);
   const kata = q.trim().toLowerCase();
-  const tampil = data.rows.filter(r => tabDari(r) === tab
-    && (!kata || `${r.canonical_id} ${r.uraian} ${r.barang_nama ?? ''}`.toLowerCase().includes(kata)));
+  const tampil = data.rows.filter(r => tabDari(r) === tab && (!fKat || r.kategori === fKat)
+    && (!kata || `${r.canonical_id} ${r.uraian} ${r.barang_nama ?? ''} ${r.kode_rekening ?? ''} ${r.jenis_kategori ?? ''}`.toLowerCase().includes(kata)));
   const totalAnggaran = data.rows.reduce((t, r) => t + (r.anggaran_nilai ?? r.nilai_rencana), 0);
   const totalDiterima = data.rows.reduce((t, r) => t + r.nilai_realisasi, 0);
 
@@ -122,8 +124,9 @@ export default function PengadaanClient({ username, role, themePreference, beku,
             <TombolUnduhBuku tahun={data.tahun} lembar="Pengadaan" />
             <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 360 }}>
               <Search size={14} style={{ position: 'absolute', left: 9, top: 9, color: c.sub }} />
-              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cari kode, uraian, barang" aria-label="Cari rencana" style={{ ...inp, width: '100%', paddingLeft: 28, boxSizing: 'border-box' }} />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cari kode, uraian, barang, rekening" aria-label="Cari rencana" style={{ ...inp, width: '100%', paddingLeft: 28, boxSizing: 'border-box' }} />
             </div>
+            <select value={fKat} onChange={e => setFKat(e.target.value)} style={inp} aria-label="Kategori"><option value="">Semua kategori</option>{kategori.induk.map(i => <option key={i.id} value={i.nama}>{i.nama}</option>)}</select>
           </div>
           <div role="tablist" aria-label="Tahap pengadaan" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
             {TAB_PENGADAAN.map(t => (

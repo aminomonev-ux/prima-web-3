@@ -5,7 +5,7 @@ import { AsetDaftarSchema, AsetIdSchema, AsetIdsSchema, AsetOpnameSchema, AsetSa
 import {
   daftarAset, detailAset, asetMenurutId, asetOpname, asetUntukSasaran, batasCekSekarang, ubahAset, AsetVersiError, AsetTidakAdaError,
 } from '@/lib/data/bba-aset';
-import { BbaBarangTidakDikenalError } from '@/lib/data/buku-besar-aset';
+import { BbaBarangTidakDikenalError, BbaKategoriTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../_guard';
 
 // Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14): GET daftar berkelompok · ?id= kartu aset ·
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest) {
   } catch (err) {
     if (err instanceof AsetVersiError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
     if (err instanceof AsetTidakAdaError) return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
-    if (err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBarangTidakDikenalError || err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
   const ket = [p.data.nama !== undefined ? 'nama' : '', p.data.barang_baru ? `barang_baru="${p.data.barang_baru.slice(0, 40)}"` : p.data.barang_id !== undefined ? `barang_id=${p.data.barang_id}` : ''].filter(Boolean).join(' ');

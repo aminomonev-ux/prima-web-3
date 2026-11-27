@@ -1234,14 +1234,23 @@ INSERT IGNORE INTO app_config (`key`, value) VALUES
 -- Nama dirapikan `rapikanNamaBarang` (lib/bba/barang.ts); kolasi ci menolak kembar beda huruf.
 -- Dibuat SEBELUM buku_besar_aset karena fk_bba_barang menunjuk ke sini.
 CREATE TABLE IF NOT EXISTS bba_barang (
-  id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  nama          VARCHAR(160) NOT NULL,
-  kategori_aset VARCHAR(64)  NULL,
-  satuan        VARCHAR(32)  NULL,
-  created_by    INT          NULL,
-  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  nama              VARCHAR(160) NOT NULL,
+  kategori_aset     VARCHAR(64)  NULL,
+  kategori_id       INT UNSIGNED NULL,
+  jenis_kategori_id INT UNSIGNED NULL,
+  kategori          VARCHAR(100) NULL,
+  jenis_kategori    VARCHAR(255) NULL,
+  kode_rekening     VARCHAR(64)  NULL,
+  kelompok_kib      VARCHAR(128) NULL,
+  satuan            VARCHAR(32)  NULL,
+  created_by        INT          NULL,
+  created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_bba_barang_nama (nama),
+  KEY idx_bbg_kat_id (kategori_id),
+  KEY idx_bbg_jenis_id (jenis_kategori_id),
+  KEY idx_bbg_kategori (kategori),
   CONSTRAINT fk_bba_barang_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='BBA — master jenis barang (kunci riwayat beli & eksisting)';
@@ -1260,6 +1269,11 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
   kode_rekening     VARCHAR(64)     NULL,
   uraian            TEXT            NOT NULL,
   kategori_aset     VARCHAR(64)     NULL,
+  kategori_id       INT UNSIGNED    NULL,
+  jenis_kategori_id INT UNSIGNED    NULL,
+  kategori          VARCHAR(100)    NULL,
+  jenis_kategori    VARCHAR(255)    NULL,
+  kelompok_kib      VARCHAR(128)    NULL,
   -- migration-bba-barang-proses: jenis barang (Master Barang); NULL = belum ditautkan
   barang_id         INT UNSIGNED    NULL,
   -- migration-bba-rencana (Tahap D buku aset): NULL = rencana lama belum digolongkan
@@ -1303,6 +1317,10 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
   KEY idx_im_status       (status),
   KEY idx_im_tahun_status (tahun_anggaran, status),
   KEY idx_bba_barang      (barang_id),
+  KEY idx_bba_kat_id      (kategori_id),
+  KEY idx_bba_jenis_id    (jenis_kategori_id),
+  KEY idx_bba_kategori    (kategori),
+  KEY idx_bba_kode_rek    (kode_rekening),
   CONSTRAINT fk_im_created FOREIGN KEY (created_by)     REFERENCES users(id)            ON DELETE SET NULL,
   CONSTRAINT fk_im_updated FOREIGN KEY (updated_by)     REFERENCES users(id)            ON DELETE SET NULL,
   CONSTRAINT fk_bba_barang FOREIGN KEY (barang_id)      REFERENCES bba_barang(id)       ON DELETE RESTRICT
@@ -1311,24 +1329,74 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
 
 INSERT IGNORE INTO app_config (`key`, value) VALUES ('app_status_buku_besar_aset', 'online');
 
--- Master Kategori Aset (BBA) — sumber dropdown kategori_aset (migration-bba-kategori-master.sql)
-CREATE TABLE IF NOT EXISTS bba_kategori_aset (
+-- Master Kategori Induk, Kelompok KIB & Jenis Kategori (BBA) — migration-bba-master-kategori.sql
+CREATE TABLE IF NOT EXISTS bba_kategori_induk (
   id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  nama       VARCHAR(128) NOT NULL,
+  nama       VARCHAR(100) NOT NULL,
+  bawaan     TINYINT(1)   NOT NULL DEFAULT 0,
   urutan     INT          NOT NULL DEFAULT 0,
   created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_bba_kategori_nama (nama)
+  UNIQUE KEY uq_bba_kat_induk_nama (nama)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='Master kategori aset (BBA) — sumber dropdown kategori_aset';
+  COMMENT='Master kategori induk BBA (Barang dan Jasa, Modal, Pegawai, kustom)';
 
-INSERT IGNORE INTO bba_kategori_aset (nama, urutan) VALUES
-  ('TANAH', 1),
-  ('PERALATAN DAN MESIN', 2),
-  ('GEDUNG DAN BANGUNAN', 3),
-  ('JALAN, IRIGASI, DAN JARINGAN', 4),
-  ('KONSTRUKSI DALAM PENGERJAAN (KDP)', 5),
-  ('ALKES & ALDOK', 6);
+INSERT IGNORE INTO bba_kategori_induk (nama, bawaan, urutan) VALUES
+  ('Barang dan Jasa', 1, 1),
+  ('Modal',           1, 2),
+  ('Pegawai',         1, 3);
+
+CREATE TABLE IF NOT EXISTS bba_kelompok_kib (
+  id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  nama       VARCHAR(128) NOT NULL,
+  bawaan     TINYINT(1)   NOT NULL DEFAULT 0,
+  urutan     INT          NOT NULL DEFAULT 0,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_bba_kelompok_kib_nama (nama)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  COMMENT='Master kelompok KIB BBA untuk kategori Modal (6 bawaan + kustom)';
+
+INSERT IGNORE INTO bba_kelompok_kib (nama, bawaan, urutan) VALUES
+  ('TANAH',                              1, 1),
+  ('PERALATAN DAN MESIN',                1, 2),
+  ('GEDUNG DAN BANGUNAN',                1, 3),
+  ('JALAN, IRIGASI, DAN JARINGAN',       1, 4),
+  ('KONSTRUKSI DALAM PENGERJAAN (KDP)', 1, 5),
+  ('ALKES & ALDOK',                      1, 6);
+
+CREATE TABLE IF NOT EXISTS bba_kategori_aset (
+  id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  kategori_id   INT UNSIGNED NOT NULL,
+  nama          VARCHAR(255) NOT NULL,
+  kode_rekening VARCHAR(64)  NULL,
+  kelompok_kib  VARCHAR(128) NULL,
+  urutan        INT          NOT NULL DEFAULT 0,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_bka_induk (kategori_id),
+  KEY idx_bka_induk_nama (kategori_id, nama),
+  KEY idx_bka_kode (kode_rekening),
+  KEY idx_bka_kelompok_kib (kelompok_kib),
+  CONSTRAINT fk_bka_induk FOREIGN KEY (kategori_id) REFERENCES bba_kategori_induk(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  COMMENT='Master jenis kategori BBA (level 2) — kode rekening BLUD & kelompok KIB';
+
+INSERT INTO bba_kategori_aset (kategori_id, nama, kode_rekening, kelompok_kib, urutan)
+SELECT i.id, v.nama, NULL, v.nama, v.urutan
+FROM bba_kategori_induk i
+JOIN (
+  SELECT 'TANAH' AS nama, 1 AS urutan UNION ALL
+  SELECT 'PERALATAN DAN MESIN', 2 UNION ALL
+  SELECT 'GEDUNG DAN BANGUNAN', 3 UNION ALL
+  SELECT 'JALAN, IRIGASI, DAN JARINGAN', 4 UNION ALL
+  SELECT 'KONSTRUKSI DALAM PENGERJAAN (KDP)', 5 UNION ALL
+  SELECT 'ALKES & ALDOK', 6
+) v
+WHERE i.nama = 'Modal'
+  AND NOT EXISTS (
+    SELECT 1 FROM bba_kategori_aset k WHERE k.kategori_id = i.id AND k.nama = v.nama
+  );
 
 -- BBA referensi harga + bukti dukung per item (migration-bba-referensi-bukti.sql,
 -- docs/konsep/bba/CONCEPT-bba-perencanaan.md §4). Referensi ditulis ulang tiap Simpan item (satu
@@ -1354,22 +1422,30 @@ CREATE TABLE IF NOT EXISTS bba_referensi_harga (
 
 -- BBA revamp Tahap 5 — Penawaran Rekanan (migration-bba-penawaran.sql). Sesudah bba_barang (FK barang_id).
 CREATE TABLE IF NOT EXISTS bba_penawaran (
-  id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  rekanan        VARCHAR(160) NOT NULL,
-  nomor_surat    VARCHAR(120) NULL,
-  tgl_surat      DATE         NOT NULL,
-  berlaku_sampai DATE         NULL COMMENT 'NULL = tanpa batas tertulis',
-  kategori       VARCHAR(80)  NULL,
-  file_id        VARCHAR(64)  NULL COMMENT 'Soft-FK uploaded_files.file_id (context buku_besar_aset) — berkas surat',
-  catatan        VARCHAR(500) NULL,
-  version        INT UNSIGNED NOT NULL DEFAULT 0,
-  created_by     INT          NULL,
-  updated_by     INT          NULL,
-  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  rekanan           VARCHAR(160) NOT NULL,
+  nomor_surat       VARCHAR(120) NULL,
+  tgl_surat         DATE         NOT NULL,
+  berlaku_sampai    DATE         NULL COMMENT 'NULL = tanpa batas tertulis',
+  kategori_id       INT UNSIGNED NULL,
+  jenis_kategori_id INT UNSIGNED NULL,
+  kategori          VARCHAR(100) NULL,
+  jenis_kategori    VARCHAR(255) NULL,
+  kode_rekening     VARCHAR(64)  NULL,
+  kelompok_kib      VARCHAR(128) NULL,
+  file_id           VARCHAR(64)  NULL COMMENT 'Soft-FK uploaded_files.file_id (context buku_besar_aset) — berkas surat',
+  catatan           VARCHAR(500) NULL,
+  version           INT UNSIGNED NOT NULL DEFAULT 0,
+  created_by        INT          NULL,
+  updated_by        INT          NULL,
+  created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_bpw_tgl (tgl_surat),
   KEY idx_bpw_rekanan (rekanan),
+  KEY idx_bpw_kat_id (kategori_id),
+  KEY idx_bpw_jenis_id (jenis_kategori_id),
+  KEY idx_bpw_kategori (kategori),
   CONSTRAINT fk_bpw_dibuat FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_bpw_diubah FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4

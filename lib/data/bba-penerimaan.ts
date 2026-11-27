@@ -7,12 +7,13 @@ import type mysql from 'mysql2/promise';
 import { sql, queryMany, withTransaction, bulkInsert, sqlInt, type TxSql } from '@/lib/data/db';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import { ringkasPenerimaan, alasanTolakPenerimaan, sisaDitempatkan, salinanYangDibeli } from '@/lib/bba/penerimaan';
+import { adalahModal, normalisasiKategoriItem } from '@/lib/bba/kategori';
 import type { BbaStatus } from '@/lib/bba/status';
 import { bolehBerRuang, punyaKondisi } from '@/lib/bba/kondisi';
 import { uraiKodeBarang, golonganDariKodeObjek, TEKS_KONDISI_KIB, type Golongan, type Kondisi } from '@/lib/bba/kib';
 import type { JenisRencana } from '@/lib/bba/rencana';
 import {
-  SELECT_COLS, FROM_JOIN, mapRow, listReferensi, bekukanTautanUsulan, pastikanBerkasBba,
+  SELECT_COLS, SYARAT_MODAL, FROM_JOIN, mapRow, listReferensi, bekukanTautanUsulan, pastikanBerkasBba,
   BbaNotFoundError, BbaVersionConflictError, BbaLokasiTidakDikenalError, type BbaRow,
 } from '@/lib/data/buku-besar-aset';
 import { AsetVersiError, AsetTidakAdaError, AsetDitolakError } from '@/lib/data/bba-aset';
@@ -172,6 +173,7 @@ export async function hapusPenerimaan(id: number, userId: number, bolehKoreksiMu
 export interface AntreanTerima {
   penerimaan_id: number; rencana_id: number; canonical_id: string; tahun: number; uraian: string; jenis: JenisRencana | null;
   barang_id: number | null; barang_nama: string | null; tgl: string; vol: number; sisa: number; harga_satuan: number; merk_tipe: string | null;
+  kategori: string | null; jenis_kategori: string | null; kode_rekening: string | null; kelompok_kib: string | null;
 }
 export interface AntreanRehab {
   rencana_id: number; canonical_id: string; uraian: string; tgl: string; aset_id: number; aset_version: number;
@@ -183,12 +185,15 @@ const BATAS_ANTREAN = 500;
 export async function antreanBukuAset(): Promise<{ terima: AntreanTerima[]; rehab: AntreanRehab[] }> {
   const [rows, rehab] = await Promise.all([
     // `pindahan` = realisasi lama yang dipindah migrasi: barangnya sudah di KIB provinsi.
+    // Hanya kategori Modal (termasuk data lama tanpa kategori non-5.1) yang masuk antrean register Buku Aset (KIB).
     queryMany<Record<string, unknown>>(sql`
       SELECT p.id, p.rencana_id, b.canonical_id, b.tahun_anggaran, b.uraian, b.jenis_rencana, b.barang_id, g.nama AS barang_nama,
+             b.kategori, b.jenis_kategori, b.kode_rekening, b.kelompok_kib, b.kategori_aset,
              DATE_FORMAT(p.tgl, '%Y-%m-%d') AS tgl, p.vol, p.harga_satuan, p.merk_tipe,
              (SELECT COUNT(*) FROM bba_aset a WHERE a.penerimaan_id = p.id) AS sudah
       FROM bba_penerimaan p JOIN buku_besar_aset b ON b.id = p.rencana_id LEFT JOIN bba_barang g ON g.id = b.barang_id
       WHERE p.pindahan = 0 AND (b.jenis_rencana IS NULL OR b.jenis_rencana <> 'REHAB')
+        AND ${SYARAT_MODAL}
         AND (SELECT COUNT(*) FROM bba_aset a WHERE a.penerimaan_id = p.id) < FLOOR(p.vol + 0.005)
       ORDER BY p.tgl DESC, p.id DESC LIMIT ${sqlInt(BATAS_ANTREAN)}
     `),
@@ -206,11 +211,19 @@ export async function antreanBukuAset(): Promise<{ terima: AntreanTerima[]; reha
   return {
     terima: rows.map(r => {
       const jenis = (r.jenis_rencana as JenisRencana | null) ?? null;
+      const kat = normalisasiKategoriItem({
+        kategori: (r.kategori as string | null) ?? null,
+        jenis_kategori: (r.jenis_kategori as string | null) ?? null,
+        kode_rekening: (r.kode_rekening as string | null) ?? null,
+        kelompok_kib: (r.kelompok_kib as string | null) ?? null,
+        kategori_aset: (r.kategori_aset as string | null) ?? null,
+      });
       return {
         penerimaan_id: Number(r.id), rencana_id: Number(r.rencana_id), canonical_id: String(r.canonical_id ?? ''), tahun: Number(r.tahun_anggaran),
         uraian: String(r.uraian ?? ''), jenis, barang_id: r.barang_id == null ? null : Number(r.barang_id), barang_nama: (r.barang_nama as string | null) ?? null,
         tgl: (r.tgl as string | null) ?? '', vol: Number(r.vol), sisa: sisaDitempatkan({ vol: Number(r.vol) }, Number(r.sudah ?? 0), jenis),
         harga_satuan: Number(r.harga_satuan), merk_tipe: (r.merk_tipe as string | null) ?? null,
+        kategori: kat.kategori, jenis_kategori: kat.jenis_kategori, kode_rekening: kat.kode_rekening, kelompok_kib: kat.kelompok_kib,
       };
     }),
     rehab: rehab.map(r => ({
@@ -229,11 +242,19 @@ export async function antreanBukuAset(): Promise<{ terima: AntreanTerima[]; reha
 export async function tempatkan(input: TempatkanInput, userId: number): Promise<{ ditempatkan: number; canonical_id: string }> {
   return withTransaction(async ({ tx, conn }) => {
     const ps = await tx`
-      SELECT p.id, DATE_FORMAT(p.tgl, '%Y-%m-%d') AS tgl, p.vol, p.harga_satuan, p.merk_tipe, p.pindahan, b.barang_id, b.jenis_rencana, b.uraian, b.canonical_id
+      SELECT p.id, DATE_FORMAT(p.tgl, '%Y-%m-%d') AS tgl, p.vol, p.harga_satuan, p.merk_tipe, p.pindahan,
+             b.barang_id, b.jenis_rencana, b.uraian, b.canonical_id, b.kategori, b.kategori_aset, b.kode_rekening
       FROM bba_penerimaan p JOIN buku_besar_aset b ON b.id = p.rencana_id WHERE p.id = ${input.penerimaan_id} FOR UPDATE
     ` as Array<Record<string, unknown>>;
     if (ps.length === 0) throw new BbaNotFoundError();
     const p = ps[0];
+    if (!adalahModal({
+      kategori: (p.kategori as string | null) ?? null,
+      kategori_aset: (p.kategori_aset as string | null) ?? null,
+      kode_rekening: (p.kode_rekening as string | null) ?? null,
+    })) {
+      throw new PenerimaanDitolakError('Hanya item kategori Modal yang dapat ditempatkan menjadi register Buku Aset (KIB).');
+    }
     const sudah = Number(((await tx`SELECT COUNT(*) AS n FROM bba_aset WHERE penerimaan_id = ${input.penerimaan_id}`) as Array<{ n: number }>)[0]?.n ?? 0);
     const sisa = Number(p.pindahan) === 1 ? 0 : sisaDitempatkan({ vol: Number(p.vol) }, sudah, (p.jenis_rencana as JenisRencana | null) ?? null);
     if (input.jumlah > sisa) throw new PenerimaanDitolakError(sisa === 0 ? 'Tidak ada unit penerimaan ini yang menunggu ditempatkan.' : `Tinggal ${sisa} unit yang belum ditempatkan.`);

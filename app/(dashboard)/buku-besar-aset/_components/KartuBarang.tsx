@@ -88,7 +88,7 @@ export default function KartuBarang({ barangId, tahun, c, tandaiTahun, ringkas, 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ fontSize: 11, color: c.sub }}>Barang</div>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{barang.nama}{barang.kategori_aset ? <span style={{ fontWeight: 400, color: c.sub, fontSize: 11.5 }}> · {barang.kategori_aset}</span> : null}</div>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{barang.nama}{barang.kategori || barang.kategori_aset ? <span style={{ fontWeight: 400, color: c.sub, fontSize: 11.5 }}> · {[barang.kategori, barang.jenis_kategori ?? barang.kategori_aset].filter(Boolean).join(' › ')}</span> : null}</div>
 
       {petunjuk.length > 0 && (
         <div role="note" style={{ border: '1px solid rgba(186,117,23,.5)', background: 'rgba(186,117,23,.10)', borderRadius: 8, padding: '6px 9px', display: 'flex', flexDirection: 'column', gap: 3 }}>

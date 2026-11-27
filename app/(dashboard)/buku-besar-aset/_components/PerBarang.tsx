@@ -80,7 +80,7 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
               const sat = r.satuan || 'unit';
               return (
                 <tr key={r.id} onClick={() => setBuka(r)} style={{ background: i % 2 ? c.rowOdd : 'transparent', cursor: 'pointer' }}>
-                  <td style={td}><b>{r.nama}</b>{r.kategori_aset ? <span style={{ fontSize: 11, color: c.sub }}> · {r.kategori_aset}</span> : null}</td>
+                  <td style={td}><b>{r.nama}</b>{r.kategori || r.kategori_aset ? <span style={{ fontSize: 11, color: c.sub }}> · {[r.kategori, r.jenis_kategori ?? r.kategori_aset].filter(Boolean).join(' › ')}</span> : null}</td>
                   <td style={{ ...td, minWidth: 150 }}>
                     {r.dimiliki
                       ? <>

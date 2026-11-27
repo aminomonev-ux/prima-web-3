@@ -28,6 +28,8 @@ import type { BbaRow, BbaBukti, BbaDetail, BbaBarang, SasaranRencana } from '@/l
 import { JENIS_RENCANA, LABEL_JENIS, KAPAN_JENIS, LABEL_ANGGARAN, type JenisRencana } from '@/lib/bba/rencana';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
 import PilihSasaran from './PilihSasaran';
+import PilihKategori from './PilihKategori';
+import { pilihanDariBaris, type MasterKategoriData, type PilihanKategori } from '@/lib/bba/kategori';
 import KartuBarang from './KartuBarang';
 import GarisTahap from './GarisTahap';
 import AmbilPenawaran from './AmbilPenawaran';
@@ -72,21 +74,21 @@ export function LencanaBukti({ bukti }: { bukti: KelengkapanBukti | null }) {
 // ─── Isian Data item ──────────────────────────────────────────────────────────
 // Status sengaja TIDAK di sini — satu pintu: modal Proses & Realisasi (§5.2).
 type IsianItem = {
-  tahun_anggaran: number; uraian: string; kode_rekening: string; kategori_aset: string; sumber_anggaran: string;
+  tahun_anggaran: number; uraian: string; kode_rekening: string; kat: PilihanKategori; sumber_anggaran: string;
   vol: number; satuan: string; harga: number; penanggung_jawab: string; keterangan: string; barang: PilihanBarang;
   // Tahap D buku aset (§7.3). `sasaran` = id register terurut — labelnya di state terpisah.
   jenis_rencana: JenisRencana | ''; alasan: string; sasaran: number[];
 };
 
 const isianKosong = (tahun: number): IsianItem => ({
-  tahun_anggaran: tahun, uraian: '', kode_rekening: '', kategori_aset: '', sumber_anggaran: 'BLUD',
+  tahun_anggaran: tahun, uraian: '', kode_rekening: '', kat: { kategori_id: null, jenis_kategori_id: null }, sumber_anggaran: 'BLUD',
   vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '', barang: null, jenis_rencana: '', alasan: '', sasaran: [],
 });
 
 const urutId = (xs: readonly { id: number }[]) => xs.map(x => x.id).sort((a, b) => a - b);
 
-const isianDari = (r: BbaRow, sasaran: readonly SasaranRencana[]): IsianItem => ({
-  tahun_anggaran: r.tahun_anggaran, uraian: r.uraian, kode_rekening: r.kode_rekening || '', kategori_aset: r.kategori_aset || '',
+const isianDari = (r: BbaRow, sasaran: readonly SasaranRencana[], master: MasterKategoriData): IsianItem => ({
+  tahun_anggaran: r.tahun_anggaran, uraian: r.uraian, kode_rekening: r.kode_rekening || '', kat: pilihanDariBaris(master, r),
   sumber_anggaran: r.sumber_anggaran, vol: r.vol, satuan: r.satuan || '', harga: r.harga,
   penanggung_jawab: r.penanggung_jawab || '', keterangan: r.keterangan || '',
   barang: r.barang_id ? { id: r.barang_id, nama: r.barang_nama ?? '' } : null,
@@ -120,7 +122,7 @@ type Props = {
   tabAwal: TabItem;
   saringanAwal: 'BELUM' | 'SEMUA';
   tahun: number;
-  kategori: string[];
+  kategori: MasterKategoriData;
   /** Izin EDIT bagian Rencana — tanpa itu modal hanya untuk membaca (pagarnya tetap di route). */
   bolehUbah: boolean;
   /** Bukti dukung dipegang Rencana ATAU Pengadaan. */
@@ -186,7 +188,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
     // Selama belum ada referensi tersimpan, slot diisi dari tautan usulan (§4.1) — dan itu
     // jadi DASAR pembanding, jadi membuka item tanpa mengetik apa pun tidak berbunyi "belum tersimpan".
     const refsAwal = det.referensi.length > 0 ? det.referensi : slotDariUsulan(det.item.tautan_usulan);
-    const isianAwal = isianDari(det.item, det.sasaran);
+    const isianAwal = isianDari(det.item, det.sasaran, kategori);
     setInfoSasaran(det.sasaran);
     setGalatMuat('');
     setMuatan({ item: det.item, referensiTersimpan: det.referensi.length });
@@ -243,7 +245,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
     if (rapi.length > MAKS_REFERENSI) { setTab('ref'); toast.error(`Referensi harga paling banyak ${MAKS_REFERENSI}`); return; }
 
     const dataUmum = {
-      kode_rekening: isian.kode_rekening || null, kategori_aset: isian.kategori_aset || null,
+      kode_rekening: isian.kode_rekening || null,
       sumber_anggaran: isian.sumber_anggaran, satuan: isian.satuan || null,
       penanggung_jawab: isian.penanggung_jawab || null, keterangan: isian.keterangan || null,
       jenis_rencana: isian.jenis_rencana || null, alasan: isian.alasan.trim() || null,
@@ -252,14 +254,17 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
     const refBerubah = !referensiSama(refs, dasar.refs);
     const barangBerubah = JSON.stringify(isian.barang) !== JSON.stringify(dasar.isian.barang);
     const sasaranBerubah = JSON.stringify(isian.sasaran) !== JSON.stringify(dasar.isian.sasaran);
+    const katBerubah = JSON.stringify(isian.kat) !== JSON.stringify(dasar.isian.kat);
     const body = modeBaru
       ? { tahun_anggaran: isian.tahun_anggaran, uraian: isian.uraian, vol: isian.vol, harga: isian.harga, ...dataUmum,
+          ...(isian.kat.kategori_id ? isian.kat : {}),
           ...(isian.barang ? bodyBarang(isian.barang) : {}), ...(rapi.length ? { referensi: rapi } : {}),
           ...(isian.sasaran.length ? { aset_sasaran: isian.sasaran } : {}) }
       : {
           id: item!.id, expected_version: item!.version, ...dataUmum,
           // Baris asal-usulan: uraian/vol/harga terkunci server-side → tidak dikirim (T8).
           ...(isUsulan ? {} : { uraian: isian.uraian, vol: isian.vol, harga: isian.harga }),
+          ...(katBerubah ? isian.kat : {}),
           ...(barangBerubah ? bodyBarang(isian.barang) : {}),
           ...(refBerubah ? { referensi: rapi } : {}),
           ...(sasaranBerubah ? { aset_sasaran: isian.sasaran } : {}),
@@ -464,8 +469,11 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                         dipilih={isian.sasaran.map(id => infoSasaran.find(x => x.id === id)).filter((x): x is SasaranRencana => !!x)}
                         onUbah={xs => { setInfoSasaran(lama => [...lama.filter(x => !xs.some(y => y.id === x.id)), ...xs]); setIsian({ ...isian, sasaran: urutId(xs) }); }} />
                     </fieldset>
-                    <Field label="Kode Rekening"><input value={isian.kode_rekening} onChange={e => setIsian({ ...isian, kode_rekening: e.target.value })} style={{ ...inp, fontFamily: MONO }} /></Field>
-                    <Field label="Kategori Aset"><SatuanCombobox value={isian.kategori_aset} onChange={v => setIsian({ ...isian, kategori_aset: v })} options={kategori} style={inp} placeholder="Pilih / ketik kategori…" /></Field>
+                    <Field label="Kategori · Jenis · Kode Rekening" full>
+                      <PilihKategori c={c} master={kategori} inp={inp} teksLama={item?.jenis_kategori ?? item?.kategori_aset}
+                        nilai={{ ...isian.kat, kode_rekening: isian.kode_rekening }}
+                        onChange={n => setIsian({ ...isian, kat: { kategori_id: n.kategori_id, jenis_kategori_id: n.jenis_kategori_id }, kode_rekening: n.kode_rekening })} />
+                    </Field>
                     <Field label="Vol"><PrimaNumberField value={isian.vol} disabled={isUsulan} onChange={e => setIsian({ ...isian, vol: Number(e.target.value) })} /></Field>
                     <Field label="Satuan"><SatuanCombobox value={isian.satuan} onChange={v => setIsian({ ...isian, satuan: v })} style={inp} placeholder="Pilih / ketik satuan…" /></Field>
                     <Field label="Harga satuan">{isUsulan

@@ -3,7 +3,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { PenawaranSimpanSchema, PenawaranHapusSchema } from '@/lib/data/bba-penawaran-schemas';
 import { listPenawaran, itemPenawaran, saranRekanan, simpanPenawaran, hapusPenawaran } from '@/lib/data/bba-penawaran';
-import { BbaVersionConflictError, BbaNotFoundError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError } from '@/lib/data/buku-besar-aset';
+import { BbaVersionConflictError, BbaNotFoundError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError, BbaKategoriTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, type GuardedSession } from '../_guard';
 
 // Penawaran Rekanan (docs/konsep/bba/CONCEPT-bba-revamp-alur.md §5A). Lihat = semua pemegang BBA (guard); catat/ubah/hapus =
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 const galat = (err: unknown) => {
   if (err instanceof BbaVersionConflictError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: 'Surat ini baru saja diubah orang lain — dimuat ulang.' }, { status: 409 });
   if (err instanceof BbaNotFoundError) return NextResponse.json({ ok: false, message: 'Surat penawaran tidak ditemukan.' }, { status: 404 });
-  if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+  if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
   throw err;
 };
 

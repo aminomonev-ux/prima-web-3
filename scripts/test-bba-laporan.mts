@@ -79,7 +79,7 @@ const bahan: BahanBukuRencana = {
 console.log('\nC. Route & sambungan')
 {
   const un = sumber('app/api/buku-besar-aset/unduh/route.ts'), dl = sumber('lib/data/bba-laporan.ts')
-  ok('C1 unduhan & Drive memakai penyusun yang SAMA (bahanBukuRencana → tulisBuku → tulisBukuRencana)', un.includes('bukuRencanaBuffer(p.data.tahun, p.data.lembar)')
+  ok('C1 unduhan & Drive memakai penyusun yang SAMA (bahanBukuRencana → tulisBuku → tulisBukuRencana)', un.includes('bukuRencanaBuffer(p.data.tahun, p.data.lembar')
     && dl.includes('tulisBukuRencana(wb, b, aktif)') && dl.includes('buffer: await tulisBuku(b, aktif)')
     && dl.includes('await bahanBukuRencana(t, penawaran)') && dl.includes("tulis: () => tulisBuku(b, 'Ringkasan')"))
   const cron = sumber('app/api/cron/bba-drive/route.ts'), kirim = sumber('app/api/buku-besar-aset/drive-kirim/route.ts')

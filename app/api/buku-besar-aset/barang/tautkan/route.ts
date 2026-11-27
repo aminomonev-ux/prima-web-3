@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { BarangTautkanSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
-import { tautkanBarang, BbaBarangTidakDikenalError } from '@/lib/data/buku-besar-aset';
+import { tautkanBarang, BbaBarangTidakDikenalError, BbaKategoriTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from '../../_guard';
 
 // POST /api/buku-besar-aset/barang/tautkan { pasangan: [{ aset_id, barang_id | barang_baru }] }
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       detail: `BBA tautkan barang item=${h.ditautkan} dilewati=${h.dilewati} barang_baru=${h.barang_baru}` });
     return NextResponse.json({ ok: true, ...h });
   } catch (err) {
-    if (err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBarangTidakDikenalError || err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
 }

@@ -2,7 +2,7 @@
 
 - **Modul Utama:** Buku Besar Aset (`app/(dashboard)/buku-besar-aset`)
 - **Integrasi Terkait:** Modul BLUD (`Master Akun` & `Kode Besar`), Usulan Kebutuhan, Cetak & Ekspor Excel
-- **Status Dokumen:** Konsep Final (Siap Implementasi) — **belum ada kode/migrasi yang ditulis**
+- **Status Dokumen:** DIKERJAKAN 2026-11-27 — mig `docs/migrations/migration-bba-master-kategori.sql` (**WAJIB dijalankan di server kantor sebelum kodenya dipasang**), regresi `npx tsx --env-file=.env.local scripts/test-bba-kategori.mts` (46, kotak pasir 2063, 13 uji mutasi tertangkap). Keputusan pelaksanaan yang menyimpang/menambah konsep: §7.
 - **Prasyarat sebelum implementasi:** kolom/tabel baru wajib masuk `docs/schema-mysql.sql` + `docs/migrations/migration-*.sql`, dan setiap tulis soft-FK (`kategori_id`, `jenis_kategori_id`, `kelompok_kib`) wajib lewat cek-eksistensi (L68)
 
 ---
@@ -214,3 +214,18 @@ Setiap item pada tahap Rencana, Pengadaan, Penawaran, dan Aset menyimpan:
 | **Alur Penerimaan & Menu Aset (KIB)** | `AksiTerima.tsx`, `aset/aset-client.tsx`, `KartuAset.tsx`, `ModalImporKib.tsx`<br>`app/api/buku-besar-aset/aset/*` | Menyaring hanya item dengan `kategori === "Modal"` untuk masuk ke antrean register aset, dan menggunakan `kelompok_kib` sebagai penentu golongan KIB. |
 | **Integrasi Usulan Kebutuhan & Pagu** | `app/api/buku-besar-aset/import-usulan/route.ts`<br>`KartuPagu.tsx` | Memetakan data usulan yang ditarik ke struktur `kategori`, `jenis_kategori`, dan `kode_rekening` (jika tersedia). |
 | **Cetak & Ekspor Excel** | `cetak/cetak-client.tsx`, `UnduhBuku.tsx`<br>`app/api/buku-besar-aset/aset/excel/route.ts`<br>`app/api/buku-besar-aset/unduh/route.ts` | Menambahkan filter per **Kategori** dan **Jenis Kategori**, serta menyertakan kolom **Kode Rekening** pada hasil cetak dan file Excel. |
+
+---
+
+## 7. Catatan Pelaksanaan (2026-11-27)
+
+1. **Satu aturan "Modal"**: `adalahModal` (`lib/bba/kategori.ts`) dan cermin SQL-nya `SYARAT_MODAL` (`lib/data/buku-besar-aset.ts`) — dipakai saringan Kategori=Modal, `belum_dicatat` (tahap rencana), antrean Buku Aset, dan pagar `tempatkan`. Uji C7 membandingkan keduanya pada 12 bentuk data. Item tanpa kategori tetap dianggap Modal kecuali kode rekeningnya 5.1.x (perilaku lama BBA = register belanja modal).
+2. **Barang & Jasa / Pegawai yang diterima penuh langsung Tercatat** — tidak menunggu register. Antrean **rehab** sengaja TIDAK disaring kategori: rehab gedung sering dianggarkan sebagai pemeliharaan (5.1.02), padahal kondisi gedungnya tetap perlu diperbarui.
+3. **Kategori Modal ⇄ bukan Modal dikunci sesudah barang diterima** (`BbaKategoriBekuError`, 409 `KATEGORI_BEKU`) — berpindah sisi membuat unit yang menunggu register lenyap dari antrean. Jenis lain di kategori yang sama tetap boleh.
+4. **Kategori tidak diwajibkan** di form (konsep menandai `*`): Tinjauan Drive dan data lama membuat item tanpa kategori, dan bawaan "dianggap Modal" sudah aman. Kategori hanya dikirim kalau berubah (L87) — item/barang/surat lama yang cuma punya teks tidak dikosongkan diam-diam.
+5. **Urutan kunci**: baris master kategori (FOR SHARE) SELALU sebelum baris pemakai — `updateAset` menyelesaikan kategori sebelum mengunci item; hapus/ubah jenis mengunci master dulu baru melepas tautan.
+6. **Hapus**: jenis/induk → tautan id di item, barang, surat dilepas (teks tetap); kelompok KIB yang masih dipakai jenis, barang, rencana, atau surat ditolak dengan jumlahnya; induk & kelompok bawaan tidak bisa dihapus.
+7. **Ganti nama jenis menjalar** ke teks pemakai tanpa menaikkan angka kunci (label, bukan isi); **pindah induk** melepas tautan pemakai (Modal/bukan milik keputusan tiap item).
+8. **Migrasi**: teks kategori surat penawaran yang bukan nama induk dipindah ke `jenis_kategori` — dibiarkan, ia terbaca sebagai induk yang tidak ada dan Simpan surat berikutnya ditolak.
+9. **Pencarian rekening BLUD** (`GET /api/buku-besar-aset/kategori?rekening=`) hanya untuk penyunting Master; daftar kategori (`GET`) untuk semua pemegang BBA.
+10. **Belum dikerjakan**: tombol saringan kategori di layar Cetak (API `aset/excel?jenis=RENCANA&kategori=` dan `unduh?kategori=` sudah menerimanya), kolom kategori di antrean Tempatkan, dan `ModalImporKib`/penentu golongan dari `kelompok_kib` saat Tempatkan (golongan tetap dipilih petugas).

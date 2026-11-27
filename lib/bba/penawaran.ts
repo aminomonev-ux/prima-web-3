@@ -7,6 +7,7 @@ export type ItemPenawaran = {
   id: number; penawaran_id: number; rekanan: string; nomor_surat: string | null; tgl_surat: string; berlaku_sampai: string | null;
   file_id: string | null; barang_id: number | null; barang_nama: string | null; nama_barang: string; merk_tipe: string | null;
   spesifikasi: string | null; satuan: string | null; harga_satuan: number;
+  kategori?: string | null; jenis_kategori?: string | null; kode_rekening?: string | null;
 };
 
 /** Tanpa tanggal berlaku = berlaku (surat tidak menulis batas); tanggal berlaku hari ini masih berlaku. */

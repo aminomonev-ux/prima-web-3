@@ -14,6 +14,7 @@ export type RencanaLaporan = BahanTahap & {
   id: number; canonical_id: string; uraian: string; barang_nama: string | null; sumber_anggaran: string; vol: number; satuan: string | null;
   harga: number; nilai_rencana: number; anggaran: Anggaran; anggaran_nilai: number | null; jenis_rencana: JenisRencana | null;
   tgl_proses: string | null; vol_realisasi: number; nilai_realisasi: number; usulan_no: string | null; alasan: string | null;
+  kategori?: string | null; jenis_kategori?: string | null; kode_rekening?: string | null; kelompok_kib?: string | null;
 };
 export type PenerimaanLaporan = {
   id: number; rencana_id: number; tgl: string; vol: number; harga_satuan: number; nilai: number; merk_tipe: string | null; penyedia: string | null;
@@ -38,16 +39,19 @@ export const KOLOM_LAPORAN: Record<LembarBalik, KolomLaporan[]> = {
   rencana: [k('no', 'No', 'nomor', 5), k('kode', 'Kode', 'kode', 12), k('uraian', 'Uraian', 'uraian', 36), k('barang', 'Barang', 'teks', 18),
     k('jenis', 'Jenis', 'teks', 16), k('sumber', 'Sumber', 'teks', 9), k('vol', 'Vol', 'desimal', 7), k('satuan', 'Satuan', 'teks', 8),
     k('harga', 'Harga Satuan', 'rupiah', 15), k('nilai', 'Nilai Rencana', 'rupiah', 17), k('keputusan', 'Keputusan', 'teks', 14),
-    k('tahap', 'Tahap', 'teks', 18), k('ref', 'Ref', 'angka', 5), k('alasan', 'Alasan', 'teks', 36)],
+    k('tahap', 'Tahap', 'teks', 18), k('ref', 'Ref', 'angka', 5), k('alasan', 'Alasan', 'teks', 36),
+    k('kategori', 'Kategori', 'teks', 16), k('jenis_kategori', 'Jenis Kategori', 'teks', 26), k('kode_rekening', 'Kode Rekening', 'kode', 20), k('kelompok_kib', 'Kelompok KIB', 'teks', 24)],
   pengadaan: [k('no', 'No', 'nomor', 5), k('kode', 'Kode', 'kode', 12), k('uraian', 'Uraian', 'uraian', 36), k('vol', 'Vol', 'desimal', 7),
     k('satuan', 'Satuan', 'teks', 8), k('nilai_didanai', 'Nilai Didanai', 'rupiah', 17), k('tgl_pesan', 'Tgl Pesan', 'teks', 11),
-    k('vol_diterima', 'Vol Diterima', 'desimal', 9), k('nilai_diterima', 'Nilai Diterima', 'rupiah', 17), k('tahap', 'Tahap', 'teks', 18)],
+    k('vol_diterima', 'Vol Diterima', 'desimal', 9), k('nilai_diterima', 'Nilai Diterima', 'rupiah', 17), k('tahap', 'Tahap', 'teks', 18),
+    k('kategori', 'Kategori', 'teks', 16), k('jenis_kategori', 'Jenis Kategori', 'teks', 26), k('kode_rekening', 'Kode Rekening', 'kode', 20)],
   penerimaan: [k('no', 'No', 'nomor', 5), k('kode', 'Kode', 'kode', 12), k('uraian', 'Uraian', 'uraian', 30), k('tgl', 'Tanggal', 'teks', 11),
     k('vol', 'Jumlah', 'desimal', 8), k('harga', 'Harga Riil', 'rupiah', 15), k('nilai', 'Nilai', 'rupiah', 17), k('merk', 'Merk / Tipe', 'teks', 20),
     k('penyedia', 'Penyedia', 'teks', 20), k('register', 'Register', 'angka', 9), k('catatan', 'Catatan', 'teks', 24)],
   penawaran: [k('no', 'No', 'nomor', 5), k('rekanan', 'Rekanan', 'teks', 24), k('nomor', 'No. Surat', 'teks', 16), k('tgl_surat', 'Tgl Surat', 'teks', 11),
     k('berlaku', 'Berlaku s.d.', 'teks', 11), k('status', 'Status', 'teks', 12), k('barang', 'Barang', 'teks', 20), k('nama', 'Nama di Surat', 'uraian', 28),
-    k('merk', 'Merk / Tipe', 'teks', 18), k('spesifikasi', 'Spesifikasi', 'teks', 28), k('satuan', 'Satuan', 'teks', 8), k('harga', 'Harga Satuan', 'rupiah', 15)],
+    k('merk', 'Merk / Tipe', 'teks', 18), k('spesifikasi', 'Spesifikasi', 'teks', 28), k('satuan', 'Satuan', 'teks', 8), k('harga', 'Harga Satuan', 'rupiah', 15),
+    k('kategori', 'Kategori', 'teks', 16), k('jenis_kategori', 'Jenis Kategori', 'teks', 26), k('kode_rekening', 'Kode Rekening', 'kode', 20)],
 };
 
 /**
@@ -78,11 +82,13 @@ const yangDibeli = (p: PenerimaanLaporan) => (p.pindahan ? 'realisasi lama' : p.
 export function selRencana(r: RencanaLaporan, no: number): Record<string, string | number> {
   return { no, kode: r.canonical_id, uraian: r.uraian, barang: r.barang_nama ?? '', jenis: r.jenis_rencana ? LABEL_JENIS[r.jenis_rencana] : '',
     sumber: r.sumber_anggaran, vol: r.vol, satuan: r.satuan ?? '', harga: r.harga, nilai: r.nilai_rencana, keputusan: labelKeputusan(r),
-    tahap: LABEL_TAHAP[tahapRencana(r)], ref: r.ref.n, alasan: r.alasan ?? '' };
+    tahap: LABEL_TAHAP[tahapRencana(r)], ref: r.ref.n, alasan: r.alasan ?? '',
+    kategori: r.kategori ?? '', jenis_kategori: r.jenis_kategori ?? '', kode_rekening: r.kode_rekening ?? '', kelompok_kib: r.kelompok_kib ?? '' };
 }
 export function selPengadaan(r: RencanaLaporan, no: number): Record<string, string | number> {
   return { no, kode: r.canonical_id, uraian: r.uraian, vol: r.vol, satuan: r.satuan ?? '', nilai_didanai: r.anggaran_nilai ?? r.nilai_rencana,
-    tgl_pesan: r.tgl_proses ?? '', vol_diterima: r.vol_realisasi, nilai_diterima: r.nilai_realisasi, tahap: LABEL_TAHAP[tahapRencana(r)] };
+    tgl_pesan: r.tgl_proses ?? '', vol_diterima: r.vol_realisasi, nilai_diterima: r.nilai_realisasi, tahap: LABEL_TAHAP[tahapRencana(r)],
+    kategori: r.kategori ?? '', jenis_kategori: r.jenis_kategori ?? '', kode_rekening: r.kode_rekening ?? '' };
 }
 export function selPenerimaan(p: PenerimaanLaporan, r: RencanaLaporan | undefined, no: number): Record<string, string | number> {
   return { no, kode: r?.canonical_id ?? '', uraian: r?.uraian ?? '', tgl: p.tgl, vol: p.vol, harga: p.harga_satuan, nilai: p.nilai,
@@ -91,7 +97,8 @@ export function selPenerimaan(p: PenerimaanLaporan, r: RencanaLaporan | undefine
 export function selPenawaran(i: ItemPenawaran, hariIni: string, no: number): Record<string, string | number> {
   return { no, rekanan: i.rekanan, nomor: i.nomor_surat ?? '', tgl_surat: i.tgl_surat, berlaku: i.berlaku_sampai ?? '',
     status: masihBerlaku(i.berlaku_sampai, hariIni) ? 'berlaku' : 'kedaluwarsa', barang: i.barang_nama ?? 'belum ditautkan', nama: i.nama_barang,
-    merk: i.merk_tipe ?? '', spesifikasi: i.spesifikasi ?? '', satuan: i.satuan ?? '', harga: i.harga_satuan };
+    merk: i.merk_tipe ?? '', spesifikasi: i.spesifikasi ?? '', satuan: i.satuan ?? '', harga: i.harga_satuan,
+    kategori: i.kategori ?? '', jenis_kategori: i.jenis_kategori ?? '', kode_rekening: i.kode_rekening ?? '' };
 }
 
 const urut = (l: LembarBalik, sel: Record<string, string | number>) => KOLOM_LAPORAN[l].map(c => sel[c.kunci] ?? '');

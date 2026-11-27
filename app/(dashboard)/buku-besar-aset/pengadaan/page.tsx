@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import { sql, queryOne } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
-import { listKategori } from '@/lib/data/buku-besar-aset';
+import { listKategoriLengkap } from '@/lib/data/buku-besar-aset';
 import { pengadaanTahun } from '@/lib/data/bba-penerimaan';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
@@ -36,12 +36,12 @@ export default async function PengadaanBbaPage({ searchParams }: { searchParams:
   const tahunCari = Number(cari.tahun);
   const tahun = Number.isInteger(tahunCari) && tahunCari >= 2020 && tahunCari <= 2100 ? tahunCari : Number(tanggalHariIniWIB().slice(0, 4));
   const tabAwal = typeof cari.tab === 'string' && (TAB_PENGADAAN as readonly string[]).includes(cari.tab) ? cari.tab as TabPengadaan : null;
-  const [beku, awal, kategori] = await Promise.all([bekuLayarModul('buku_besar_aset'), pengadaanTahun(tahun), listKategori()]);
+  const [beku, awal, kategori] = await Promise.all([bekuLayarModul('buku_besar_aset'), pengadaanTahun(tahun), listKategoriLengkap()]);
 
   return (
     <KunciTulisProvider beku={beku}>
       <PengadaanClient username={username} role={role} themePreference={(row?.theme_preference ?? 'dark') as 'dark' | 'light'}
-        beku={beku} izin={peta} awal={awal} kategori={kategori.map(k => k.nama)} bolehKoreksiMundur={bolehBatalkanFinal(role)} tabAwal={tabAwal} />
+        beku={beku} izin={peta} awal={awal} kategori={kategori} bolehKoreksiMundur={bolehBatalkanFinal(role)} tabAwal={tabAwal} />
     </KunciTulisProvider>
   );
 }

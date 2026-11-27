@@ -18,13 +18,18 @@ export const ItemPenawaranSchema = z.object({
 }).refine(i => !(i.barang_id && i.barang_baru), 'Pilih barang yang ada ATAU buat barang baru, bukan keduanya');
 
 export const KepalaPenawaranSchema = z.object({
-  rekanan: Teks(160).min(1, 'Nama rekanan wajib'),
-  nomor_surat: Teks(120).nullish(),
-  tgl_surat: TanggalSchema,
-  berlaku_sampai: TanggalSchema.nullish(),
-  kategori: Teks(80).nullish(),
-  file_id: FileIdSchema.nullish(),
-  catatan: Teks(500).nullish(),
+  rekanan:           Teks(160).min(1, 'Nama rekanan wajib'),
+  nomor_surat:       Teks(120).nullish(),
+  tgl_surat:         TanggalSchema,
+  berlaku_sampai:    TanggalSchema.nullish(),
+  kategori_id:       z.number().int().positive().nullish(),
+  jenis_kategori_id: z.number().int().positive().nullish(),
+  kategori:          Teks(100).nullish(),
+  jenis_kategori:    Teks(255).nullish(),
+  kode_rekening:     Teks(64).nullish(),
+  kelompok_kib:      Teks(128).nullish(),
+  file_id:           FileIdSchema.nullish(),
+  catatan:           Teks(500).nullish(),
 }).refine(k => !k.berlaku_sampai || k.berlaku_sampai >= k.tgl_surat, 'Tanggal berlaku tidak boleh sebelum tanggal surat');
 
 export const PenawaranSimpanSchema = z.object({

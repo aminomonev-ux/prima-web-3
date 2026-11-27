@@ -32,12 +32,19 @@ export const SPEK: Record<LembarBalik, Record<string, Spek>> = {
     keputusan: S('ubahbaru', 'keputusan', 'keputusan anggaran', 'anggaran', 'status anggaran', 'didanai'),
     tahap: S('hitung', 'teks', 'status', 'tahapan', 'posisi'), ref: S('hitung', 'angka', 'referensi', 'jumlah referensi'),
     alasan: S('ubahbaru', 'teks', 'alasan kebutuhan', 'justifikasi', 'catatan', 'keterangan'),
+    kategori: S('menu', 'teks', 'kategori induk', 'induk kategori'),
+    jenis_kategori: S('menu', 'teks', 'sub kategori'),
+    kode_rekening: S('ubahbaru', 'teks', 'kode rek', 'rekening belanja'),
+    kelompok_kib: S('menu', 'teks', 'golongan kib'),
   },
   pengadaan: {
     no: S('hitung', 'angka', 'nomor'), kode: S('acuan', 'teks', 'kode bba'), uraian: S('menu', 'teks', 'nama item'),
     vol: S('menu', 'angka', 'volume', 'jumlah'), satuan: S('menu', 'teks', 'sat'), nilai_didanai: S('hitung', 'angka', 'pagu', 'nilai'),
     tgl_pesan: S('ubah', 'tanggal', 'tanggal pesan', 'tgl kontrak', 'tanggal kontrak', 'tgl spk', 'tanggal spk', 'dipesan'),
     vol_diterima: S('hitung', 'angka', 'diterima'), nilai_diterima: S('hitung', 'angka', 'realisasi'), tahap: S('hitung', 'teks', 'status'),
+    kategori: S('menu', 'teks', 'kategori induk', 'induk kategori'),
+    jenis_kategori: S('menu', 'teks', 'sub kategori'),
+    kode_rekening: S('menu', 'teks', 'kode rek', 'rekening belanja'),
   },
   penerimaan: {
     no: S('hitung', 'angka', 'nomor'), kode: S('acuan', 'teks', 'kode bba', 'kode rencana'), uraian: S('menu', 'teks', 'nama item', 'barang'),
@@ -54,6 +61,9 @@ export const SPEK: Record<LembarBalik, Record<string, Spek>> = {
     barang: S('ubahbaru', 'barang', 'master barang'), nama: S('ubahbaru', 'teks', 'nama barang', 'uraian', 'item', 'nama item'),
     merk: S('ubahbaru', 'teks', 'merk', 'merek', 'tipe'), spesifikasi: S('ubahbaru', 'teks', 'spek', 'spesifikasi teknis', 'keterangan'),
     satuan: S('ubahbaru', 'teks', 'sat'), harga: S('ubahbaru', 'angka', 'harga', 'harga satuan rp', 'harga penawaran'),
+    kategori: S('menu', 'teks', 'kategori induk', 'induk kategori'),
+    jenis_kategori: S('menu', 'teks', 'sub kategori'),
+    kode_rekening: S('menu', 'teks', 'kode rek', 'rekening belanja'),
   },
 };
 export const bolehUbah = (p: Peran) => p === 'ubah' || p === 'ubahbaru';
