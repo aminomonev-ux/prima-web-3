@@ -74,16 +74,33 @@ export function bacaPenawaranWorkbook(wb: ExcelJS.Workbook): HasilBacaPenawaran 
   return pertama ?? { item: [], dilewati: [], masalah: ['Berkas tidak berisi lembar.'] };
 }
 
-/** Templat seragam (kop + kepala baris 7) — diunduh kosong, diisi, lalu diimpor balik. */
-export function tulisTemplatPenawaran(wb: ExcelJS.Workbook): void {
-  const ws = wb.addWorksheet('Penawaran');
-  tulisTabelExcel(ws, {
-    kop: { judul: 'DAFTAR ITEM SURAT PENAWARAN', modul: 'BUKU BESAR ASET', keterangan: 'Satu berkas = satu surat. Kepala surat (rekanan, nomor, tanggal, masa berlaku) diisi di PRIMA saat impor.' },
-    kolom: [
-      { judul: KOLOM_TEMPLAT[0], jenis: 'nomor', lebar: 5 }, { judul: KOLOM_TEMPLAT[1], jenis: 'uraian', lebar: 36 }, { judul: KOLOM_TEMPLAT[2], lebar: 22 },
-      { judul: KOLOM_TEMPLAT[3], lebar: 40 }, { judul: KOLOM_TEMPLAT[4], lebar: 10 }, { judul: KOLOM_TEMPLAT[5], jenis: 'rupiah', lebar: 16 },
-    ],
-    baris: [{ sel: [1, 'Laptop', 'Merk A 14"', 'Core i5, RAM 16 GB, SSD 512 GB', 'unit', 12500000] }],
-    tanpaNomorKolom: true,
+/** Kolom templat Matriks — urutan lembar 1 "Matriks Inventarisasi" pemilik; dibaca balik `bacaMatriksGrid`. */
+export const KOLOM_MATRIKS = [
+  ['No', 'nomor', 5], ['Tgl Surat', 'teks', 12], ['No. Surat Rekanan', 'teks', 22], ['Jenis Surat', 'teks', 26], ['Nama Rekanan / Vendor', 'teks', 26],
+  ['PIC & Kontak', 'teks', 26], ['Kategori Belanja / Jasa', 'teks', 28], ['Nama Barang', 'uraian', 26], ['Merk', 'teks', 14], ['Tipe', 'teks', 22],
+  ['Spesifikasi', 'teks', 30], ['Satuan', 'teks', 9], ['Harga Penawaran (Rp)', 'rupiah', 18], ['Status Pajak', 'teks', 18], ['Link E-Katalog / Ref.', 'teks', 28],
+  ['Garansi', 'teks', 12], ['Masa Berlaku SPH', 'teks', 16], ['Syarat & Pengecualian', 'teks', 30], ['Status Tindak Lanjut', 'teks', 26],
+] as const;
+
+/**
+ * Templat seragam Matriks (kop + kepala baris 7) — diunduh kosong, diisi, lalu diimpor balik; satu baris = satu barang,
+ * surat yang sama (rekanan + nomor + tanggal) cukup diulang di tiap barisnya. Isian berpilihan diberi daftar Excel.
+ */
+export function tulisTemplatPenawaran(wb: ExcelJS.Workbook, pilihan: { jenis: readonly string[]; pajak: readonly string[]; status: readonly string[] }): void {
+  const ws = wb.addWorksheet('Matriks Inventarisasi');
+  const letak = tulisTabelExcel(ws, {
+    kop: { judul: 'MATRIKS INVENTARISASI PENAWARAN & PERMOHONAN REKANAN', modul: 'BUKU BESAR ASET',
+      keterangan: 'Satu baris = satu barang. Surat dengan beberapa barang: ulangi Tgl, No. Surat, dan Rekanan di tiap baris. Harga kosong / "-" = surat belum mencantumkan harga.' },
+    kolom: KOLOM_MATRIKS.map(([judul, jenis, lebar]) => ({ judul, jenis, lebar })),
+    // Tanpa baris contoh: baris contoh yang lupa dihapus akan ikut tercatat sebagai surat sungguhan.
+    baris: [],
+    tanpaNomorKolom: true, mendatar: true,
   });
+  const daftar = (kolom: number, isi: readonly string[]) => {
+    const huruf = ws.getColumn(kolom).letter;
+    for (let r = letak.dataAwal; r < letak.dataAwal + 200; r++) {
+      ws.getCell(`${huruf}${r}`).dataValidation = { type: 'list', allowBlank: true, showErrorMessage: false, formulae: [`"${isi.join(',').replace(/"/g, '')}"`] };
+    }
+  };
+  daftar(4, pilihan.jenis); daftar(14, pilihan.pajak); daftar(19, pilihan.status);
 }

@@ -4,6 +4,7 @@
 import { LABEL_ANGGARAN, LABEL_JENIS, JENIS_RENCANA, type Anggaran, type JenisRencana } from './rencana';
 import { kunciNamaBarang, rapikanNamaBarang } from './barang';
 import { angka } from './penawaran-impor';
+import { bacaStatusPajak, bacaTindakLanjut } from './penawaran';
 import {
   KOLOM_LAPORAN, LEMBAR_BALIK, AWALAN_JANGKAR, JUDUL_JANGKAR, selRencana, selPengadaan, selPenerimaan, selPenawaran,
   type LembarBalik, type BahanBukuRencana,
@@ -14,7 +15,7 @@ import { cariBarisKepala, adalahBarisHiasan } from '@/lib/shared/impor-tabel';
 
 /** ubah = boleh dibawa balik pada baris lama; baru = diisi untuk baris baru; hitung = dihitung PRIMA; menu = milik lembar lain. */
 export type Peran = 'ubah' | 'baru' | 'ubahbaru' | 'hitung' | 'menu' | 'acuan';
-export type JenisNilai = 'teks' | 'angka' | 'tanggal' | 'jenis' | 'keputusan' | 'sumber' | 'barang';
+export type JenisNilai = 'teks' | 'angka' | 'tanggal' | 'jenis' | 'keputusan' | 'sumber' | 'barang' | 'pajak' | 'tindak';
 type Spek = { peran: Peran; nilai: JenisNilai; sinonim: string[] };
 
 const S = (peran: Peran, nilai: JenisNilai, ...sinonim: string[]): Spek => ({ peran, nilai, sinonim });
@@ -54,13 +55,22 @@ export const SPEK: Record<LembarBalik, Record<string, Spek>> = {
     penyedia: S('baru', 'teks', 'rekanan', 'toko', 'vendor', 'supplier'), register: S('hitung', 'angka', 'ditempatkan'),
     catatan: S('baru', 'teks', 'keterangan', 'ket'),
   },
+  // Kolom Matriks (CONCEPT-bba-penawaran-matriks). Judul lama (Rekanan, No. Surat, Nama di Surat, Merk / Tipe, Harga Satuan, Status)
+  // tetap dikenali lewat sinonim — salinan Drive yang dikirim sebelum kolom ini berubah masih bisa dibawa balik.
   penawaran: {
-    no: S('hitung', 'angka', 'nomor'), rekanan: S('ubahbaru', 'teks', 'penyedia', 'vendor', 'toko', 'supplier', 'perusahaan'),
-    nomor: S('ubahbaru', 'teks', 'nomor surat', 'no surat penawaran'), tgl_surat: S('ubahbaru', 'tanggal', 'tanggal surat', 'tanggal'),
-    berlaku: S('ubahbaru', 'tanggal', 'berlaku sampai', 'masa berlaku', 'berlaku hingga'), status: S('hitung', 'teks'),
-    barang: S('ubahbaru', 'barang', 'master barang'), nama: S('ubahbaru', 'teks', 'nama barang', 'uraian', 'item', 'nama item'),
-    merk: S('ubahbaru', 'teks', 'merk', 'merek', 'tipe'), spesifikasi: S('ubahbaru', 'teks', 'spek', 'spesifikasi teknis', 'keterangan'),
-    satuan: S('ubahbaru', 'teks', 'sat'), harga: S('ubahbaru', 'angka', 'harga', 'harga satuan rp', 'harga penawaran'),
+    no: S('hitung', 'angka', 'nomor'), rekanan: S('ubahbaru', 'teks', 'rekanan', 'nama rekanan', 'penyedia', 'vendor', 'toko', 'supplier', 'perusahaan'),
+    pic: S('ubahbaru', 'teks', 'pic', 'kontak', 'pic kontak', 'contact person'),
+    jenis_surat: S('ubahbaru', 'teks', 'jenis pengajuan', 'jenis surat penawaran'),
+    nomor: S('ubahbaru', 'teks', 'no surat', 'nomor surat', 'no surat penawaran'), tgl_surat: S('ubahbaru', 'tanggal', 'tanggal surat', 'tanggal'),
+    berlaku: S('ubahbaru', 'tanggal', 'berlaku sampai', 'berlaku hingga'), masa: S('ubahbaru', 'teks', 'masa berlaku', 'masa berlaku sph'),
+    status: S('hitung', 'teks', 'status', 'status berlaku'),
+    barang: S('ubahbaru', 'barang', 'barang', 'master barang'), nama: S('ubahbaru', 'teks', 'nama di surat', 'uraian', 'item', 'nama item'),
+    merek: S('ubahbaru', 'teks', 'merek', 'brand'), merk: S('ubahbaru', 'teks', 'merk tipe', 'type'),
+    spesifikasi: S('ubahbaru', 'teks', 'spek', 'spesifikasi teknis'),
+    satuan: S('ubahbaru', 'teks', 'sat'), harga: S('ubahbaru', 'angka', 'harga', 'harga satuan', 'harga satuan rp'),
+    pajak: S('ubahbaru', 'pajak', 'pajak', 'ppn', 'status ppn'), tautan: S('ubahbaru', 'teks', 'link', 'link e katalog', 'e katalog', 'tautan', 'url'),
+    garansi: S('ubahbaru', 'teks', 'garansi resmi', 'masa garansi'),
+    syarat: S('ubahbaru', 'teks', 'syarat', 'catatan', 'keterangan', 'pengecualian'), status_tl: S('ubahbaru', 'tindak', 'tindak lanjut', 'status tindak lanjut'),
     kategori: S('menu', 'teks', 'kategori induk', 'induk kategori'),
     jenis_kategori: S('menu', 'teks', 'sub kategori'),
     kode_rekening: S('menu', 'teks', 'kode rek', 'rekening belanja'),
@@ -96,7 +106,7 @@ export function skorJudul(judul: string, lembar: LembarBalik, kunci: string): nu
   return terbaik >= 0.5 ? 1 : 0;
 }
 
-const POLA_JANGKAR = /^[RDTW]:\d+$/;
+const POLA_JANGKAR = /^([RDTW]:\d+|W:S\d+)$/;
 
 export type PetaLembar = Record<string, number | null>;
 export interface HasilPeta {
@@ -221,6 +231,14 @@ export function bacaNilai(jenis: JenisNilai, v: unknown): Bacaan {
       const cocok = KENAL_KEPUTUSAN.find(([p]) => p.test(norm(t)));
       return cocok ? { nilai: cocok[1] } : { nilai: null, galat: `keputusan "${t}" tidak dikenali (Didanai / Tidak didanai / kosong)` };
     }
+    case 'pajak': {
+      const p = bacaStatusPajak(t === '-' || t === '—' ? '' : t);
+      return p === undefined ? { nilai: null, galat: `status pajak "${t}" tidak dikenali (Termasuk PPN / Belum termasuk PPN / Bebas PPN / Tidak disebut)` } : { nilai: p };
+    }
+    case 'tindak': {
+      const p = bacaTindakLanjut(t === '-' || t === '—' ? '' : t);
+      return p === undefined ? { nilai: null, galat: `status tindak lanjut "${t}" tidak dikenali` } : { nilai: p };
+    }
     case 'sumber': {
       if (!t) return { nilai: null };
       const s = ['BLUD', 'APBD', 'DAK', 'LAINNYA'].find(x => x === t.toUpperCase().replace(/[^A-Z]/g, ''));
@@ -282,6 +300,8 @@ export function bacaLembar(lembar: LembarBalik, grid: readonly (readonly unknown
     const jangkarTeks = peta.jangkar === null ? '' : teksSel(b[peta.jangkar]);
     // Baris JUMLAH laporan ("JUMLAH (tanpa usulan ditolak)") lolos dari pengenal hiasan bersama.
     if (!jangkarTeks && b.some(v => /^jumlah\b/i.test(teksSel(v)))) continue;
+    // Surat tanpa barang (Matriks penawaran): bukan item, tidak dibawa balik — diubah di menu Penawaran.
+    if (/^W:S\d+$/.test(jangkarTeks)) continue;
     const m = /^([RDTW]):(\d+)$/.exec(jangkarTeks);
     const milik = m && m[1] === AWALAN_JANGKAR[lembar];
     const nilai: Record<string, NilaiBaku> = {}, galat: Record<string, string> = {};
@@ -337,7 +357,8 @@ export interface Tinjauan {
 
 const tampil = (v: NilaiBaku | undefined) => (v === null || v === undefined || v === '' ? '(kosong)' : String(v));
 const UNTUK_BARU: Record<LembarBalik, string[]> = {
-  rencana: ['uraian'], pengadaan: [], penerimaan: ['kode', 'tgl', 'vol', 'harga'], penawaran: ['rekanan', 'tgl_surat', 'nama', 'harga'],
+  // Harga penawaran boleh kosong (surat belum mencantumkan harga); surat berharga tetap diperiksa syaratSurat saat diterapkan.
+  rencana: ['uraian'], pengadaan: [], penerimaan: ['kode', 'tgl', 'vol', 'harga'], penawaran: ['rekanan', 'tgl_surat', 'nama'],
 };
 
 function labelBaru(l: LembarBalik, n: Record<string, NilaiBaku>): string {
@@ -403,7 +424,9 @@ export function gabungTigaArah(berkas: BacaanBerkas, asal: Potret | null, prima:
       for (const [k, d] of Object.entries(b.nilai)) {
         if (k in b.galat) continue;
         const spek = SPEK[l][k];
-        const asalK = a ? a[k] : undefined;
+        // Kolom yang belum ada saat potret asal dibuat (mis. kolom Matriks penawaran) = asal sama dengan PRIMA sekarang,
+        // bukan "kosong" — kalau tidak, isian PRIMA tampil sebagai benturan di tinjauan pertama sesudah kolomnya lahir.
+        const asalK = a ? (k in a ? a[k] : p[k]) : undefined;
         const driveBerubah = a ? !samaNilai(spek.nilai, d, asalK) : !samaNilai(spek.nilai, d, p[k]);
         if (a && !samaNilai(spek.nilai, p[k], asalK) && samaNilai(spek.nilai, d, asalK)) hasil.dipertahankan++;
         if (!driveBerubah) continue;

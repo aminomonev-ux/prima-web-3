@@ -30,7 +30,7 @@ export default async function PenawaranBbaPage() {
   return (
     <KunciTulisProvider beku={beku}>
       <PenawaranClient username={username} role={role} themePreference={(row?.theme_preference ?? 'dark') as 'dark' | 'light'}
-        beku={beku} izin={peta} awal={surat} rekanan={rekanan} barang={barang.map(b => ({ id: b.id, nama: b.nama }))} kategori={kategori} />
+        beku={beku} izin={peta} awal={surat} rekanan={rekanan} barang={barang.map(b => ({ id: b.id, nama: b.nama, satuan: b.satuan ?? null, kategori: b.kategori ?? null, jenis_kategori: b.jenis_kategori ?? null, kode_rekening: b.kode_rekening ?? null }))} kategori={kategori} />
     </KunciTulisProvider>
   );
 }

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
-import { urutUntukRencana, referensiDariPenawaran, type ItemPenawaran } from '@/lib/bba/penawaran';
+import { urutUntukRencana, referensiDariPenawaran, gabungMerkTipe, LABEL_PAJAK, type ItemPenawaran, type ItemBerharga } from '@/lib/bba/penawaran';
 import { fmtTanggal } from '@/lib/bba/kondisi';
 import type { ReferensiIsian } from '@/lib/bba/referensi';
 import { Bingkai } from './AksiAset';
@@ -21,7 +21,7 @@ export default function AmbilPenawaran({ c, barangId, barangNama, sisa, sudah, o
   sudah: ReadonlySet<number>;
   onPakai: (refs: ReferensiIsian[]) => void; onTutup: () => void;
 }) {
-  const [daftar, setDaftar] = useState<Array<ItemPenawaran & { berlaku: boolean }> | null>(null);
+  const [daftar, setDaftar] = useState<Array<ItemBerharga & { berlaku: boolean }> | null>(null);
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   useEffect(() => {
     let batal = false;
@@ -49,11 +49,12 @@ export default function AmbilPenawaran({ c, barangId, barangNama, sisa, sudah, o
                 <input type="checkbox" checked={pilih.has(i.id)} disabled={!pilih.has(i.id) && penuh}
                   onChange={e => setPilih(p => { const x = new Set(p); if (e.target.checked) x.add(i.id); else x.delete(i.id); return x; })} />
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>
-                  <b>{i.rekanan}</b>{i.merk_tipe ? ` · ${i.merk_tipe}` : ''}
+                  <b>{i.rekanan}</b>{gabungMerkTipe(i.merk, i.merk_tipe) ? ` · ${gabungMerkTipe(i.merk, i.merk_tipe)}` : ''}
                   <div style={{ fontSize: 11.5, color: c.sub }}>
-                    {[i.nomor_surat ? `No. ${i.nomor_surat}` : null, `surat ${fmtTanggal(i.tgl_surat)}`, i.berlaku_sampai ? `berlaku s.d. ${fmtTanggal(i.berlaku_sampai)}` : null, i.satuan, i.spesifikasi].filter(Boolean).join(' · ')}
+                    {[i.nomor_surat ? `No. ${i.nomor_surat}` : null, `surat ${fmtTanggal(i.tgl_surat)}`, i.berlaku_sampai ? `berlaku s.d. ${fmtTanggal(i.berlaku_sampai)}` : null, i.satuan, i.status_pajak ? LABEL_PAJAK[i.status_pajak] : null, i.garansi ? `garansi ${i.garansi}` : null, i.spesifikasi].filter(Boolean).join(' · ')}
                     {!i.berlaku && <b style={{ color: '#BA7517' }}> · kedaluwarsa</b>}
-                    {!i.file_id && <span style={{ color: '#BA7517' }}> · tanpa berkas surat (belum dihitung sah sampai diberi berkas/tautan)</span>}
+                    {!i.file_id && !i.tautan && <span style={{ color: '#BA7517' }}> · tanpa berkas surat & link e-Katalog (belum dihitung sah sampai diberi berkas/tautan)</span>}
+                    {i.tautan && <span style={{ color: '#7C5CFC' }}> · link e-Katalog ikut tersalin</span>}
                   </div>
                 </span>
                 <span style={{ fontFamily: MONO, fontSize: 12.5, whiteSpace: 'nowrap' }}>{fmtRp(i.harga_satuan)}</span>

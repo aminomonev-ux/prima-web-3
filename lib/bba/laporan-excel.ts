@@ -8,7 +8,7 @@ import { tulisTabelExcel, type BarisDok, type KolomDok, type LetakTabelExcel } f
 import { periodeTahun } from '@/lib/shared/gaya-dokumen';
 import { LABEL_JENIS, LABEL_ANGGARAN, type Anggaran, type JenisRencana } from './rencana';
 import { tahapRencana, ringkasAlur, LABEL_TAHAP, type BahanTahap } from './tahap';
-import { masihBerlaku, type ItemPenawaran } from './penawaran';
+import { masihBerlaku, LABEL_PAJAK, LABEL_TINDAK_LANJUT, type ItemPenawaran } from './penawaran';
 
 export type RencanaLaporan = BahanTahap & {
   id: number; canonical_id: string; uraian: string; barang_nama: string | null; sumber_anggaran: string; vol: number; satuan: string | null;
@@ -20,7 +20,11 @@ export type PenerimaanLaporan = {
   id: number; rencana_id: number; tgl: string; vol: number; harga_satuan: number; nilai: number; merk_tipe: string | null; penyedia: string | null;
   catatan: string | null; pindahan: boolean; ditempatkan: number;
 };
-export type BahanBukuRencana = { tahun: number; rencana: RencanaLaporan[]; penerimaan: PenerimaanLaporan[]; penawaran: ItemPenawaran[]; hariIni: string };
+export type BahanBukuRencana = {
+  tahun: number; rencana: RencanaLaporan[]; penerimaan: PenerimaanLaporan[]; penawaran: ItemPenawaran[]; hariIni: string;
+  /** Surat tanpa barang (permohonan presentasi, company profile) — tetap satu baris Matriks; `penawaran_id` = id surat. */
+  suratTanpaBarang?: ItemPenawaran[];
+};
 
 export const LEMBAR_BUKU = ['Ringkasan', 'Rencana', 'Pengadaan', 'Penerimaan', 'Penawaran'] as const;
 export type LembarBuku = typeof LEMBAR_BUKU[number];
@@ -48,10 +52,15 @@ export const KOLOM_LAPORAN: Record<LembarBalik, KolomLaporan[]> = {
   penerimaan: [k('no', 'No', 'nomor', 5), k('kode', 'Kode', 'kode', 12), k('uraian', 'Uraian', 'uraian', 30), k('tgl', 'Tanggal', 'teks', 11),
     k('vol', 'Jumlah', 'desimal', 8), k('harga', 'Harga Riil', 'rupiah', 15), k('nilai', 'Nilai', 'rupiah', 17), k('merk', 'Merk / Tipe', 'teks', 20),
     k('penyedia', 'Penyedia', 'teks', 20), k('register', 'Register', 'angka', 9), k('catatan', 'Catatan', 'teks', 24)],
-  penawaran: [k('no', 'No', 'nomor', 5), k('rekanan', 'Rekanan', 'teks', 24), k('nomor', 'No. Surat', 'teks', 16), k('tgl_surat', 'Tgl Surat', 'teks', 11),
-    k('berlaku', 'Berlaku s.d.', 'teks', 11), k('status', 'Status', 'teks', 12), k('barang', 'Barang', 'teks', 20), k('nama', 'Nama di Surat', 'uraian', 28),
-    k('merk', 'Merk / Tipe', 'teks', 18), k('spesifikasi', 'Spesifikasi', 'teks', 28), k('satuan', 'Satuan', 'teks', 8), k('harga', 'Harga Satuan', 'rupiah', 15),
-    k('kategori', 'Kategori', 'teks', 16), k('jenis_kategori', 'Jenis Kategori', 'teks', 26), k('kode_rekening', 'Kode Rekening', 'kode', 20)],
+  // Urut kolom lembar "Matriks Inventarisasi" pemilik (CONCEPT-bba-penawaran-matriks §2): I. surat & rekanan, II. barang, III. harga & syarat.
+  penawaran: [k('no', 'No', 'nomor', 5), k('tgl_surat', 'Tgl Surat', 'teks', 11), k('nomor', 'No. Surat Rekanan', 'teks', 22), k('jenis_surat', 'Jenis Surat', 'teks', 22),
+    k('rekanan', 'Nama Rekanan / Vendor', 'teks', 26), k('pic', 'PIC & Kontak', 'teks', 26),
+    k('kategori', 'Kategori', 'teks', 14), k('jenis_kategori', 'Kategori Belanja / Jasa', 'teks', 26), k('kode_rekening', 'Kode Rekening', 'kode', 18),
+    k('nama', 'Nama Barang', 'uraian', 28), k('barang', 'Barang (Master)', 'teks', 20), k('merek', 'Merk', 'teks', 14), k('merk', 'Tipe', 'teks', 22),
+    k('spesifikasi', 'Spesifikasi', 'teks', 30), k('satuan', 'Satuan', 'teks', 8), k('harga', 'Harga Penawaran (Rp)', 'rupiah', 18),
+    k('pajak', 'Status Pajak', 'teks', 16), k('tautan', 'Link E-Katalog / Ref.', 'teks', 28), k('garansi', 'Garansi', 'teks', 14),
+    k('masa', 'Masa Berlaku SPH', 'teks', 14), k('berlaku', 'Berlaku s.d.', 'teks', 11), k('status', 'Keberlakuan', 'teks', 12),
+    k('syarat', 'Syarat & Pengecualian', 'teks', 30), k('status_tl', 'Status Tindak Lanjut', 'teks', 24)],
 };
 
 /**
@@ -61,6 +70,8 @@ export const KOLOM_LAPORAN: Record<LembarBalik, KolomLaporan[]> = {
 export const JUDUL_JANGKAR = 'Jangkar';
 export const AWALAN_JANGKAR: Record<LembarBalik, string> = { rencana: 'R', pengadaan: 'D', penerimaan: 'T', penawaran: 'W' };
 export const tulisJangkar = (l: LembarBalik, id: number) => `${AWALAN_JANGKAR[l]}:${id}`;
+/** Baris surat tanpa barang: penanda sendiri supaya pembaca Drive melewatinya (bukan item, tidak bisa diubah dari berkas). */
+export const jangkarSuratKosong = (suratId: number) => `W:S${suratId}`;
 
 const MODUL = 'BUKU BESAR ASET';
 
@@ -71,8 +82,8 @@ const MODUL = 'BUKU BESAR ASET';
  * dihitung darinya ikut — kalau tidak, salinan Drive tetap menulis "berlaku" sesudah suratnya lewat masa berlaku.
  */
 export function sidikBahan(b: BahanBukuRencana): string {
-  const berlaku = b.penawaran.map(i => masihBerlaku(i.berlaku_sampai, b.hariIni));
-  return createHash('sha256').update(JSON.stringify([b.tahun, b.rencana, b.penerimaan, b.penawaran, berlaku])).digest('hex');
+  const berlaku = [...b.penawaran, ...(b.suratTanpaBarang ?? [])].map(i => masihBerlaku(i.berlaku_sampai, b.hariIni));
+  return createHash('sha256').update(JSON.stringify([b.tahun, b.rencana, b.penerimaan, b.penawaran, b.suratTanpaBarang ?? [], berlaku])).digest('hex');
 }
 
 const labelKeputusan = (r: RencanaLaporan) => (r.usulan_keputusan === 'DITOLAK' ? 'Usulan ditolak' : LABEL_ANGGARAN[r.anggaran]);
@@ -95,19 +106,21 @@ export function selPenerimaan(p: PenerimaanLaporan, r: RencanaLaporan | undefine
     merk: yangDibeli(p), penyedia: p.pindahan ? '' : p.penyedia ?? '', register: p.ditempatkan, catatan: p.catatan ?? '' };
 }
 export function selPenawaran(i: ItemPenawaran, hariIni: string, no: number): Record<string, string | number> {
-  return { no, rekanan: i.rekanan, nomor: i.nomor_surat ?? '', tgl_surat: i.tgl_surat, berlaku: i.berlaku_sampai ?? '',
-    status: masihBerlaku(i.berlaku_sampai, hariIni) ? 'berlaku' : 'kedaluwarsa', barang: i.barang_nama ?? 'belum ditautkan', nama: i.nama_barang,
-    merk: i.merk_tipe ?? '', spesifikasi: i.spesifikasi ?? '', satuan: i.satuan ?? '', harga: i.harga_satuan,
-    kategori: i.kategori ?? '', jenis_kategori: i.jenis_kategori ?? '', kode_rekening: i.kode_rekening ?? '' };
+  return { no, tgl_surat: i.tgl_surat, nomor: i.nomor_surat ?? '', jenis_surat: i.jenis_surat ?? '', rekanan: i.rekanan, pic: i.pic_kontak ?? '',
+    kategori: i.kategori ?? '', jenis_kategori: i.jenis_kategori ?? '', kode_rekening: i.kode_rekening ?? '',
+    nama: i.nama_barang, barang: i.barang_nama ?? 'belum ditautkan', merek: i.merk ?? '', merk: i.merk_tipe ?? '', spesifikasi: i.spesifikasi ?? '',
+    satuan: i.satuan ?? '', harga: i.harga_satuan ?? '', pajak: i.status_pajak ? LABEL_PAJAK[i.status_pajak] : '', tautan: i.tautan ?? '', garansi: i.garansi ?? '',
+    masa: i.masa_berlaku_teks ?? '', berlaku: i.berlaku_sampai ?? '', status: masihBerlaku(i.berlaku_sampai, hariIni) ? 'berlaku' : 'kedaluwarsa',
+    syarat: i.syarat ?? '', status_tl: i.status_tindak_lanjut ? LABEL_TINDAK_LANJUT[i.status_tindak_lanjut] : '' };
 }
 
 const urut = (l: LembarBalik, sel: Record<string, string | number>) => KOLOM_LAPORAN[l].map(c => sel[c.kunci] ?? '');
 
 /** Kolom Jangkar di kanan tabel (tersembunyi) — kepala di baris kepala, isi sejajar baris data. */
-function pasangJangkar(ws: ExcelJS.Worksheet, l: LembarBalik, letak: LetakTabelExcel, ids: number[]): void {
+function pasangJangkar(ws: ExcelJS.Worksheet, l: LembarBalik, letak: LetakTabelExcel, ids: Array<number | string>): void {
   const c = KOLOM_LAPORAN[l].length + 1;
   ws.getRow(letak.kepalaAwal).getCell(c).value = JUDUL_JANGKAR;
-  ids.forEach((id, i) => { ws.getRow(letak.dataAwal + i).getCell(c).value = tulisJangkar(l, id); });
+  ids.forEach((id, i) => { ws.getRow(letak.dataAwal + i).getCell(c).value = typeof id === 'string' ? id : tulisJangkar(l, id); });
   ws.getColumn(c).hidden = true;
 }
 
@@ -154,11 +167,16 @@ export function tulisBukuRencana(wb: ExcelJS.Workbook, b: BahanBukuRencana, akti
   pasangJangkar(wsT, 'penerimaan', tulisTabelExcel(wsT, { kop: { judul: 'PENERIMAAN BARANG', periode: periodeTahun(b.tahun), modul: MODUL }, kolom: KOLOM_LAPORAN.penerimaan, baris: barisTerima, mendatar: true }),
     b.penerimaan.map(p => p.id));
 
+  // Urut tanggal surat terbaru dulu (urutan daftar Penawaran); surat tanpa barang menyisip di tanggalnya.
+  const barisW = [...b.penawaran.map(i => ({ i, kosong: false })), ...(b.suratTanpaBarang ?? []).map(i => ({ i, kosong: true }))]
+    .sort((x, y) => (x.i.tgl_surat === y.i.tgl_surat ? y.i.penawaran_id - x.i.penawaran_id : x.i.tgl_surat < y.i.tgl_surat ? 1 : -1));
   const wsW = wb.addWorksheet('Penawaran');
   pasangJangkar(wsW, 'penawaran', tulisTabelExcel(wsW, {
-    kop: { judul: 'PENAWARAN REKANAN', modul: MODUL, keterangan: 'Semua surat penawaran yang tercatat (tidak terikat tahun anggaran).' },
-    kolom: KOLOM_LAPORAN.penawaran, baris: b.penawaran.map((i, n) => ({ sel: urut('penawaran', selPenawaran(i, b.hariIni, n + 1)) })), mendatar: true,
-  }), b.penawaran.map(i => i.id));
+    kop: { judul: 'MATRIKS INVENTARISASI PENAWARAN & PERMOHONAN REKANAN', modul: MODUL, keterangan: 'Satu baris per barang. Semua surat yang tercatat (tidak terikat tahun anggaran).' },
+    kolom: KOLOM_LAPORAN.penawaran, mendatar: true,
+    baris: [...barisW.map((x, n): BarisDok => ({ sel: urut('penawaran', selPenawaran(x.i, b.hariIni, n + 1)) })),
+      { total: true, sel: urut('penawaran', { nama: 'JUMLAH NILAI PENAWARAN YANG MENCANTUMKAN HARGA', harga: b.penawaran.reduce((t, i) => t + (i.harga_satuan ?? 0), 0) }) }],
+  }), barisW.map(x => (x.kosong ? jangkarSuratKosong(x.i.penawaran_id) : x.i.id)));
 
   const ix = LEMBAR_BUKU.indexOf(aktif);
   wb.views = [{ x: 0, y: 0, width: 20000, height: 12000, firstSheet: 0, activeTab: ix < 0 ? 0 : ix, visibility: 'visible' }];

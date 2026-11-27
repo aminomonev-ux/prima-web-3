@@ -81,7 +81,7 @@ console.log('\nB. Bentuk kode (urutan kunci, satu aturan Modal)')
   ok('B5 antrean: syarat Modal di unit terima, TIDAK di rehab', (an.match(/SYARAT_MODAL/g) ?? []).length === 1 && an.indexOf('SYARAT_MODAL') < an.indexOf("b.jenis_rencana = 'REHAB'"))
   ok('B6 tidak ada salinan kedua aturan Modal (regex 5.1 hanya di lib/bba/kategori.ts)',
     !/5\\\\?\.0\?1/.test(pn) && !/5\\\\?\.0\?1/.test(d))
-  const sp = badan(tanpaKomentar(sumber('lib/data/bba-penawaran.ts')), 'export async function simpanPenawaran(')
+  const sp = badan(tanpaKomentar(sumber('lib/data/bba-penawaran.ts')), 'export async function simpanPenawaranDi(')
   ok('B7 simpan surat: kategori hanya ditulis kalau dikirim (L87)', /if \(kat\.terisi\)\s*\{\s*setKat = sql`kategori_id/.test(sp))
   ok('B8 tinjauan Drive tidak mengirim teks kategori surat', !/kategori: sr\?\.kategori/.test(sumber('lib/data/bba-drive-balik.ts')))
   ok('B9 kedua unduhan rencana menyaring lewat cocokSaringKategori (satu aturan)', badan(d, 'export async function rencanaUntukExcel(').includes('cocokSaringKategori(r, filter)')

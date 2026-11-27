@@ -173,3 +173,18 @@ Tidak ada modul di luar BBA (RIMA, Dashboard, Usulan, BLUD) yang membaca data Pe
 - Kalibrasi `bacaMatriksPenawaran` dengan berkas Matriks pemilik (7 surat, 3 berharga, total Rp 34.081.318.604 = baris TOTAL berkas).
 - Bagian MySQL kotak pasir: kolom baru tersimpan & terbaca, kolom kepala tak dikirim tidak dikosongkan, harga kosong tidak muncul di Ambil dari penawaran, impor banyak surat satu transaksi.
 - Uji mutasi untuk tiap aturan murni di atas.
+
+## 11. Pelaksanaan (2026-11-28)
+
+Dikerjakan dalam satu putaran. Yang menyimpang dari rancangan di atas, dan alasannya:
+
+- **Kepala unduhan Excel tetap SATU baris** (bukan dua tingkat I/II/III seperti lembar pemilik). Pembaca salinan Drive (`bacaLembar`) mencari satu baris kepala; kepala bertingkat membuat salinan Drive tidak bisa dibawa balik. Urutan dan judul kolom mengikuti Matriks; kelompok I/II/III tampil di layar. Judul lama tetap dikenali lewat sinonim (salinan Drive lama masih terbaca).
+- **Surat tanpa barang** ikut di unduhan sebagai satu baris berpenanda `W:S<id>` di kolom Jangkar; pembaca Drive melewatinya (bukan item, diubah di menu Penawaran).
+- **Belum tersimpan**: menutup panel (Batal/✕/Esc) dengan isian berubah ditanya dulu. `useIngatkanBelumTersimpan` tidak dipasang: panel ini modal, bukan layar.
+- **Jenis surat** dipetakan lewat kata kunci (harga → SPH/SPH+Presentasi, demo/brosur, presentasi, profil/jasa); syaratnya ternyata saling meniadakan, jadi "hanya bila tunggal" tidak pernah bisa gagal dan dibuang dari kode.
+- **Ponsel**: tabel Matriks digulir mendatar (kolom No lengket), bukan kartu per surat. Panel form satu kolom di bawah 900 px, ringkasan di atas.
+- **Bandingkan** memakai nama rekanan yang dirapikan sebagai judul kolom ("PT A" → "PT. A").
+
+Berkas: `lib/bba/penawaran.ts` (aturan murni: jenis berharga, `syaratSurat`, nama rekanan, durasi berlaku, pajak, tindak lanjut), `lib/bba/penawaran-matriks.ts` (pembaca berkas Matriks banyak surat), `lib/data/bba-penawaran.ts` (`simpanPenawaranDi` untuk impor satu transaksi, `ubahStatusPenawaran`, `suratTanpaBarang`, `kunciSuratTercatat`), `app/(dashboard)/buku-besar-aset/_components/CariPilih.tsx` (combobox cari-atau-ketik bersama), `PilihKategori.tsx` (jenis kategori dicari lintas induk, `manual`), layar `penawaran-client.tsx`, route `penawaran` (`?aksi=status`) & `penawaran/impor`.
+
+Regresi: `npx tsx --env-file=.env.local scripts/test-bba-penawaran.mts [Matriks.xlsx]` (60 + 2 kalibrasi berkas pemilik: 7 surat, Rp 34.081.318.604), `test-bba-drive-balik.mts` (63), `test-bba-laporan.mts` (31), `test-bba-kategori.mts` (52). 38 uji mutasi tertangkap; empat sempat lolos (dua celah data uji, satu syarat yang tidak mungkin gagal, satu sinonim berlebih) dan ditutup.

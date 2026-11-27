@@ -304,6 +304,9 @@ export async function terapkanDriveBalik(p: PilihanTerapkan, userId: number, izi
   });
 }
 
+/** Kolom lembar Penawaran milik SURAT (bukan item): diubah di satu baris = diubah untuk suratnya. */
+const KOLOM_KEPALA = ['rekanan', 'nomor', 'tgl_surat', 'berlaku', 'jenis_surat', 'pic', 'masa', 'syarat', 'status_tl'] as const;
+
 type Barang = (nama: NilaiBaku | undefined) => { barang_id?: number | null; barang_baru?: string } | null;
 
 async function terapkanPenawaran(p: PilihanTerapkan, t: Tinjauan, surat: SuratPenawaran[], barang: Barang, userId: number, hasil: HasilTerapkan): Promise<void> {
@@ -323,7 +326,7 @@ async function terapkanPenawaran(p: PilihanTerapkan, t: Tinjauan, surat: SuratPe
     if (pu.versi !== u.versi) { hasil.ditolak.push(`${u.label}: surat ini diubah orang lain di PRIMA sesudah pratinjau dibuka — buka pratinjau lagi`); continue; }
     const v = Object.fromEntries(u.sel.filter(x => pu.sel[x.kunci] === 'drive').map(x => [x.kunci, x.drive]));
     const r = ambil(`id:${sr.id}`, sr, {});
-    for (const k of ['rekanan', 'nomor', 'tgl_surat', 'berlaku'] as const) if (k in v && !(k in r.kepala)) r.kepala[k] = v[k];
+    for (const k of KOLOM_KEPALA) if (k in v && !(k in r.kepala)) r.kepala[k] = v[k];
     r.ubah.set(pu.id, v); r.label.push(u.label);
   }
   for (const pb of p.baru.filter(x => x.lembar === 'penawaran')) {
@@ -332,20 +335,26 @@ async function terapkanPenawaran(p: PilihanTerapkan, t: Tinjauan, surat: SuratPe
     const k = kunciSurat(b.nilai.rekanan, b.nilai.nomor, b.nilai.tgl_surat);
     // Surat yang sama (rekanan + no. + tgl) — termasuk yang baru dibuat orang lain di PRIMA — digabung, bukan kembar.
     const ada = surat.find(x => kunciSurat(x.rekanan, x.nomor_surat, x.tgl_surat) === k);
-    const r = ada ? ambil(`id:${ada.id}`, ada, {}) : ambil(`baru:${k}`, null, { rekanan: b.nilai.rekanan, nomor: b.nilai.nomor, tgl_surat: b.nilai.tgl_surat, berlaku: b.nilai.berlaku });
+    const r = ada ? ambil(`id:${ada.id}`, ada, {}) : ambil(`baru:${k}`, null, Object.fromEntries(KOLOM_KEPALA.filter(x => x in b.nilai).map(x => [x, b.nilai[x]])));
     r.baru.push(b); r.label.push(`baris ${b.baris} ${b.label}`);
   }
   for (const r of perSurat.values()) {
     const judul = r.surat ? `Surat ${r.surat.rekanan}${r.surat.nomor_surat ? ` No. ${r.surat.nomor_surat}` : ''}` : `Surat baru ${r.kepala.rekanan ?? ''}`;
     try {
       const catatan: string[] = [];
-      const kolomItem = (v: Record<string, NilaiBaku>, dasar: { barang_id: number | null; nama_barang: string; merk_tipe: string | null; spesifikasi: string | null; satuan: string | null; harga_satuan: number }) => {
+      type DasarItem = { barang_id: number | null; nama_barang: string; merk_tipe: string | null; spesifikasi: string | null; satuan: string | null; harga_satuan: number | null };
+      const kolomItem = (v: Record<string, NilaiBaku>, dasar: DasarItem) => {
         const item: Record<string, unknown> = { ...dasar };
         if ('nama' in v) item.nama_barang = s(v.nama);
         if ('merk' in v) item.merk_tipe = s(v.merk);
+        // Kolom Matriks hanya dikirim bila ada di berkas — selebihnya jangan sentuh (L87, simpanPenawaran).
+        if ('merek' in v) item.merk = s(v.merek);
+        if ('pajak' in v) item.status_pajak = v.pajak ?? null;
+        if ('tautan' in v) item.tautan = s(v.tautan);
+        if ('garansi' in v) item.garansi = s(v.garansi);
         if ('spesifikasi' in v) item.spesifikasi = s(v.spesifikasi);
         if ('satuan' in v) item.satuan = s(v.satuan);
-        if ('harga' in v) item.harga_satuan = n(v.harga);
+        if ('harga' in v) item.harga_satuan = v.harga === null ? null : n(v.harga);
         if ('barang' in v) {
           const b = barang(v.barang);
           if (b) { delete item.barang_id; Object.assign(item, b.barang_baru ? { barang_baru: b.barang_baru } : { barang_id: b.barang_id }); }
@@ -355,14 +364,20 @@ async function terapkanPenawaran(p: PilihanTerapkan, t: Tinjauan, surat: SuratPe
       };
       const item = [
         ...(r.surat?.item ?? []).map(i => ({ id: i.id, ...kolomItem(r.ubah.get(i.id) ?? {}, { barang_id: i.barang_id, nama_barang: i.nama_barang, merk_tipe: i.merk_tipe, spesifikasi: i.spesifikasi, satuan: i.satuan, harga_satuan: i.harga_satuan }) })),
-        ...r.baru.map(b => kolomItem(b.nilai, { barang_id: null, nama_barang: '', merk_tipe: null, spesifikasi: null, satuan: null, harga_satuan: 0 })),
+        ...r.baru.map(b => kolomItem(b.nilai, { barang_id: null, nama_barang: '', merk_tipe: null, spesifikasi: null, satuan: null, harga_satuan: null })),
       ];
       const sr = r.surat;
       const kepala = {
         rekanan: s(r.kepala.rekanan ?? sr?.rekanan), nomor_surat: s('nomor' in r.kepala ? r.kepala.nomor : sr?.nomor_surat ?? null),
         tgl_surat: s(r.kepala.tgl_surat ?? sr?.tgl_surat), berlaku_sampai: s('berlaku' in r.kepala ? r.kepala.berlaku : sr?.berlaku_sampai ?? null),
-        // Kategori sengaja tidak dikirim: tinjauan Drive tidak mengubahnya, dan undefined = jangan sentuh (L87).
-        file_id: sr?.file_id ?? null, catatan: sr?.catatan ?? null,
+        // Kategori sengaja tidak dikirim: tinjauan Drive tidak mengubahnya, dan undefined = jangan sentuh (L87). Kolom Matriks
+        // kepala sama: dikirim hanya yang ada di berkas, jadi surat lama tidak dikosongkan oleh salinan berbentuk lama.
+        file_id: sr?.file_id ?? null,
+        ...('syarat' in r.kepala ? { catatan: s(r.kepala.syarat) } : {}),
+        ...('jenis_surat' in r.kepala ? { jenis_surat: s(r.kepala.jenis_surat) } : {}),
+        ...('pic' in r.kepala ? { pic_kontak: s(r.kepala.pic) } : {}),
+        ...('masa' in r.kepala ? { masa_berlaku_teks: s(r.kepala.masa) } : {}),
+        ...('status_tl' in r.kepala ? { status_tindak_lanjut: r.kepala.status_tl ?? null } : {}),
       };
       const z = PenawaranSimpanSchema.safeParse({ id: sr?.id ?? null, expected_version: sr?.version ?? null, kepala, item });
       if (!z.success) throw new Error(z.error.issues[0].message);

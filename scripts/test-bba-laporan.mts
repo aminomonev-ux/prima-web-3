@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import ExcelJS from 'exceljs'
 import mysql from 'mysql2/promise'
 import { putuskanKirim, catatHasilKirim, JEDA_DIAM_MS } from '../lib/bba/drive-kirim'
-import { tulisBukuRencana, sidikBahan, LEMBAR_BUKU, type BahanBukuRencana } from '../lib/bba/laporan-excel'
+import { tulisBukuRencana, sidikBahan, LEMBAR_BUKU, KOLOM_LAPORAN, type BahanBukuRencana } from '../lib/bba/laporan-excel'
 import { kelengkapanRef } from '../lib/bba/referensi'
 
 let lulus = 0
@@ -46,7 +46,7 @@ const bahan: BahanBukuRencana = {
     { id: 3, canonical_id: 'BBA-3', uraian: 'Ditolak', barang_nama: null, sumber_anggaran: 'BLUD', vol: 1, satuan: null, harga: 99, nilai_rencana: 99, anggaran: 'BELUM', anggaran_nilai: null, jenis_rencana: null, tgl_proses: null, vol_realisasi: 0, nilai_realisasi: 0, usulan_no: 'U-1', alasan: null, status: 'DIRENCANAKAN', usulan_keputusan: 'DITOLAK', barang_id: null, ref, belum_dicatat: 0 },
   ],
   penerimaan: [{ id: 1, rencana_id: 1, tgl: '2066-03-01', vol: 2, harga_satuan: 9.5, nilai: 19, merk_tipe: 'A', penyedia: 'PT', catatan: null, pindahan: false, ditempatkan: 1 }],
-  penawaran: [{ id: 9, penawaran_id: 4, rekanan: 'PT X', nomor_surat: '1', tgl_surat: '2066-01-01', berlaku_sampai: '2066-05-01', file_id: null, barang_id: 1, barang_nama: 'Laptop', nama_barang: 'Laptop', merk_tipe: null, spesifikasi: null, satuan: 'unit', harga_satuan: 11 }],
+  penawaran: [{ id: 9, penawaran_id: 4, rekanan: 'PT X', nomor_surat: '1', tgl_surat: '2066-01-01', berlaku_sampai: '2066-05-01', file_id: null, barang_id: 1, barang_nama: 'Laptop', nama_barang: 'Laptop', merk: null, merk_tipe: null, spesifikasi: null, satuan: 'unit', harga_satuan: 11, status_pajak: null, tautan: null, garansi: null }],
 }
 {
   const wb = new ExcelJS.Workbook()
@@ -54,7 +54,7 @@ const bahan: BahanBukuRencana = {
   const buf = await wb.xlsx.writeBuffer(); const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.load(buf as ArrayBuffer)
   ok('B1 lima lembar urut alur; lembar menu yang dibuka aktif', JSON.stringify(wb2.worksheets.map(w => w.name)) === JSON.stringify(LEMBAR_BUKU) && wb2.views?.[0]?.activeTab === 2)
   const ws = wb2.getWorksheet('Rencana')!
-  ok('B2 templat seragam: kepala tabel di baris 7 ("No")', String(ws.getCell(7, 1).value) === 'No' && String(wb2.getWorksheet('Penawaran')!.getCell(7, 2).value) === 'Rekanan')
+  ok('B2 templat seragam: kepala tabel di baris 7 ("No")', String(ws.getCell(7, 1).value) === 'No' && String(wb2.getWorksheet('Penawaran')!.getCell(7, 5).value) === 'Nama Rekanan / Vendor')
   const sel = (w: string, r: number, k: number) => wb2.getWorksheet(w)!.getCell(r, k).value
   const isiRencana: string[] = []
   ws.eachRow((row, r) => { if (r > 7) isiRencana.push(String(row.getCell(12).value ?? '')) })
@@ -65,7 +65,7 @@ const bahan: BahanBukuRencana = {
   let pengadaan = 0
   wb2.getWorksheet('Pengadaan')!.eachRow((row, r) => { if (r > 7 && /^BBA-/.test(String(row.getCell(2).value ?? ''))) pengadaan++ })
   ok('B5 lembar Pengadaan = rencana didanai saja', pengadaan === 1)
-  ok('B6 penawaran kedaluwarsa ditandai (data mulai baris 9, sesudah nomor kolom); Ringkasan memuat unit belum dicatat', sel('Penawaran', 8, 1) === '(1)' && sel('Penawaran', 9, 6) === 'kedaluwarsa' && JSON.stringify(wb2.getWorksheet('Ringkasan')!.getSheetValues()).includes('belum dicatat'))
+  ok('B6 penawaran kedaluwarsa ditandai (data mulai baris 9, sesudah nomor kolom); Ringkasan memuat unit belum dicatat', sel('Penawaran', 8, 1) === '(1)' && sel('Penawaran', 9, KOLOM_LAPORAN.penawaran.findIndex(x => x.kunci === 'status') + 1) === 'kedaluwarsa' && JSON.stringify(wb2.getWorksheet('Ringkasan')!.getSheetValues()).includes('belum dicatat'))
   const s1 = sidikBahan(bahan)
   ok('B7 sidik stabil untuk bahan yang sama; berubah saat baris DIHAPUS (bukan cuma saat diubah)', s1 === sidikBahan(structuredClone(bahan))
     && s1 !== sidikBahan({ ...bahan, penerimaan: [] }) && s1 !== sidikBahan({ ...bahan, rencana: bahan.rencana.slice(1) }))

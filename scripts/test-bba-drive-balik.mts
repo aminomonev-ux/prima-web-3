@@ -79,7 +79,7 @@ const bahan: BahanBukuRencana = {
     { id: 3, canonical_id: 'BBA-3', uraian: 'Ditolak', barang_nama: null, sumber_anggaran: 'BLUD', vol: 1, satuan: null, harga: 99, nilai_rencana: 99, anggaran: 'BELUM', anggaran_nilai: null, jenis_rencana: null, tgl_proses: null, vol_realisasi: 0, nilai_realisasi: 0, usulan_no: 'U-1', alasan: null, status: 'DIRENCANAKAN', usulan_keputusan: 'DITOLAK', barang_id: null, ref, belum_dicatat: 0 },
   ],
   penerimaan: [{ id: 7, rencana_id: 1, tgl: '2065-03-01', vol: 2, harga_satuan: 9.5, nilai: 19, merk_tipe: 'Merk A', penyedia: 'PT Satu', catatan: null, pindahan: false, ditempatkan: 1 }],
-  penawaran: [{ id: 9, penawaran_id: 4, rekanan: 'PT X', nomor_surat: '1', tgl_surat: '2065-01-01', berlaku_sampai: '2065-05-01', file_id: null, barang_id: 1, barang_nama: 'Laptop', nama_barang: 'Laptop', merk_tipe: null, spesifikasi: 'i5', satuan: 'unit', harga_satuan: 11 }],
+  penawaran: [{ id: 9, penawaran_id: 4, rekanan: 'PT X', nomor_surat: '1', tgl_surat: '2065-01-01', berlaku_sampai: '2065-05-01', file_id: null, barang_id: 1, barang_nama: 'Laptop', nama_barang: 'Laptop', merk: null, merk_tipe: null, spesifikasi: 'i5', satuan: 'unit', harga_satuan: 11, status_pajak: null, tautan: null, garansi: null }],
 }
 const asal = potretDariBahan(bahan)
 const meta: MetaPrima = {
@@ -181,6 +181,36 @@ const berkasDari = (p: Potret, ubah?: (b: BacaanBerkas) => void): BacaanBerkas =
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+console.log('\nC2. Kolom Matriks penawaran')
+{
+  // Bahan berisi kolom Matriks + surat tanpa barang; potret "lama" = potret sebelum kolom Matriks ada (kuncinya dibuang).
+  const bm: BahanBukuRencana = { ...bahan, penawaran: [{ ...bahan.penawaran[0], merk: 'Lenovo', status_pajak: 'TERMASUK', tautan: 'https://katalog.inaproc.id/x', garansi: '3 Tahun',
+    jenis_surat: 'Penawaran Harga (SPH)', pic_kontak: 'Budi', status_tindak_lanjut: 'PERLU_TELAAH', syarat: 'tanpa kabel' }],
+    suratTanpaBarang: [{ ...bahan.penawaran[0], id: 0, penawaran_id: 77, nama_barang: '', barang_id: null, barang_nama: null, harga_satuan: null, jenis_surat: 'Permohonan Presentasi' }] }
+  const wb = new ExcelJS.Workbook(); tulisBukuRencana(wb, bm)
+  const b = await bacaWb(wb)
+  const pw = b.penawaran
+  ok('C2a lembar Matriks terbaca balik: kolom baru dikenali, nilai baku sama dengan potret, baris surat tanpa barang (W:S) dilewati',
+    pw.ada && pw.baris.length === 1 && pw.baris[0].id === 9 && pw.baris[0].nilai.pajak === 'TERMASUK' && pw.baris[0].nilai.status_tl === 'PERLU_TELAAH' && pw.baris[0].nilai.merek === 'Lenovo'
+    && pw.baris[0].nilai.jenis_surat === 'Penawaran Harga (SPH)' && Object.keys(pw.baris[0].galat).length === 0 && pw.peta!.asing.length === 0, JSON.stringify(pw.baris.map(x => [x.id, x.nilai, x.galat])))
+  const prima = potretDariBahan(bm)
+  const lama = { ...prima, penawaran: { 9: Object.fromEntries(Object.entries(prima.penawaran[9]).filter(([k]) => !['pic', 'jenis_surat', 'merek', 'pajak', 'tautan', 'garansi', 'masa', 'syarat', 'status_tl'].includes(k))) } }
+  const t = gabungTigaArah(b, lama, prima, meta)
+  ok('C2b potret asal yang dibuat sebelum kolom Matriks ada: isian PRIMA TIDAK tampil sebagai usulan/benturan', !t.ubah.some(u => u.lembar === 'penawaran'), JSON.stringify(t.ubah))
+  const dariLama = gabungTigaArah(berkasDari(prima, x => { x.penawaran.baris[0].nilai.pajak = 'BELUM' }), lama, prima, meta).ubah.find(x => x.lembar === 'penawaran')
+  ok('C2f potret lama + pajak diubah di Drive = usulan biasa (asal kolom baru = PRIMA), bukan "benturan"', dariLama?.sel.length === 1 && dariLama.sel[0].kunci === 'pajak' && dariLama.sel[0].jenis === 'usul', JSON.stringify(dariLama))
+  const ubah = gabungTigaArah(berkasDari(prima, x => { x.penawaran.baris[0].nilai.pajak = 'BELUM'; x.penawaran.baris[0].nilai.status_tl = 'LANJUT' }), prima, prima, meta)
+  const u = ubah.ubah.find(x => x.lembar === 'penawaran')
+  ok('C2c perubahan pajak & status tindak lanjut di Drive = usulan biasa', !!u && u.sel.map(x => x.kunci).sort().join() === 'pajak,status_tl' && u.sel.every(x => x.jenis === 'usul'))
+  // Salinan Drive berbentuk LAMA (judul Rekanan/No. Surat/Nama di Surat/Merk / Tipe/Harga Satuan) tetap dikenali.
+  const judulLama = ['No', 'Rekanan', 'No. Surat', 'Tgl Surat', 'Berlaku s.d.', 'Status', 'Barang', 'Nama di Surat', 'Merk / Tipe', 'Spesifikasi', 'Satuan', 'Harga Satuan', JUDUL_JANGKAR]
+  const l = bacaLembar('penawaran', [judulLama, [1, 'PT X', '1', '2065-01-01', '2065-05-01', 'kedaluwarsa', 'Laptop', 'Laptop', 'A-14', 'i5', 'unit', 11, 'W:9']])
+  ok('C2d salinan berbentuk lama: judul lama dikenali (Merk / Tipe = Tipe, Harga Satuan = harga), tanpa kolom asing', l.ada && l.peta!.asing.length === 0 && l.baris[0].nilai.merk === 'A-14'
+    && l.baris[0].nilai.harga === 11 && l.baris[0].nilai.nama === 'Laptop' && l.baris[0].nilai.rekanan === 'PT X' && l.peta!.peta.merek === null, JSON.stringify(l.peta))
+  const tanpaHarga = gabungTigaArah(berkasDari(prima, x => { x.penawaran.baris.push({ baris: 99, id: null, jangkarAsing: null, galat: {}, nilai: { rekanan: 'PT Baru', tgl_surat: '2065-02-01', nama: 'CT Scan', harga: null } }) }), prima, prima, meta)
+  ok('C2e baris penawaran baru tanpa harga TIDAK ditolak "belum diisi" (harga boleh kosong)', tanpaHarga.baru.some(x => x.lembar === 'penawaran' && x.tolak === null))
+}
+
 console.log('\nD. Deteksi & tahanan')
 {
   const s: StatusBerkasDrive = catatHasilKirim({}, 'S1', { fileId: 'F', pada: 'x', md5: 'M1', revisi: 'r1' })
@@ -304,7 +334,7 @@ if (c) {
       const n = ws.rowCount + 1
       ws.getCell(n, kolom(ws, 'Uraian')).value = 'UJID lemari'; ws.getCell(n, kolom(ws, 'Vol')).value = 3; ws.getCell(n, kolom(ws, 'Harga Satuan')).value = 250
       const wp = wb.getWorksheet('Penawaran')!
-      for (let r = 8; r <= wp.rowCount; r++) if (String(wp.getCell(r, kolom(wp, 'Nama di Surat')).value) === 'UJID meja') wp.getCell(r, kolom(wp, 'Harga Satuan')).value = 280
+      for (let r = 8; r <= wp.rowCount; r++) if (String(wp.getCell(r, kolom(wp, 'Nama Barang')).value) === 'UJID meja') wp.getCell(r, kolom(wp, 'Harga Penawaran (Rp)')).value = 280
     })
     await B.updateAset({ id: r1.id, expected_version: await versi(r1.id), alasan: 'dari B' }, uid)
     await B.updateAset({ id: r2.id, expected_version: await versi(r2.id), harga: 800 }, uid)

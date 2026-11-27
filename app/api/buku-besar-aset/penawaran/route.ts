@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
-import { PenawaranSimpanSchema, PenawaranHapusSchema } from '@/lib/data/bba-penawaran-schemas';
-import { listPenawaran, itemPenawaran, saranRekanan, simpanPenawaran, hapusPenawaran } from '@/lib/data/bba-penawaran';
+import { PenawaranSimpanSchema, PenawaranHapusSchema, StatusPenawaranSchema } from '@/lib/data/bba-penawaran-schemas';
+import { listPenawaran, itemPenawaran, saranRekanan, simpanPenawaran, hapusPenawaran, ubahStatusPenawaran, BbaSyaratSuratError } from '@/lib/data/bba-penawaran';
+import { LABEL_TINDAK_LANJUT } from '@/lib/bba/penawaran';
 import { BbaVersionConflictError, BbaNotFoundError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError, BbaKategoriTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, type GuardedSession } from '../_guard';
 
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
 const galat = (err: unknown) => {
   if (err instanceof BbaVersionConflictError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: 'Surat ini baru saja diubah orang lain — dimuat ulang.' }, { status: 409 });
   if (err instanceof BbaNotFoundError) return NextResponse.json({ ok: false, message: 'Surat penawaran tidak ditemukan.' }, { status: 404 });
-  if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaKategoriTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+  if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaKategoriTidakDikenalError || err instanceof BbaSyaratSuratError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
   throw err;
 };
 
@@ -51,7 +52,21 @@ export async function PATCH(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
   const ditolak = await tolakKecualiEdit(g.session, 'rencana', 'pengadaan'); if (ditolak) return ditolak;
+  if (new URL(req.url).searchParams.get('aksi') === 'status') return ubahStatus(req, g.session);
   return simpan(req, g.session, true);
+}
+
+/** Status tindak lanjut dari menu ⋯ baris — tidak membuka form, tidak menyentuh item. */
+async function ubahStatus(req: NextRequest, s: GuardedSession) {
+  const limited = await bbaRateLimit(s.userId, 'penawaran', 60); if (limited) return limited;
+  const p = StatusPenawaranSchema.safeParse(await req.json().catch(() => null));
+  if (!p.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + p.error.issues[0].message }, { status: 400 });
+  try {
+    const h = await ubahStatusPenawaran(p.data.id, p.data.expected_version, p.data.status_tindak_lanjut, s.userId);
+    await writeAuditLog({ req, eventType: 'BBA_PENAWARAN_SIMPAN', userId: s.userId, username: s.username,
+      detail: `BBA penawaran id=${p.data.id} rekanan="${h.rekanan.slice(0, 80)}" status tindak lanjut → ${p.data.status_tindak_lanjut ? LABEL_TINDAK_LANJUT[p.data.status_tindak_lanjut] : '(kosong)'}` });
+    return NextResponse.json({ ok: true });
+  } catch (err) { return galat(err); }
 }
 
 export async function DELETE(req: NextRequest) {
