@@ -29,15 +29,16 @@ export function bagianTerbuka(peta: PetaIzinLayar): MenuBba[] {
 
 /**
  * Penawaran Rekanan (CONCEPT-bba-revamp-alur §5A) bukan bagian izin tersendiri: dilihat semua pemegang BBA, diubah
- * pemegang EDIT Rencana ATAU Pengadaan. Di bilah tab ia duduk di antara Pengadaan dan Master.
+ * pemegang EDIT Rencana ATAU Pengadaan.
  */
 export const HALAMAN_PENAWARAN = '/buku-besar-aset/penawaran';
 export type HalamanBba = MenuBba | 'penawaran';
 export const bolehUbahPenawaran = (peta: PetaIzinLayar) => peta.rencana === 'EDIT' || peta.pengadaan === 'EDIT';
+/** Urutan bilah tab = urutan kerja (rencana → pengadaan → buku aset), lalu alat pendukung. Bukan urutan izin `MENU_BBA`. */
+const URUTAN_NAV: readonly HalamanBba[] = ['rencana', 'pengadaan', 'aset', 'penawaran', 'master', 'cetak'];
 function urutanNav(peta: PetaIzinLayar): HalamanBba[] {
-  const m = bagianTerbuka(peta);
-  const i = m.indexOf('master');
-  return i < 0 ? [...m, 'penawaran'] : [...m.slice(0, i), 'penawaran', ...m.slice(i)];
+  const terbuka = new Set<HalamanBba>([...bagianTerbuka(peta), 'penawaran']);
+  return URUTAN_NAV.filter(h => terbuka.has(h));
 }
 const hrefHalaman = (h: HalamanBba) => (h === 'penawaran' ? HALAMAN_PENAWARAN : HALAMAN_BBA[h]!);
 const labelHalaman = (h: HalamanBba) => (h === 'penawaran' ? 'Penawaran' : LABEL_MENU_BBA[h]);
@@ -56,9 +57,16 @@ type PropsNav = { aktif: HalamanBba; peta: PetaIzinLayar; c: Warna;
   /** Tahun pita alur — tanpa ini tahun berjalan. */
   tahun?: number; segarkan?: number; pindah?: PindahPita };
 
+const IKON_TAB: Record<HalamanBba, ReactNode> = {
+  rencana: <ClipboardList size={15} />, pengadaan: <ShoppingCart size={15} />, aset: <BookOpen size={15} />,
+  penawaran: <Tags size={15} />, master: <Layers size={15} />, cetak: <Printer size={15} />,
+};
+
 export default function BbaNav({ aktif, peta, c, tahun, segarkan, pindah }: PropsNav) {
   return (<>
-    <nav aria-label="Bagian Buku Besar Aset" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+    {/* Tab bergaris bawah: yang aktif = teks + garis amber yang menimpa garis dasar (marginBottom -1). Membungkus
+        di layar sempit, bukan digulir — wadah bergulir memotong tooltip pseudo `data-tooltip`. */}
+    <nav aria-label="Bagian Buku Besar Aset" style={{ display: 'flex', columnGap: 22, rowGap: 2, flexWrap: 'wrap', borderBottom: `1px solid ${c.border}`, marginBottom: 16 }}>
       {urutanNav(peta).map(m => {
         const kini = m === aktif;
         // Cetak memang tanpa jalur tulis bagi siapa pun — ikon "hanya melihat" di situ menyesatkan.
@@ -66,8 +74,9 @@ export default function BbaNav({ aktif, peta, c, tahun, segarkan, pindah }: Prop
         return (
           <Link key={m} href={hrefHalaman(m)} aria-current={kini ? 'page' : undefined}
             data-tooltip={hanyaLihat ? 'Izin Anda di bagian ini: hanya melihat' : undefined}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 20, textDecoration: 'none',
-              border: `1px solid ${kini ? '#EF9F27' : c.border}`, background: kini ? 'rgba(239,159,39,.15)' : 'transparent', color: kini ? '#EF9F27' : c.sub }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 2px 10px', marginBottom: -1, fontSize: 13, fontWeight: kini ? 700 : 500,
+              textDecoration: 'none', whiteSpace: 'nowrap', color: kini ? '#EF9F27' : c.sub, borderBottom: `2px solid ${kini ? '#EF9F27' : 'transparent'}` }}>
+            {IKON_TAB[m]}
             {labelHalaman(m)}
             {hanyaLihat && <Eye size={12} style={{ opacity: .7 }} />}
           </Link>
