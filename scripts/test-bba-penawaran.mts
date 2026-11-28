@@ -9,7 +9,7 @@ import ExcelJS from 'exceljs'
 import mysql from 'mysql2/promise'
 import {
   bandingkanPenawaran, urutUntukRencana, referensiDariPenawaran, masihBerlaku, kunciSatuan, jenisBerharga, syaratSurat, cocokJenisSurat, rapikanNamaRekanan,
-  kunciRekanan, saranRekananDari, gabungMerkTipe, durasiDariTeks, tambahDurasi, bacaStatusPajak, bacaTindakLanjut, JENIS_SURAT,
+  kunciRekanan, saranRekananDari, gabungMerkTipe, durasiDariTeks, tambahDurasi, bacaStatusPajak, bacaTindakLanjut, JENIS_SURAT, angka, barisTempelBarang,
   type ItemPenawaran, type ItemBerharga,
 } from '../lib/bba/penawaran'
 import { bacaPenawaranGrid, tulisTemplatPenawaran, KOLOM_MATRIKS } from '../lib/bba/penawaran-impor'
@@ -146,6 +146,42 @@ ok('E9 status pajak: label, "belum/tidak termasuk" mendahului "termasuk", "-" = 
 ok('E10 status tindak lanjut: label lengkap & kata kunci lembar Ringkasan', bacaTindakLanjut('Menunggu Jadwal Presentasi') === 'MENUNGGU_PRESENTASI' && bacaTindakLanjut('Disetujui / Lanjut Proses') === 'LANJUT'
   && bacaTindakLanjut('Arsip / Referensi Vendor') === 'ARSIP' && bacaTindakLanjut('Ditolak / Tidak Sesuai') === 'DITOLAK' && bacaTindakLanjut('Perlu Telaah Teknis & Anggaran') === 'PERLU_TELAAH'
   && bacaTindakLanjut('') === null && bacaTindakLanjut('entah') === undefined)
+{
+  const tanpaKomentar = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const layar = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/penawaran/penawaran-client.tsx'))
+  const rute = tanpaKomentar(sumber('app/api/buku-besar-aset/penawaran/impor/route.ts'))
+  ok('C7 tempel di layar lewat SATU aturan barisTempelBarang (tanpa pemecah baris & pembaca harga sendiri)', layar.includes('barisTempelBarang(') && !/split\('\\n'\)/.test(layar) && !/replace\(',', '\.'\)/.test(layar))
+  ok('C8 rute impor Matriks menulis lewat imporSuratMatriks — tanpa transaksi & FOR UPDATE sendiri', rute.includes('imporSuratMatriks(') && !rute.includes('withTransaction') && !/FOR UPDATE/.test(rute))
+}
+ok('E15 status tindak lanjut bernada negatif TIDAK terbaca "lanjut"', bacaTindakLanjut('Tidak dilanjutkan') === 'DITOLAK' && bacaTindakLanjut('tidak lanjut') === 'DITOLAK'
+  && bacaTindakLanjut('Tidak disetujui') === 'DITOLAK' && bacaTindakLanjut('Batal') === 'DITOLAK' && bacaTindakLanjut('Belum disetujui') === undefined && bacaTindakLanjut('Lanjut proses') === 'LANJUT',
+  `${bacaTindakLanjut('Tidak dilanjutkan')} ${bacaTindakLanjut('Belum disetujui')}`)
+{
+  const kasus: Array<[unknown, number]> = [
+    ['Rp 1.250.000', 1250000], ['12.500.000,00', 12500000], ['12,500,000', 12500000], ['12,500,000.50', 12500000.5], ['1,750,000.50', 1750000.5],
+    ['12500000,0', 12500000], ['1750000,5000', 1750000.5], ['1250000.00', 1250000], ['Rp 1.250.000,-', 1250000], ['1.250', 1250], ['12,5', 12.5],
+    [' Rp650,000 ', 650000], [98500000, 98500000], ['1 250 000', 1250000],
+  ]
+  const salah = kasus.filter(([v, n]) => angka(v) !== n).map(([v]) => `${JSON.stringify(v)}→${angka(v)}`)
+  ok('E16 angka: pemisah Indonesia & Inggris, desimal 1–4 digit, ",-", spasi tak-putus', salah.length === 0 && Number.isNaN(angka('abc')) && Number.isNaN(angka('1,2,3.4.5')), salah.join(' '))
+}
+for (const [berkas, nama] of [['excel-id.txt', 'pemisah Indonesia'], ['excel-en.txt', 'pemisah Inggris']] as const) {
+  // Teks papan klip yang DISALIN DARI EXCEL DESKTOP sungguhan (otomasi COM, 2026-11-28) — termasuk sel Alt+Enter terkutip.
+  const b = barisTempelBarang(readFileSync(new URL(`./fixtures/bba-papan-klip/${berkas}`, import.meta.url), 'utf8'))
+  ok(`E17 tempel dari Excel desktop (${nama}): 5 barang, harga utuh, sel dua baris tetap satu barang`, b.length === 5
+    && JSON.stringify(b.map(x => x.harga)) === JSON.stringify([12500000, 3250000, 1750000.5, 98500000, 650000])
+    && b[4].nama === 'Tensimeter digital lengan' && b[4].merk === 'Omron' && b[3].nama === 'Total Station', JSON.stringify(b.map(x => [x.nama, x.harga])))
+}
+ok('E18 tempel: baris kepala yang ikut tersalin dilewati, baris data pertama tidak', barisTempelBarang('Nama Barang\tMerk\tTipe\tSatuan\tHarga\nLaptop\tAsus\tB1\tunit\t10.000').length === 1
+  && barisTempelBarang('Nama\tA\tB\tunit\t5000\nKursi\tX\tY\tbuah\t7000').length === 2)
+{
+  const g = [['Tgl Surat', 'Nama Rekanan', 'Nama Barang', 'Harga Penawaran (Rp)', 'Syarat & Pengecualian'],
+    ['2026-01-02', 'PT Ukur', 'Total Station', 98500000, ''], ['2026-01-02', 'PT Ukur', 'Waterpass', 5000000, 'Jumlah minimal pemesanan 2 unit'],
+    ['', 'TOTAL', '', 103500000, ''], ['Jumlah', '', '', 103500000, '']]
+  const h = bacaMatriksGrid(g)
+  ok('H4 Matriks: barang "Total Station" & syarat "Jumlah minimal …" tetap terbaca; baris TOTAL/Jumlah dilewati', h?.surat.length === 1 && h.surat[0].item.length === 2
+    && h.surat[0].item[0].nama_barang === 'Total Station' && h.dilewati.length === 0, JSON.stringify(h?.surat[0]?.item.map(i => i.nama_barang)))
+}
 {
   const r = referensiDariPenawaran(ib({ file_id: null, tautan: 'https://katalog.inaproc.id/ge-operations', merk: 'GE', merk_tipe: 'Revolution', harga_satuan: 9 }))
   ok('E11 link e-Katalog ikut jadi url referensi: sumber EKATALOG, SAH walau surat tanpa berkas; merk+tipe tergabung', r.url === 'https://katalog.inaproc.id/ge-operations' && r.sumber === 'EKATALOG' && referensiSah(r) && r.merk_tipe === 'GE Revolution')
@@ -324,8 +360,66 @@ if (c) {
     ok('D16 impor banyak surat satu transaksi: satu gagal = semuanya batal', gagalTengah instanceof B.BbaKategoriTidakDikenalError && !(await W.listPenawaran('UJIW PT Impor')).length)
     const kunci = await W.kunciSuratTercatat()
     ok('D17 kunci surat tercatat (rekanan+nomor+tanggal) untuk melewati surat yang sudah diimpor', kunci.some(x => x.rekanan === 'UJIW PT Matriks' && x.tgl_surat === '2026-03-01'))
+
+    // ── Balapan (deterministik lewat performance_schema). Impor Matriks × ganti nama jenis kategori di Master.
+    const menunggu = async (tabel: string) => {
+      for (let i = 0; i < 100; i++) {
+        const [r] = await k.query(`SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+          WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = ?`, [tabel]) as [Array<{ n: number }>, unknown]
+        if (Number(r[0].n) > 0) return true
+        await new Promise(s => setTimeout(s, 50))
+      }
+      return false
+    }
+    const [indRow] = await k.query("SELECT id FROM bba_kategori_induk WHERE nama = 'Barang dan Jasa'") as [Array<{ id: number }>, unknown]
+    const indId = Number(indRow[0].id)
+    const jenis = await B.createJenisKategori({ kategori_id: indId, jenis_kategori: 'UJIW Jenis Balapan', kode_rekening: null })
+    await W.simpanPenawaran({ kepala: { rekanan: 'UJIW PT Pemegang Jenis', tgl_surat: '2026-06-01', kategori_id: indId, jenis_kategori_id: jenis.id }, item: [{ nama_barang: 'x', harga_satuan: 1 }] }, userId)
+    const isiImpor = (n: string) => ({ kepala: { rekanan: `UJIW PT Balap ${n}`, tgl_surat: '2026-06-02', jenis_surat: 'Permohonan Presentasi', kategori_id: indId, jenis_kategori_id: jenis.id }, item: [] })
+    const { PenawaranSimpanSchema: Skema } = await import('../lib/data/bba-penawaran-schemas')
+    const saling = (e: unknown) => e instanceof Error && /deadlock/i.test(e.message)
+
+    // Urutan LAMA (rute impor sebelum 2026-11-28): FOR UPDATE seluruh surat → baru kategori. Dibuktikan saling-kunci.
+    let sudahKunci!: () => void; const terkunci = new Promise<void>(r => (sudahKunci = r))
+    let lanjut!: () => void; const jeda = new Promise<void>(r => (lanjut = r))
+    const lama = coba(() => withTransaction(async t => {
+      await t.tx`SELECT rekanan FROM bba_penawaran FOR UPDATE`
+      sudahKunci(); await jeda
+      await W.simpanPenawaranDi(t, Skema.parse(isiImpor('Lama')), userId)
+    }))
+    await terkunci
+    const gantiLama = coba(() => B.updateJenisKategori({ id: jenis.id, jenis_kategori: 'UJIW Jenis Balapan 2' }))
+    const tungguLama = await menunggu('bba_penawaran')
+    lanjut()
+    const [rLama, gLama] = await Promise.all([lama, gantiLama])
+    ok('D18a pembanding: urutan lama (kunci semua surat dulu) SALING-KUNCI dengan ganti nama jenis', tungguLama && (saling(rLama) || saling(gLama)),
+      `menunggu=${tungguLama} impor=${(rLama as Error)?.message ?? 'ok'} ganti=${(gLama as Error)?.message ?? 'ok'}`)
+
+    // Urutan BARU (imporSuratMatriks): kunci bernama, surat tak dikunci → ganti nama tidak menunggu impor.
+    const [ab] = await k.query("SELECT COUNT(*) AS n FROM blud_locks WHERE entity = 'bba_penawaran_impor' AND key_id = 'semua'") as [Array<{ n: number }>, unknown]
+    const tahan = await mysql.createConnection({ host: process.env.MYSQL_HOST, port: Number(process.env.MYSQL_PORT || 3306), user: process.env.MYSQL_USER, password: process.env.MYSQL_PASSWORD, database: process.env.MYSQL_DATABASE })
+    try {
+      await tahan.query('START TRANSACTION')
+      await tahan.query("INSERT INTO blud_locks (entity, key_id, version) VALUES ('bba_penawaran_impor', 'semua', 0) ON DUPLICATE KEY UPDATE version = version")
+      await tahan.query("SELECT version FROM blud_locks WHERE entity = 'bba_penawaran_impor' AND key_id = 'semua' FOR UPDATE")
+      const surat = (n: string) => ({ label: n, lewati: false, data: isiImpor(n) })
+      const imp1 = coba(() => W.imporSuratMatriks([surat('Baru')], userId))
+      const imp2 = coba(() => W.imporSuratMatriks([surat('Baru')], userId))   // impor kembar berbarengan
+      const antre = await menunggu('blud_locks')
+      const ganti = await coba(() => B.updateJenisKategori({ id: jenis.id, jenis_kategori: 'UJIW Jenis Balapan 3' }))
+      await tahan.query('COMMIT')
+      const [h1, h2] = await Promise.all([imp1, imp2])
+      const ditulis = (await W.listPenawaran('UJIW PT Balap Baru'))
+      ok('D18b urutan baru: impor ANTRE di kunci bernama, ganti nama jenis selesai tanpa menunggu impor, tidak saling-kunci', antre && !(ganti instanceof Error)
+        && !(h1 instanceof Error) && !(h2 instanceof Error), `antre=${antre} ganti=${(ganti as Error)?.message ?? 'ok'} h1=${(h1 as Error)?.message ?? 'ok'} h2=${(h2 as Error)?.message ?? 'ok'}`)
+      ok('D19 dua impor berkas yang sama berbarengan: suratnya tercatat SATU kali, yang kedua melewatinya; label jenis ikut nama terbaru',
+        ditulis.length === 1 && [h1, h2].filter(h => !(h instanceof Error) && h.tulis.length === 1).length === 1 && ditulis[0].jenis_kategori === 'UJIW Jenis Balapan 3',
+        `${ditulis.length} surat, ${JSON.stringify([h1, h2])}`)
+      if (Number(ab[0].n) === 0) await k.query("DELETE FROM blud_locks WHERE entity = 'bba_penawaran_impor' AND key_id = 'semua'")  // L92: hanya kunci yang dibuat uji ini
+    } finally { await tahan.end() }
   } finally {
     await bersih()
+    await k.query("DELETE FROM bba_kategori_aset WHERE nama LIKE 'UJIW%'")
     const [s] = await k.query("SELECT (SELECT COUNT(*) FROM bba_penawaran WHERE rekanan LIKE 'UJIW%') + (SELECT COUNT(*) FROM bba_barang WHERE nama LIKE 'UJIW %') AS n") as [Array<{ n: number }>, unknown]
     ok('D9 kotak pasir bersih', Number(s[0].n) === 0)
     await k.end()

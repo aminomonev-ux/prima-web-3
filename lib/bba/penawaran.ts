@@ -2,6 +2,7 @@
 // CONCEPT-bba-penawaran-matriks.md). MURNI: dipakai tampilan Bandingkan, pemilih "Ambil dari penawaran" di modal rencana,
 // form & impor Matriks, unduhan, dan uji — satu aturan untuk "berlaku", "termurah", "surat berharga", nama rekanan, dll.
 import { tebakSumber, type ReferensiIsian } from './referensi';
+import { parseTSV } from '@/lib/lkjip/tabel';
 
 export const STATUS_PAJAK = ['TERMASUK', 'BELUM', 'BEBAS', 'TIDAK_DISEBUT'] as const;
 export type StatusPajak = typeof STATUS_PAJAK[number];
@@ -53,6 +54,10 @@ export function bacaTindakLanjut(teks: string | null | undefined): StatusTindakL
   if (!t) return null;
   const label = STATUS_TINDAK_LANJUT.find(s => huruf(LABEL_TINDAK_LANJUT[s]) === t || huruf(s) === t);
   if (label) return label;
+  // Penolakan dulu: "tidak dilanjutkan" / "tidak disetujui" memuat kata "lanjut"/"setuju". "Belum disetujui" bukan
+  // ditolak dan bukan lanjut — tidak dikenali (pembaca menyebutnya), bukan ditebak.
+  if (/tolak|tidaksesuai|tidak(di)?lanjut|batal|tidak(di)?setuju/.test(t)) return 'DITOLAK';
+  if (/belum(di)?setuju|belum(di)?lanjut/.test(t)) return undefined;
   if (/presentasi/.test(t)) return 'MENUNGGU_PRESENTASI';
   if (/demo/.test(t)) return 'MENUNGGU_DEMO';
   if (/telaah/.test(t)) return 'PERLU_TELAAH';
@@ -119,6 +124,47 @@ export function tambahDurasi(tgl: string, d: Durasi): string {
   return `${ty}-${String(tm + 1).padStart(2, '0')}-${String(Math.min(h, akhir)).padStart(2, '0')}`;
 }
 export const teksDurasi = (d: Durasi) => `${d.n} ${d.satuan}`;
+
+export type BarisTempel = { nama: string; merk: string; tipe: string; satuan: string; harga: number | null };
+/**
+ * Tempel dari Excel di kotak Nama barang: Nama · Merk · Tipe · Satuan · Harga. Sel ber-Alt+Enter datang terkutip ("…") —
+ * dibaca `parseTSV`, kalau dipecah per baris satu barang jadi dua. Harga lewat `angka` (pemisah ikut setelan Excel). Baris
+ * kepala yang ikut tersalin dilewati.
+ */
+export function barisTempelBarang(teks: string): BarisTempel[] {
+  const baris = parseTSV(teks).map(b => b.map(x => (x.v ?? '').replace(/\s+/g, ' ').trim())).filter(b => b[0]);
+  const kepala = (b: string[]) => /^(nama\s*barang|nama|barang|uraian)$/i.test(b[0]) && !Number.isFinite(angka(b[4] ?? ''));
+  return baris.filter((b, i) => !(i === 0 && kepala(b))).slice(0, 200).map(([nama, merk = '', tipe = '', satuan = '', harga = '']) => {
+    const h = angka(harga);
+    return { nama: nama.slice(0, 255), merk: merk.slice(0, 80), tipe: tipe.slice(0, 160), satuan: satuan.slice(0, 40), harga: Number.isFinite(h) && h > 0 ? Math.round(h * 100) / 100 : null };
+  });
+}
+
+/**
+ * Angka dari sel/teks Excel → number; bukan angka = NaN. Dipakai impor berkas, Drive balik, DAN tempel dari Excel di layar.
+ * Teks tempelan = angka seperti TAMPIL di Excel, jadi pemisahnya mengikuti setelan Excel orang itu: "12.500.000,00",
+ * "12,500,000.00" (Excel berpemisah Inggris), "12500000,0", "Rp 1.250.000,-". Kedua pemisah ada → yang terakhir desimal;
+ * satu pemisah → ribuan hanya bila tiap kelompok sesudahnya tepat 3 digit ("1.250" = 1250, "1750000,5000" = 1750000,5).
+ */
+export function angka(v: unknown): number {
+  if (typeof v === 'number') return v;
+  const t = String(v ?? '').replace(/rp/gi, '').replace(/[\s ]/g, '').replace(/[.,]-+$/, '');
+  if (!t || !/^-?[\d.,]+$/.test(t)) return NaN;
+  const titik = t.lastIndexOf('.'), koma = t.lastIndexOf(',');
+  let desimal: '.' | ',' | null = null;
+  if (titik >= 0 && koma >= 0) desimal = titik > koma ? '.' : ',';
+  else if (titik >= 0 || koma >= 0) {
+    const sep = titik >= 0 ? '.' : ',';
+    const bagian = t.split(sep);
+    const ribuan = /^-?\d{1,3}$/.test(bagian[0]) && bagian.slice(1).every(b => /^\d{3}$/.test(b));
+    if (!ribuan) desimal = sep;   // "1,2,3" → lebih dari satu pemisah desimal, ditolak di bawah
+  }
+  const ribu = desimal === ',' ? '.' : desimal === '.' ? ',' : /[.,]/;
+  const [utuh, pecahan, lebih] = desimal ? t.split(desimal) : [t];
+  if (lebih !== undefined) return NaN;
+  const bulat = utuh.split(ribu).join('');
+  return Number(pecahan === undefined ? bulat : `${bulat}.${pecahan}`);
+}
 
 export type ItemPenawaran = {
   id: number; penawaran_id: number; rekanan: string; nomor_surat: string | null; tgl_surat: string; berlaku_sampai: string | null;

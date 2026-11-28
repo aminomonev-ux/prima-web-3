@@ -3,6 +3,9 @@
 // hanya jejak), jadi surat boleh disunting/dihapus tanpa mengubah catatan sejarah rencana.
 import { sql, queryMany, withTransaction, bulkInsert, escapeLike } from '@/lib/data/db';
 import type { Penanya } from '@/lib/data/db';
+import { acquireBludLock } from '@/lib/data/locks';
+import { kunciSuratMatriks } from '@/lib/bba/penawaran-matriks';
+import { PenawaranSimpanSchema } from './bba-penawaran-schemas';
 import { rapikanNamaRekanan, saranRekananDari, syaratSurat, type ItemPenawaran, type SaranRekanan, type StatusPajak, type StatusTindakLanjut } from '@/lib/bba/penawaran';
 import { normalisasiKategoriItem } from '@/lib/bba/kategori';
 import { pastikanBerkasBba, tentukanBarang, selesaikanKategori, BbaVersionConflictError, BbaNotFoundError } from '@/lib/data/buku-besar-aset';
@@ -222,7 +225,37 @@ export async function simpanPenawaranDi({ tx, conn }: Transaksi, input: Penawara
 export async function kunciSuratTercatat(q?: Penanya): Promise<Array<{ rekanan: string; nomor_surat: string | null; tgl_surat: string }>> {
   type Baris = { rekanan: string; nomor_surat: string | null; tgl_surat: string };
   if (!q) return queryMany<Baris>(sql`SELECT rekanan, nomor_surat, DATE_FORMAT(tgl_surat, '%Y-%m-%d') AS tgl_surat FROM bba_penawaran`);
-  return await q`SELECT rekanan, nomor_surat, DATE_FORMAT(tgl_surat, '%Y-%m-%d') AS tgl_surat FROM bba_penawaran FOR UPDATE` as Baris[];
+  return await q`SELECT rekanan, nomor_surat, DATE_FORMAT(tgl_surat, '%Y-%m-%d') AS tgl_surat FROM bba_penawaran` as Baris[];
+}
+
+/** Kunci "sudah tercatat" dihitung dari isi yang ditulis (bukan dikirim pemanggil) — satu rumus dengan `kunciSuratTercatat`. */
+export type SuratImpor = { label: string; lewati: boolean; data: unknown };
+
+/**
+ * Impor Matriks: banyak surat dalam SATU transaksi, surat yang sudah tercatat dilewati (dibaca ulang di sini — surat yang
+ * dicatat impor lain di sela pratinjau & simpan tidak dicatat dua kali). Antre lewat kunci bernama, BUKAN `FOR UPDATE`
+ * seluruh `bba_penawaran`: kunci baris surat yang dipegang sebelum `selesaikanKategori` membalik urutan "Master dulu, baru
+ * baris pemakai" dan saling-kunci dengan ganti nama/hapus jenis kategori (uji D18). Bacaan pertama sesudah kunci = foto baru.
+ */
+export async function imporSuratMatriks(surat: readonly SuratImpor[], userId: number): Promise<{ tulis: Array<{ rekanan: string; item: number }>; lewat: number }> {
+  return withTransaction(async t => {
+    await acquireBludLock(t.tx, 'bba_penawaran_impor', 'semua');
+    const sudah = new Set((await kunciSuratTercatat(t.tx)).map(x => kunciSuratMatriks(x.rekanan, x.nomor_surat, x.tgl_surat)));
+    const tulis: Array<{ rekanan: string; item: number }> = [];
+    let lewat = 0;
+    for (const s of surat) {
+      if (s.lewati) { lewat++; continue; }
+      const z = PenawaranSimpanSchema.safeParse(s.data);
+      if (!z.success) throw new BbaSyaratSuratError(`${s.label}: ${z.error.issues[0].message}`);
+      const kp = z.data.kepala;
+      const kunci = kunciSuratMatriks(rapikanNamaRekanan(kp.rekanan), kp.nomor_surat || null, kp.tgl_surat);
+      if (sudah.has(kunci)) { lewat++; continue; }
+      const h = await simpanPenawaranDi(t, z.data, userId);
+      sudah.add(kunci);
+      tulis.push({ rekanan: rapikanNamaRekanan(z.data.kepala.rekanan), item: h.item });
+    }
+    return { tulis, lewat };
+  });
 }
 
 /** Status tindak lanjut dari menu ⋯ baris — satu kolom, dengan angka kunci surat (L77). */

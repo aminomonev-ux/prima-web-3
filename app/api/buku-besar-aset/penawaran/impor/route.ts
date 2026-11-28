@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { withTransaction } from '@/lib/data/db';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { KepalaPenawaranSchema, PenawaranSimpanSchema } from '@/lib/data/bba-penawaran-schemas';
 import { bacaPenawaranGrid, tulisTemplatPenawaran, MAKS_LEMBAR_PENAWARAN } from '@/lib/bba/penawaran-impor';
@@ -10,7 +9,7 @@ import { kunciNamaBarang } from '@/lib/bba/barang';
 import { polosSelExcel } from '@/lib/shared/excel-sel';
 import type { MasterKategoriData } from '@/lib/bba/kategori';
 import { listBarang, listKategoriLengkap, BbaBerkasTidakDikenalError, BbaKategoriTidakDikenalError, BbaBarangTidakDikenalError } from '@/lib/data/buku-besar-aset';
-import { simpanPenawaran, simpanPenawaranDi, kunciSuratTercatat, BbaSyaratSuratError } from '@/lib/data/bba-penawaran';
+import { simpanPenawaran, imporSuratMatriks, kunciSuratTercatat, BbaSyaratSuratError } from '@/lib/data/bba-penawaran';
 import { guard, tolakKecualiEdit } from '../../_guard';
 
 // Impor penawaran dari Excel (docs/konsep/bba/CONCEPT-bba-penawaran-matriks.md §6) — pola impor KIB:
@@ -117,28 +116,18 @@ export async function POST(req: NextRequest) {
     if (step === 'pratinjau') return NextResponse.json({ ok: true, mode: 'matriks', surat: matriks.surat.map(s => siapkan(s, tercatat)), dilewati: matriks.dilewati });
 
     try {
-      const hasil = await withTransaction(async t => {
-        // Dibaca ulang DI DALAM transaksi: surat yang dicatat orang lain di sela pratinjau & simpan tidak dicatat dua kali.
-        const sudah = new Set((await kunciSuratTercatat(t.tx)).map(x => kunciSuratMatriks(x.rekanan, x.nomor_surat, x.tgl_surat)));
-        const tulis: Array<{ rekanan: string; item: number }> = [];
-        let lewat = 0;
-        for (const s of matriks.surat.map(x => siapkan(x, sudah))) {
-          if (s.sudahAda || s.masalah) { lewat++; continue; }
-          const z = PenawaranSimpanSchema.safeParse({
-            kepala: {
-              ...s.kepala, kategori: undefined,
-              ...(s.kategori_id || s.jenis_kategori ? { kategori_id: s.kategori_id, jenis_kategori_id: s.jenis_kategori_id, jenis_kategori: s.jenis_kategori_id ? undefined : s.jenis_kategori, kode_rekening: s.kode_rekening } : {}),
-            },
-            item: s.item.map(i => ({ barang_id: i.barang_id, nama_barang: i.nama_barang, merk: i.merk, merk_tipe: i.merk_tipe, spesifikasi: i.spesifikasi, satuan: i.satuan,
-              harga_satuan: i.harga_satuan, status_pajak: i.status_pajak, tautan: i.tautan, garansi: i.garansi })),
-          });
-          if (!z.success) throw new BbaSyaratSuratError(`Surat ${s.kepala.rekanan} (baris ${s.baris[0]}): ${z.error.issues[0].message}`);
-          const h = await simpanPenawaranDi(t, z.data, g.session.userId);
-          sudah.add(s.kunci);
-          tulis.push({ rekanan: s.kepala.rekanan, item: h.item });
-        }
-        return { tulis, lewat };
-      });
+      // Surat yang sudah tercatat dinilai ulang di dalam transaksi impor (imporSuratMatriks), bukan dari pratinjau.
+      const hasil = await imporSuratMatriks(matriks.surat.map(x => siapkan(x, new Set())).map(s => ({
+        label: `Surat ${s.kepala.rekanan} (baris ${s.baris[0]})`, lewati: !!s.masalah,
+        data: {
+          kepala: {
+            ...s.kepala, kategori: undefined,
+            ...(s.kategori_id || s.jenis_kategori ? { kategori_id: s.kategori_id, jenis_kategori_id: s.jenis_kategori_id, jenis_kategori: s.jenis_kategori_id ? undefined : s.jenis_kategori, kode_rekening: s.kode_rekening } : {}),
+          },
+          item: s.item.map(i => ({ barang_id: i.barang_id, nama_barang: i.nama_barang, merk: i.merk, merk_tipe: i.merk_tipe, spesifikasi: i.spesifikasi, satuan: i.satuan,
+            harga_satuan: i.harga_satuan, status_pajak: i.status_pajak, tautan: i.tautan, garansi: i.garansi })),
+        },
+      })), g.session.userId);
       await writeAuditLog({ req, eventType: 'BBA_PENAWARAN_IMPOR', userId: g.session.userId, username: g.session.username,
         detail: `BBA impor Matriks "${berkas.name.slice(0, 80)}": ${hasil.tulis.length} surat (${hasil.tulis.reduce((n, x) => n + x.item, 0)} barang) dicatat, ${hasil.lewat} dilewati (sudah tercatat/bermasalah)` });
       return NextResponse.json({ ok: true, mode: 'matriks', surat: hasil.tulis.length, item: hasil.tulis.reduce((n, x) => n + x.item, 0), lewat: hasil.lewat, dilewati: matriks.dilewati });

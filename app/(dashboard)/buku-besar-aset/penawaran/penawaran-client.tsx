@@ -13,7 +13,7 @@ import { fetchJson } from '@/lib/shared/api';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import {
   bandingkanPenawaran, masihBerlaku, gabungMerkTipe, syaratSurat, durasiDariTeks, tambahDurasi, teksDurasi, kunciRekanan, rapikanNamaRekanan,
-  JENIS_SURAT, STATUS_PAJAK, LABEL_PAJAK, STATUS_TINDAK_LANJUT, LABEL_TINDAK_LANJUT, kunciSatuan,
+  JENIS_SURAT, STATUS_PAJAK, LABEL_PAJAK, STATUS_TINDAK_LANJUT, LABEL_TINDAK_LANJUT, kunciSatuan, barisTempelBarang,
   type ItemPenawaran, type SaranRekanan, type StatusPajak, type StatusTindakLanjut, type Durasi,
 } from '@/lib/bba/penawaran';
 import { fmtTanggal } from '@/lib/bba/kondisi';
@@ -389,12 +389,9 @@ const itemBody = (i: IsianItem) => ({
   harga_satuan: i.harga && i.harga > 0 ? i.harga : null, status_pajak: i.pajak || null, tautan: i.tautan.trim() || null, garansi: i.garansi.trim() || null,
 });
 
-/** Tempel baris dari Excel (Tab antar sel): Nama · Merk · Tipe · Satuan · Harga. */
+/** Tempel baris dari Excel (aturannya `barisTempelBarang`): Nama · Merk · Tipe · Satuan · Harga. */
 function itemDariTempel(teks: string, pajak: StatusPajak | ''): IsianItem[] {
-  return teks.replace(/\r/g, '').split('\n').map(b => b.split('\t').map(x => x.trim())).filter(b => b[0]).slice(0, 200).map(([nama, merk = '', tipe = '', satuan = '', harga = '']) => {
-    const h = Number(harga.replace(/rp/gi, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
-    return { ...itemKosong(pajak), nama_barang: nama.slice(0, 255), merk: merk.slice(0, 80), tipe: tipe.slice(0, 160), satuan: satuan.slice(0, 40), harga: Number.isFinite(h) && h > 0 ? h : null };
-  });
+  return barisTempelBarang(teks).map(b => ({ ...itemKosong(pajak), nama_barang: b.nama, merk: b.merk, tipe: b.tipe, satuan: b.satuan, harga: b.harga }));
 }
 
 function PanelSurat({ c, awal, semua, rekanan, barang, merkAda, kategori, hariIni, onTutup, onTersimpan }: {

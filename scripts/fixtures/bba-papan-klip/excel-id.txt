@@ -1,0 +1,6 @@
+Laptop	Asus	ExpertBook B1	unit	12500000,0
+Printer Laser	HP	LaserJet M211	unit	Rp3250000,0
+Kursi Kerja	Chitose	Yamato	buah	1750000,5000
+Total Station	Topcon	GM-52	set	98500000
+"Tensimeter
+digital lengan"	Omron	HEM-7120	unit	 Rp650000,0 

@@ -25,14 +25,9 @@ const kepalaPenawaran = (b: string[]) => b.some(KENALI.nama) && b.some(KENALI.ha
 export type BarisImporPenawaran = { baris: number; nama_barang: string; merk_tipe: string | null; spesifikasi: string | null; satuan: string | null; harga_satuan: number };
 export type HasilBacaPenawaran = { item: BarisImporPenawaran[]; masalah: string[]; dilewati: string[] };
 
-/** "Rp 1.250.000" / "1250000" / 1250000 → 1250000. Teks bukan angka = NaN. Dipakai juga pembaca Drive balik. */
-export function angka(v: unknown): number {
-  if (typeof v === 'number') return v;
-  const t = String(v ?? '').replace(/rp/gi, '').replace(/\s/g, '');
-  if (!t) return NaN;
-  const bersih = /,\d{1,2}$/.test(t) ? t.replace(/\./g, '').replace(',', '.') : t.replace(/[.,](?=\d{3}(\D|$))/g, '');
-  return Number(bersih);
-}
+import { angka } from './penawaran';
+/** Pembaca angka bersama (aturannya di `lib/bba/penawaran.ts` — dipakai juga tempel dari Excel di layar). */
+export { angka };
 
 export function bacaPenawaranGrid(grid: readonly (readonly unknown[])[]): HasilBacaPenawaran {
   const hasil: HasilBacaPenawaran = { item: [], masalah: [], dilewati: [] };

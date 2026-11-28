@@ -71,11 +71,14 @@ export function bacaMatriksGrid(grid: readonly (readonly unknown[])[]): HasilBac
   data.forEach((b, n) => {
     const nomor = k + 2 + n;
     if (!b || adalahBarisHiasan(b)) return;
-    if (b.some(v => /^(total|jumlah)\b/i.test(teks(v)))) return;
     const rekananMentah = ambil(b, 'rekanan'), nama = ambil(b, 'nama');
+    const tgl = ix.tgl === undefined ? null : bacaTanggal(b[ix.tgl]).nilai;
+    // Baris TOTAL = berlabel total/jumlah TANPA rekanan sungguhan atau tanpa tanggal surat. Baris surat sungguhan tetap barang
+    // walau namanya "Total Station" atau syaratnya "Jumlah minimal pemesanan …".
+    const total = /^(total|jumlah)\b/i;
+    if (b.some(v => total.test(teks(v))) && (!rekananMentah || total.test(rekananMentah) || typeof tgl !== 'string')) return;
     if (!rekananMentah && !nama) return; // baris kosong bernomor (templat 25 baris)
     if (!rekananMentah) { hasil.dilewati.push(`Baris ${nomor} "${nama.slice(0, 40)}": nama rekanan kosong.`); return; }
-    const tgl = ix.tgl === undefined ? null : bacaTanggal(b[ix.tgl]).nilai;
     if (typeof tgl !== 'string') { hasil.dilewati.push(`Baris ${nomor} ${rekananMentah.slice(0, 40)}: tanggal surat kosong atau tidak terbaca.`); return; }
     const rekanan = rapikanNamaRekanan(rekananMentah);
     const nomorSurat = ambil(b, 'nomor').slice(0, 120) || null;
