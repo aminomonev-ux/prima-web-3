@@ -22,7 +22,8 @@ import {
   referensiSah, perluReferensi, kelengkapanBukti, buktiBelumLengkap,
   type ReferensiIsian, type JenisBukti, type KelengkapanBukti,
 } from '@/lib/bba/referensi';
-import { saranBarang, type BarangRingan } from '@/lib/bba/barang';
+import { saranBarang, kunciNamaBarang, type BarangRingan } from '@/lib/bba/barang';
+import { KotakDrive, selUntuk, type DataMenunggu, type SelBerkas } from './DriveMenunggu';
 import { referensiBeku, sasaranBeku, LABEL_STATUS, type BbaStatus } from '@/lib/bba/status';
 import type { BbaRow, BbaBukti, BbaDetail, BbaBarang, SasaranRencana } from '@/lib/data/buku-besar-aset';
 import { JENIS_RENCANA, LABEL_JENIS, KAPAN_JENIS, LABEL_ANGGARAN, type JenisRencana } from '@/lib/bba/rencana';
@@ -130,12 +131,18 @@ type Props = {
   onTutup: () => void;
   /** Ada yang tertulis ke server (item/referensi/bukti) — tabel induk memuat ulang. */
   onTersimpan: () => void;
+  /** Perubahan Drive yang menunggu (CONCEPT-bba-drive-dua-arah U2) — milik layar induk, dimuat sekali. */
+  drive?: DataMenunggu | null;
+  onDriveBerubah?: () => void;
 };
 
 /** `<fieldset disabled>` mematikan semua isian & tombol di dalamnya sekaligus — satu saklar, bukan satu per field. */
 const FIELDSET_POLOS: React.CSSProperties = { border: 0, padding: 0, margin: 0, minWidth: 0 };
 
-export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, saringanAwal, tahun, kategori, bolehUbah, bolehBukti, onTutup, onTersimpan }: Props) {
+/** Kolom laporan → isian form item. Kolom yang tidak ada di form (Keputusan, Tgl Pesan) hanya bisa ditolak di sini. */
+const KOLOM_FORM = new Set(['uraian', 'barang', 'jenis', 'sumber', 'vol', 'satuan', 'harga', 'alasan', 'kode_rekening']);
+
+export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, saringanAwal, tahun, kategori, bolehUbah, bolehBukti, onTutup, onTersimpan, drive, onDriveBerubah }: Props) {
   const [daftar, setDaftar] = useState<BbaRow[]>(daftarAwal ?? []);
   const [belumSaatBuka] = useState(() => new Set((daftarAwal ?? []).filter(perluReferensi).map(r => r.id)));
   const [saringan, setSaringan] = useState<'BELUM' | 'SEMUA'>(saringanAwal);
@@ -165,6 +172,24 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   // §10 butir 7 — server menolak perubahan referensi item yang sudah diproses (REFERENSI_BEKU).
   const refBeku = !!item && referensiBeku(item.status);
   const jenisBeku = !!item && sasaranBeku(item.status);
+  // "Pakai nilai Drive" hanya mengisi form (L78); Simpan yang menulis, dengan pagar biasa.
+  const bisaPakaiDrive = (s: SelBerkas) => s.l === 'rencana' && KOLOM_FORM.has(s.k)
+    && !(isUsulan && (s.k === 'uraian' || s.k === 'vol' || s.k === 'harga')) && !(jenisBeku && s.k === 'jenis');
+  const pakaiDrive = (s: SelBerkas) => setIsian(x => {
+    const v = s.drive;
+    switch (s.k) {
+      case 'uraian': case 'satuan': case 'alasan': case 'kode_rekening': return { ...x, [s.k]: v === null ? '' : String(v) };
+      case 'vol': case 'harga': return { ...x, [s.k]: Number(v ?? 0) };
+      case 'sumber': return v ? { ...x, sumber_anggaran: String(v) } : x;
+      case 'jenis': return { ...x, jenis_rencana: (v ?? '') as JenisRencana | '' };
+      case 'barang': {
+        if (v === null) return { ...x, barang: null };
+        const b = daftarBarang.find(d => kunciNamaBarang(d.nama) === kunciNamaBarang(String(v)));
+        return { ...x, barang: b ? { id: b.id, nama: b.nama } : { baru: String(v) } };
+      }
+      default: return x;
+    }
+  });
   // Dihitung dari daftar bukti di layar — bukti ditulis per aksi, jadi ini selalu angka tersimpan terbaru.
   const kBukti = item ? kelengkapanBukti(bukti.map(b => b.jenis), item.status) : null;
 
@@ -430,6 +455,12 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
               {memuat ? <div style={{ fontSize: 12.5, color: c.sub }}>Memuat…</div>
                 : galatMuat ? <div style={{ fontSize: 12.5, color: '#E24B4A' }}>{galatMuat}</div>
                 : tab === 'data' ? (
+                  <>
+                  {item && (
+                    <KotakDrive key={item.id} c={c} sel={selUntuk(drive ?? null, ['rencana', 'pengadaan'], item.id)}
+                      bolehPakai={bolehUbah} bolehLembar={drive?.bolehLembar ?? {}}
+                      bisaPakai={bisaPakaiDrive} onPakai={pakaiDrive} onBerubah={() => onDriveBerubah?.()} />
+                  )}
                   <fieldset disabled={!bolehUbah} style={FIELDSET_POLOS}>
                   <div className="bba-mi-grid2">
                     {isUsulan && (
@@ -484,6 +515,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                     <Field label="Keterangan" full><textarea value={isian.keterangan} onChange={e => setIsian({ ...isian, keterangan: e.target.value })} style={{ ...inp, minHeight: 54 }} /></Field>
                   </div>
                   </fieldset>
+                  </>
                 ) : tab === 'ref' ? (
                   <fieldset disabled={!bolehUbah || refBeku} style={FIELDSET_POLOS}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

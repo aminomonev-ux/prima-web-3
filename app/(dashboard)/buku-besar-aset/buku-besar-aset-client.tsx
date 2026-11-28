@@ -24,6 +24,7 @@ import SpandukBeku from '@/components/ui/SpandukBeku';
 import SpandukLihat from '@/components/ui/SpandukLihat';
 import type { InfoBeku } from '@/lib/security/beku';
 import ModalItem, { LencanaRef, type TabItem } from './_components/ModalItem';
+import { useDriveMenunggu, selUntuk, LencanaDrive } from './_components/DriveMenunggu';
 import PerBarang from './_components/PerBarang';
 import ModalTautkan from './_components/ModalTautkan';
 import SaranTahunLalu from './_components/SaranTahunLalu';
@@ -154,7 +155,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   }, [tahun, fSumber, fOrigin, fJenis, fKat, fJenisKat, q]);
 
   /** Sesudah ada yang tertulis: tabel, tampilan Per Barang, dan pita alur ikut segar. */
-  const muatUlang = () => { void load(); setSegarkanBarang(n => n + 1); };
+  const { data: drive, muat: muatDrive } = useDriveMenunggu(tahun);
+  const muatUlang = () => { void load(); setSegarkanBarang(n => n + 1); void muatDrive(); };
 
   // Auto-refresh saat ganti tahun/saringan (debounce supaya ketik tahun tak spam).
   // Patokannya saringan yang terakhir DIMUAT, bukan "sudah mount" — efek ganda strict mode
@@ -482,6 +484,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                     {r.jumlah_sasaran > 0 && <span>· mengganti {r.jumlah_sasaran} aset</span>}
                     {isRejected && <span style={{ color: '#E24B4A' }}>· {DITOLAK_LABEL[r.ditolak_oleh ?? ''] ?? 'Ditolak'}</span>}
                     <LencanaRef row={r} />
+                    <LencanaDrive sel={selUntuk(drive, ['rencana', 'pengadaan'], r.id)} />
                   </div>
                 </td>
                 <td style={{ ...td, fontFamily: MONO, textAlign: 'right', whiteSpace: 'nowrap', width: 160 }}>
@@ -519,7 +522,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       {/* Modal item — Data item / Referensi harga / Bukti dukung (CONCEPT-bba-perencanaan §4.4) */}
       {modal && (
         <ModalItem c={c} daftar={modal.daftar} awalId={modal.id} tabAwal={modal.tab} saringanAwal={modal.saringan}
-          tahun={tahun} kategori={kategori} bolehUbah={bolehRencana} bolehBukti={bolehBukti} onTutup={() => setModal(null)} onTersimpan={muatUlang} />
+          tahun={tahun} kategori={kategori} bolehUbah={bolehRencana} bolehBukti={bolehBukti} onTutup={() => setModal(null)} onTersimpan={muatUlang}
+          drive={drive} onDriveBerubah={() => void muatDrive()} />
       )}
 
       {tautkanBuka && <ModalTautkan tahun={tahun} c={c} onTutup={() => setTautkanBuka(false)} onSelesai={() => { setTautkanBuka(false); muatUlang(); }} />}

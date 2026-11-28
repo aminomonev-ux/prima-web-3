@@ -23,6 +23,7 @@ import { TombolUnduhBuku } from '../_components/UnduhBuku';
 import GarisTahap from '../_components/GarisTahap';
 import { cocokSaringKategori, type MasterKategoriData } from '@/lib/bba/kategori';
 import MenuBaris, { type ButirMenu } from '../_components/MenuBaris';
+import { useDriveMenunggu, selUntuk, LencanaDrive } from '../_components/DriveMenunggu';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -47,6 +48,7 @@ export default function PengadaanClient({ username, role, themePreference, beku,
   const [buka, setBuka] = useState<Buka | null>(null);
   const [segarkan, setSegarkan] = useState(0);
   const nomor = useRef(0);
+  const { data: drive, muat: muatDrive } = useDriveMenunggu(data.tahun);
 
   async function muat(t = Number(tahun)) {
     if (!Number.isInteger(t) || t < 2020 || t > 2100) { toast.error('Tahun 2020–2100'); return; }
@@ -155,7 +157,7 @@ export default function PengadaanClient({ username, role, themePreference, beku,
                     <tr key={r.id}>
                       <td style={td}>
                         <div style={{ fontWeight: 700 }}>{r.uraian}</div>
-                        <div style={{ fontSize: 11, color: c.sub }}>{[r.canonical_id, r.barang_nama, r.jenis_rencana ? LABEL_JENIS[r.jenis_rencana] : null, r.tgl_proses ? `dipesan ${fmtTanggal(r.tgl_proses)}` : null].filter(Boolean).join(' · ')}</div>
+                        <div style={{ fontSize: 11, color: c.sub }}>{[r.canonical_id, r.barang_nama, r.jenis_rencana ? LABEL_JENIS[r.jenis_rencana] : null, r.tgl_proses ? `dipesan ${fmtTanggal(r.tgl_proses)}` : null].filter(Boolean).join(' · ')} <LencanaDrive sel={selUntuk(drive, ['rencana', 'pengadaan'], r.id)} /></div>
                       </td>
                       <td style={{ ...td, fontFamily: MONO, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {fmtAngka(r.anggaran_vol ?? r.vol)} {r.satuan || ''}<div style={{ fontSize: 11, color: c.sub }}>{fmtRp(r.anggaran_nilai ?? r.nilai_rencana)}</div>
@@ -186,7 +188,8 @@ export default function PengadaanClient({ username, role, themePreference, beku,
           )}
           {buka?.jenis === 'item' && (
             <ModalItem c={c} daftar={tampil} awalId={buka.id} tabAwal={buka.tab} saringanAwal="SEMUA" tahun={data.tahun} kategori={kategori}
-              bolehUbah={false} bolehBukti={bolehBukti} onTutup={() => setBuka(null)} onTersimpan={() => void muat(data.tahun)} />
+              bolehUbah={false} bolehBukti={bolehBukti} onTutup={() => setBuka(null)} onTersimpan={() => { void muat(data.tahun); void muatDrive(); }}
+              drive={drive} onDriveBerubah={() => void muatDrive()} />
           )}
         </>);
       }}

@@ -29,6 +29,8 @@ import MenuBaris, { type ButirMenu } from '../_components/MenuBaris';
 import { TombolUnduhBuku } from '../_components/UnduhBuku';
 import PilihKategori, { type NilaiKategori } from '../_components/PilihKategori';
 import CariPilih from '../_components/CariPilih';
+import { useDriveMenunggu, selUntuk, gabungKembar, LencanaDrive, KotakDrive, type DataMenunggu, type SelBerkas } from '../_components/DriveMenunggu';
+import { kunciNamaBarang } from '@/lib/bba/barang';
 import { pilihanDariBaris, type MasterKategoriData } from '@/lib/bba/kategori';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -72,6 +74,7 @@ export default function PenawaranClient({ username, role, themePreference, beku,
   const [impor, setImpor] = useState(false);
   const nomor = useRef(0);
   const hariIni = tanggalHariIniWIB();
+  const { data: drive, muat: muatDrive } = useDriveMenunggu();
 
   async function muat() {
     const n = ++nomor.current;
@@ -81,6 +84,7 @@ export default function PenawaranClient({ username, role, themePreference, beku,
     const x = d as unknown as { surat: SuratPenawaran[]; rekanan: SaranRekanan[] };
     setSurat(x.surat); setRekanan(x.rekanan);
     const b = await fetchJson<unknown>('/api/buku-besar-aset/barang');
+    void muatDrive();
     if (b.ok) setBarang(((b as unknown as { data: BarangPilih[] }).data ?? []).map(x => ({ id: x.id, nama: x.nama, satuan: x.satuan ?? null, kategori: x.kategori ?? null, jenis_kategori: x.jenis_kategori ?? null, kode_rekening: x.kode_rekening ?? null })));
   }
 
@@ -176,11 +180,12 @@ export default function PenawaranClient({ username, role, themePreference, beku,
           </div>
 
           {tampilan === 'MATRIKS'
-            ? <Matriks c={c} surat={tampilSurat} kosongTotal={surat.length === 0} hariIni={hariIni} bolehUbah={bolehUbah} butirMenu={butirMenu}
+            ? <Matriks c={c} surat={tampilSurat} kosongTotal={surat.length === 0} hariIni={hariIni} bolehUbah={bolehUbah} butirMenu={butirMenu} drive={drive}
                 onMenu={(s, k) => { if (k === 'ubah') setBuka({ surat: s }); else if (k === 'hapus') void hapus(s); else if (k.startsWith('status:')) void ubahStatus(s, (k.slice(7) || null) as StatusTindakLanjut | null); }} />
             : <Bandingkan c={c} banding={banding} onBukaSurat={id => { const s = surat.find(x => x.id === id); if (s) { setTampilan('MATRIKS'); setSaring('SEMUA'); setFStatus(''); setFJenis(''); setFKat(''); setBuka({ surat: s }); } }} />}
 
-          {buka && <PanelSurat c={c} awal={buka.surat} semua={surat} rekanan={rekanan} barang={barang} merkAda={merkAda} kategori={kategori} hariIni={hariIni} onTutup={() => setBuka(null)} onTersimpan={() => { setBuka(null); void muat(); }} />}
+          {buka && <PanelSurat c={c} awal={buka.surat} semua={surat} rekanan={rekanan} barang={barang} merkAda={merkAda} kategori={kategori} hariIni={hariIni} onTutup={() => setBuka(null)} onTersimpan={() => { setBuka(null); void muat(); }}
+            drive={drive} onDriveBerubah={() => void muatDrive()} />}
           {impor && <ModalImporPenawaran c={c} rekanan={rekanan} onTutup={() => setImpor(false)} onTersimpan={() => { setImpor(false); void muat(); }} />}
         </>);
       }}
@@ -190,8 +195,8 @@ export default function PenawaranClient({ username, role, themePreference, beku,
 
 // ─── Daftar Matriks ───────────────────────────────────────────────────────────
 
-function Matriks({ c, surat, kosongTotal, hariIni, bolehUbah, butirMenu, onMenu }: {
-  c: WarnaBba; surat: SuratPenawaran[]; kosongTotal: boolean; hariIni: string; bolehUbah: boolean;
+function Matriks({ c, surat, kosongTotal, hariIni, bolehUbah, butirMenu, onMenu, drive }: {
+  c: WarnaBba; surat: SuratPenawaran[]; kosongTotal: boolean; hariIni: string; bolehUbah: boolean; drive: DataMenunggu | null;
   butirMenu: (s: SuratPenawaran) => ButirMenu[]; onMenu: (s: SuratPenawaran, kunci: string) => void;
 }) {
   const th: React.CSSProperties = { padding: '7px 8px', fontSize: 10.5, color: c.sub, textAlign: 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap', background: c.card, fontWeight: 600 };
@@ -235,7 +240,7 @@ function Matriks({ c, surat, kosongTotal, hariIni, bolehUbah, butirMenu, onMenu 
                       <td rowSpan={rs} style={{ ...td, fontFamily: MONO, whiteSpace: 'nowrap' }}>{fmtTanggal(s.tgl_surat)}</td>
                       <td rowSpan={rs} style={{ ...td, fontFamily: MONO, whiteSpace: 'pre-line', maxWidth: 190, wordBreak: 'break-all' }}>{s.nomor_surat || kosong}</td>
                       <td rowSpan={rs} style={{ ...td, maxWidth: 160 }}>{s.jenis_surat || kosong}</td>
-                      <td rowSpan={rs} style={{ ...td, maxWidth: 230 }}><b>{s.rekanan}</b>{s.pic_kontak && <div style={{ ...sub, whiteSpace: 'pre-line' }}>{s.pic_kontak}</div>}</td>
+                      <td rowSpan={rs} style={{ ...td, maxWidth: 230 }}><b>{s.rekanan}</b> <LencanaDrive sel={selUntuk(drive, ['penawaran'], s.item.map(i => i.id))} />{s.pic_kontak && <div style={{ ...sub, whiteSpace: 'pre-line' }}>{s.pic_kontak}</div>}</td>
                       <td rowSpan={rs} style={{ ...td, maxWidth: 200 }}>{[s.kategori, s.jenis_kategori].filter(Boolean).join(' · ') || kosong}{s.kode_rekening && <div style={{ ...sub, fontFamily: MONO }}>{s.kode_rekening}</div>}</td>
                     </>}
                     {i ? <>
@@ -331,6 +336,9 @@ function Bandingkan({ c, banding, onBukaSurat }: { c: WarnaBba; banding: ReturnT
 
 // ─── Panel form surat ─────────────────────────────────────────────────────────
 
+/** Kolom lembar Penawaran milik SURAT (bukan item) — sama dengan `KOLOM_KEPALA` Drive balik. */
+const KEPALA_SURAT = new Set(['rekanan', 'pic', 'jenis_surat', 'nomor', 'tgl_surat', 'berlaku', 'masa', 'syarat', 'status_tl']);
+
 type IsianItem = {
   kunci: number; id: number | null; barang: PilihanBarang; nama_barang: string; merk: string; tipe: string; spesifikasi: string; satuan: string;
   harga: number | null; pajak: StatusPajak | ''; tautan: string; garansi: string; buka: boolean;
@@ -394,9 +402,10 @@ function itemDariTempel(teks: string, pajak: StatusPajak | ''): IsianItem[] {
   return barisTempelBarang(teks).map(b => ({ ...itemKosong(pajak), nama_barang: b.nama, merk: b.merk, tipe: b.tipe, satuan: b.satuan, harga: b.harga }));
 }
 
-function PanelSurat({ c, awal, semua, rekanan, barang, merkAda, kategori, hariIni, onTutup, onTersimpan }: {
+function PanelSurat({ c, awal, semua, rekanan, barang, merkAda, kategori, hariIni, onTutup, onTersimpan, drive, onDriveBerubah }: {
   c: WarnaBba; awal: SuratPenawaran | null; semua: SuratPenawaran[]; rekanan: SaranRekanan[]; barang: BarangPilih[]; merkAda: string[];
   kategori: MasterKategoriData; hariIni: string; onTutup: () => void; onTersimpan: () => void;
+  drive: DataMenunggu | null; onDriveBerubah: () => void;
 }) {
   const [k, setK] = useState<Kepala>(() => kepalaDari(awal, kategori));
   const [item, setItem] = useState<IsianItem[]>(() => (awal ? (awal.item.length ? awal.item.map(isianDariItem) : []) : [itemKosong()]));
@@ -416,6 +425,49 @@ function PanelSurat({ c, awal, semua, rekanan, barang, merkAda, kategori, hariIn
     </div>
   );
 
+  // Perubahan Drive yang menunggu untuk surat ini (CONCEPT-bba-drive-dua-arah U2). Kolom kepala surat berulang di tiap baris
+  // barang berkas — digabung jadi satu baris; "Pakai" hanya mengisi form, Simpan yang menulis (L78).
+  const selDrive = useMemo(() => {
+    if (!awal) return [];
+    const namaItem = new Map(awal.item.map(i => [i.id, i.nama_barang]));
+    const sel = selUntuk(drive, ['penawaran'], awal.item.map(i => i.id))
+      .map(s => ({ ...s, judul: KEPALA_SURAT.has(s.k) ? `${s.judul} (surat)` : `${s.judul} · ${namaItem.get(s.id) ?? ''}` }));
+    return gabungKembar(sel, s => (KEPALA_SURAT.has(s.k) ? s.k : `${s.id}:${s.k}`));
+  }, [drive, awal]);
+  const pakaiDrive = (s: SelBerkas) => {
+    const t = s.drive === null ? '' : String(s.drive);
+    switch (s.k) {
+      case 'rekanan': setK(x => ({ ...x, rekanan: t })); return;
+      case 'pic': setK(x => ({ ...x, pic: t, picOtomatis: false })); return;
+      case 'jenis_surat': setK(x => ({ ...x, jenis: t })); return;
+      case 'nomor': setK(x => ({ ...x, nomor: t })); return;
+      case 'tgl_surat': if (t) setK(x => ({ ...x, tgl: t })); return;
+      case 'berlaku': setK(x => ({ ...x, berlaku: t ? { mode: 'tanggal', tgl: t } : { mode: 'tanpa' } })); return;
+      case 'masa': setK(x => ({ ...x, masaTeks: t })); return;
+      case 'syarat': setK(x => ({ ...x, syarat: t })); return;
+      case 'status_tl': setK(x => ({ ...x, status: (t as StatusTindakLanjut) || '' })); return;
+    }
+    setItem(xs => xs.map(it => {
+      if (it.id !== s.id) return it;
+      switch (s.k) {
+        case 'nama': return { ...it, nama_barang: t };
+        case 'merek': return { ...it, merk: t };
+        case 'merk': return { ...it, tipe: t };
+        case 'spesifikasi': return { ...it, spesifikasi: t };
+        case 'satuan': return { ...it, satuan: t };
+        case 'harga': return { ...it, harga: s.drive === null ? null : Number(s.drive) };
+        case 'pajak': return { ...it, pajak: (t as StatusPajak) || '' };
+        case 'tautan': return { ...it, tautan: t };
+        case 'garansi': return { ...it, garansi: t };
+        case 'barang': {
+          if (!t) return { ...it, barang: null };
+          const b = barang.find(x => kunciNamaBarang(x.nama) === kunciNamaBarang(t));
+          return { ...it, barang: b ? { id: b.id, nama: b.nama } : { baru: t } };
+        }
+        default: return it;
+      }
+    }));
+  };
   const ubahItem = (kunci: number, x: Partial<IsianItem>) => setItem(xs => xs.map(v => (v.kunci === kunci ? { ...v, ...x } : v)));
   const terisi = item.filter(i => i.nama_barang.trim() || i.barang);
   const berlakuSampai = berlakuDari(k);
@@ -470,6 +522,8 @@ function PanelSurat({ c, awal, semua, rekanan, barang, merkAda, kategori, hariIn
 `}</style>
       <div className="bba-panel-surat">
         <div style={{ minWidth: 0 }}>
+          <KotakDrive c={c} sel={selDrive} bolehPakai bolehLembar={drive?.bolehLembar ?? {}}
+            bisaPakai={s => KEPALA_SURAT.has(s.k) || item.some(i => i.id === s.id)} onPakai={pakaiDrive} onBerubah={onDriveBerubah} />
           <div style={bagian}>
             {judulBagian('I', 'Identitas surat & rekanan')}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>

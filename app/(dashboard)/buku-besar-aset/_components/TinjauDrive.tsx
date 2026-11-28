@@ -194,6 +194,7 @@ function TinjauDrive({ c, kunci, onTutup, onSelesai }: { c: WarnaBba; kunci: str
             ? <>Dibandingkan dengan salinan yang PRIMA kirim {p.asal.dikirimPada}{p.asal.terbaru ? '' : <b style={{ color: KUNING }}> — bukan salinan terakhir: berkas disunting dari salinan lama. Perubahan PRIMA sesudahnya tetap dipakai.</b>}.</>
             : <b style={{ color: KUNING }}>Tidak ada catatan salinan asal untuk berkas ini, jadi PRIMA tidak bisa membedakan mana yang diubah di Drive dan mana yang diubah di PRIMA. Semua beda ditampilkan tanpa dicentang — pilih sendiri.</b>}
           {t.dipertahankan > 0 && <> {t.dipertahankan} perubahan yang dibuat di PRIMA sesudah salinan itu dibuka dipertahankan.</>}
+          {(p.diputuskanWeb ?? 0) > 0 && <> {p.diputuskanWeb} perubahan Drive sudah ditolak di layar (&ldquo;tetap nilai PRIMA&rdquo;) dan tidak ditanyakan lagi.</>}
           {p.revisiHilang && <> <b style={{ color: KUNING }}>Versi yang terdeteksi sudah dipangkas Drive — yang dibaca versi terbaru.</b></>}
           {p.lembarHilang.length > 0 && <> Lembar {p.lembarHilang.map(l => NAMA[l]).join(', ')} tidak ditemukan di berkas.</>}
         </div>

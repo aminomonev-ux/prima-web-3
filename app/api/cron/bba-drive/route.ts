@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { verifyCronSecret } from '@/lib/security/cron-auth'
 import { kirimLaporanKeDrive } from '@/lib/data/bba-laporan'
+import { segarkanMenunggu } from '@/lib/data/bba-drive-balik'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,7 +24,14 @@ export async function POST(req: NextRequest) {
       await writeAuditLog({ req, eventType: 'BBA_DRIVE_KIRIM', username: 'cron',
         detail: `BBA laporan ke Drive (cron): ${h.dikirim.length} terkirim${h.gagal.length ? `, ${h.gagal.length} gagal — ${h.gagal.join(' · ')}` : ''}`.slice(0, 1000) })
     }
-    return NextResponse.json({ ok: true, ...h })
+    // Berkas yang ditahan: ringkasan per baris untuk layar + lepas sendiri bila semua sudah diputuskan di web
+    // (CONCEPT-bba-drive-dua-arah U2). Kiriman hasil gabungan menyusul di putaran berikutnya (kirim_segera).
+    const menunggu = h.status === 'selesai' && h.ditahan.length ? await segarkanMenunggu() : []
+    for (const m of menunggu.filter(x => x.dilepas)) {
+      await writeAuditLog({ req, eventType: 'BBA_DRIVE_BALIK', username: 'cron',
+        detail: `BBA perubahan Drive DILEPAS OTOMATIS — ${m.kunci}: semua sel yang diubah di Drive sudah dipakai atau ditolak di web; salinan otomatis berlanjut` })
+    }
+    return NextResponse.json({ ok: true, ...h, menunggu })
   } catch (e) {
     console.error('[cron bba-drive]', e)
     return NextResponse.json({ ok: false, message: 'Gagal mengirim laporan BBA ke Drive' }, { status: 500 })

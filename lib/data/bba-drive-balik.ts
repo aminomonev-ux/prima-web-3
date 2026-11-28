@@ -11,7 +11,10 @@ import {
   bacaLembar, potretDariBahan, pilihAsal, gabungTigaArah, barangBelumAda, tampilNilai,
   type BacaanBerkas, type MetaPrima, type PetaLembar, type Potret, type Tinjauan, type NilaiBaku, type UsulUbah, type UsulBaru,
 } from '@/lib/bba/drive-balik';
+import { JUDUL as JUDUL_KOLOM } from '@/lib/bba/drive-balik';
 import { lepasTahanan, type PerubahanLuar } from '@/lib/bba/drive-kirim';
+import { selisihDrive, nilaiMenunggu, bolehLepasOtomatis, saringTetap, kunciSel, type SelMenunggu } from '@/lib/bba/drive-menunggu';
+import { bacaMenunggu, kunciMenunggu, tulisMenunggu } from '@/lib/data/bba-drive-menunggu';
 import { kunciNamaBarang } from '@/lib/bba/barang';
 import type { Anggaran, JenisRencana } from '@/lib/bba/rencana';
 import { muatBahanBukuRencana, bacaStatusDrive, tulisStatusDrive, kunciPengirim } from '@/lib/data/bba-laporan';
@@ -77,13 +80,16 @@ export interface Pratinjau {
   tinjauan: Tinjauan;
   barangBaru: Array<{ nama: string; mirip: string | null }>;
   asal: { ada: boolean; dikirimPada: string | null; terbaru: boolean };
+  /** Sel yang di web sudah dipilih "tetap nilai PRIMA" — tidak ditanyakan lagi (CONCEPT-bba-drive-dua-arah U2). */
+  diputuskanWeb: number;
 }
 
 type Bahan = { pratinjau: Pratinjau; rows: BbaRow[]; surat: SuratPenawaran[]; master: Array<{ id: number; nama: string }> };
 
 const tahunDari = (kunci: string) => { const m = /^rencana:(\d{4})$/.exec(kunci); return m ? Number(m[1]) : null; };
 
-async function susunPratinjau(kunci: string, koreksi?: Partial<Record<LembarBalik, PetaLembar>> | null): Promise<Bahan> {
+/** Bahan gabung tiga arah satu berkas — dipakai pratinjau/terapkan DAN ringkasan cron (satu jalur baca, L78). */
+async function bahanTigaArah(kunci: string, koreksi?: Partial<Record<LembarBalik, PetaLembar>> | null) {
   const tahun = tahunDari(kunci);
   const s = (await bacaStatusDrive()).berkas[kunci];
   if (!tahun || !s?.luar || !s.file_id) throw new TinjauanDriveError('TIDAK_ADA', 'Tidak ada perubahan Drive yang menunggu ditinjau untuk berkas ini — mungkin sudah ditinjau orang lain.');
@@ -101,18 +107,117 @@ async function susunPratinjau(kunci: string, koreksi?: Partial<Record<LembarBali
   const prima = potretDariBahan(bahan);
   const potret = kandidat.map(k => (typeof k.isi === 'string' ? JSON.parse(k.isi) : k.isi) as Potret);
   const i = pilihAsal(berkas, potret);
-  const tinjauan = gabungTigaArah(berkas, i >= 0 ? potret[i] : null, prima, metaDari(rows, surat, bahan.penerimaan));
-  const master = masterBarang.map(b => ({ id: b.id, nama: b.nama }));
+  return { tahun, luar: s.luar, revisiDibaca, revisiHilang, berkas, asal: i >= 0 ? potret[i] : null, i, kandidat, prima,
+    meta: metaDari(rows, surat, bahan.penerimaan), rows, surat, masterBarang };
+}
+
+async function susunPratinjau(kunci: string, koreksi?: Partial<Record<LembarBalik, PetaLembar>> | null): Promise<Bahan> {
+  const b = await bahanTigaArah(kunci, koreksi);
+  const { berkas, i, kandidat } = b;
+  const ringkas = await bacaMenunggu(kunci);
+  const { tinjauan, diputuskan } = saringTetap(gabungTigaArah(berkas, b.asal, b.prima, b.meta), ringkas?.revisi === b.luar.revisi ? ringkas.tetap : undefined);
+  const master = b.masterBarang.map(x => ({ id: x.id, nama: x.nama }));
   return {
-    rows, surat, master,
+    rows: b.rows, surat: b.surat, master,
     pratinjau: {
-      kunci, tahun, luar: s.luar, revisiDibaca, revisiHilang,
+      kunci, tahun: b.tahun, luar: b.luar, revisiDibaca: b.revisiDibaca, revisiHilang: b.revisiHilang,
       peta: Object.fromEntries(LEMBAR_BALIK.filter(l => berkas[l].peta).map(l => [l, berkas[l].peta!])),
       lembarHilang: LEMBAR_BALIK.filter(l => !berkas[l].ada),
-      tinjauan, barangBaru: barangBelumAda(tinjauan, master.map(b => b.nama)),
+      tinjauan, barangBaru: barangBelumAda(tinjauan, master.map(x => x.nama)),
       asal: { ada: i >= 0, dikirimPada: i >= 0 ? kandidat[i].dikirim_pada : null, terbaru: i === kandidat.length - 1 },
+      diputuskanWeb: diputuskan,
     },
   };
+}
+
+// ─── Perubahan menunggu per baris (CONCEPT-bba-drive-dua-arah U2) ───────────
+
+/**
+ * Cron, sesudah memeriksa Drive: untuk berkas yang ditahan, susun ringkasan sel yang diubah di Drive (sekali per revisi — isinya
+ * tidak bergantung PRIMA), lalu lepas tahanan sendiri bila semuanya sudah diputuskan di web. Gagal Drive di sini tidak
+ * menggagalkan cron; putaran berikutnya mencoba lagi.
+ */
+export async function segarkanMenunggu(): Promise<Array<{ kunci: string; dilepas: boolean; galat?: string }>> {
+  const hasil: Array<{ kunci: string; dilepas: boolean; galat?: string }> = [];
+  for (const [kunci, s] of Object.entries((await bacaStatusDrive()).berkas)) {
+    if (!tahunDari(kunci) || !s.luar || !s.file_id) continue;
+    try {
+      let ringkas = await bacaMenunggu(kunci);
+      if (ringkas?.revisi !== s.luar.revisi) {
+        const b = await bahanTigaArah(kunci);
+        const sel = selisihDrive(b.berkas, b.asal, b.prima, b.meta);
+        const peringatan = LEMBAR_BALIK.reduce((n, l) => n + (b.berkas[l].ada ? (b.berkas[l].peta?.asing.filter(x => x.contoh.length).length ?? 0) + (b.berkas[l].peta?.ragu.length ?? 0) : 1), 0)
+          + (b.revisiHilang ? 1 : 0);
+        const revisi = b.luar.revisi;
+        ringkas = await withTransaction(async ({ tx }) => {
+          await kunciMenunggu(tx, kunci);
+          // Tahanan bisa berganti/dilepas selama berkas diunduh — ringkasan revisi lama tidak ditulis.
+          if ((await bacaStatusDrive()).berkas[kunci]?.luar?.revisi !== revisi) return null;
+          const r = { revisi, ...sel, peringatan, tetap: {} };
+          await tulisMenunggu(tx, kunci, r);
+          return r;
+        });
+        if (!ringkas) continue;
+      }
+      const { bahan } = await muatBahanBukuRencana(tahunDari(kunci)!);
+      const menunggu = nilaiMenunggu(ringkas, potretDariBahan(bahan));
+      if (!bolehLepasOtomatis(ringkas, menunggu)) { hasil.push({ kunci, dilepas: false }); continue; }
+      const kepala = await metadataBerkasDrive(s.file_id);
+      // Disunting lagi sesudah ringkasan disusun = ada yang belum terlihat; putaran berikutnya mendeteksi revisi barunya.
+      if (!s.luar.tertimpa && kepala.md5 !== s.luar.md5) { hasil.push({ kunci, dilepas: false }); continue; }
+      const dilepas = await withTransaction(async ({ tx }) => {
+        if (!(await kunciPengirim(tx))) return false;
+        const st = await bacaStatusDrive();
+        const s0 = st.berkas[kunci];
+        if (!s0?.luar || s0.luar.revisi !== ringkas!.revisi) return false;
+        st.berkas[kunci] = lepasTahanan(s0, kepala.md5);
+        await tulisStatusDrive(tx, st);
+        await kunciMenunggu(tx, kunci);
+        await tulisMenunggu(tx, kunci, null);
+        return true;
+      });
+      hasil.push({ kunci, dilepas });
+    } catch (e) {
+      console.error('[drive-menunggu]', kunci, e);
+      hasil.push({ kunci, dilepas: false, galat: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return hasil;
+}
+
+export type MenungguBerkas = { kunci: string; tahun: number; revisi: string; oleh: string | null; pada: string | null; terpotong: boolean; baru: number; sel: SelMenunggu[] };
+
+/** Untuk layar: sel yang masih menunggu, dinilai terhadap PRIMA SEKARANG. Hanya membaca DB — tidak pernah menunggu Google. */
+export async function menungguPerBaris(tahun?: number): Promise<MenungguBerkas[]> {
+  const st = await bacaStatusDrive();
+  const hasil: MenungguBerkas[] = [];
+  for (const [kunci, s] of Object.entries(st.berkas)) {
+    const t = tahunDari(kunci);
+    if (!t || !s.luar || (tahun && t !== tahun)) continue;
+    const r = await bacaMenunggu(kunci);
+    if (!r || r.revisi !== s.luar.revisi) continue;
+    const { bahan } = await muatBahanBukuRencana(t);
+    hasil.push({ kunci, tahun: t, revisi: r.revisi, oleh: s.luar.oleh, pada: s.luar.pada, terpotong: r.terpotong, baru: r.baru,
+      sel: nilaiMenunggu(r, potretDariBahan(bahan)) });
+  }
+  return hasil;
+}
+
+/**
+ * "Tetap nilai PRIMA" dari web: isi Drive sel itu ditolak — tinjauan tidak menanyakannya lagi, dan ia tidak menahan lepas
+ * otomatis. Hanya untuk revisi yang sedang ditahan (revisi lama = 409, layar memuat ulang).
+ */
+export async function tetapkanNilaiPrima(kunci: string, revisi: string, l: LembarBalik, id: number, k: string): Promise<{ judul: string; drive: NilaiBaku }> {
+  return withTransaction(async ({ tx }) => {
+    await kunciMenunggu(tx, kunci);
+    const r = await bacaMenunggu(kunci, tx);
+    const s = (await bacaStatusDrive()).berkas[kunci];
+    if (!r || !s?.luar || r.revisi !== revisi || s.luar.revisi !== revisi) throw new TinjauanDriveError('PRATINJAU_BASI', 'Berkas di Drive sudah berubah lagi atau sudah ditinjau — daftar dimuat ulang.');
+    const sel = r.sel.find(x => x.l === l && x.id === id && x.k === k);
+    if (!sel) throw new TinjauanDriveError('TIDAK_ADA', 'Perubahan Drive ini tidak ada lagi di daftar.');
+    await tulisMenunggu(tx, kunci, { ...r, tetap: { ...r.tetap, [kunciSel(l, id, k)]: sel.d } });
+    return { judul: JUDUL_KOLOM[l][k] ?? k, drive: sel.d };
+  });
 }
 
 export async function pratinjauDriveBalik(kunci: string, koreksi?: Partial<Record<LembarBalik, PetaLembar>> | null): Promise<Pratinjau> {
@@ -300,6 +405,8 @@ export async function terapkanDriveBalik(p: PilihanTerapkan, userId: number, izi
     st.berkas[p.kunci] = lepasTahanan(s0, kepala.md5);
     await tulisStatusDrive(tx, st);
     await tx`DELETE FROM bba_drive_potret WHERE kunci = ${p.kunci} AND id < (SELECT m FROM (SELECT MAX(id) AS m FROM bba_drive_potret WHERE kunci = ${p.kunci}) AS x)`;
+    await kunciMenunggu(tx, p.kunci);
+    await tulisMenunggu(tx, p.kunci, null);
     return { ...hasil, pratinjau };
   });
 }
@@ -400,6 +507,8 @@ export async function abaikanDriveBalik(kunci: string, revisi: string): Promise<
     const luar = s0.luar;
     st.berkas[kunci] = lepasTahanan(s0, kepala.md5);
     await tulisStatusDrive(tx, st);
+    await kunciMenunggu(tx, kunci);
+    await tulisMenunggu(tx, kunci, null);
     return luar;
   });
 }
