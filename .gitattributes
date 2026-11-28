@@ -44,3 +44,6 @@
 # ── Skrip Windows yang WAJIB CRLF ───────────────────────────────────────────
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Papan klip Excel ASLI (CRLF + sel terkutip ber-LF) — fixture uji tempel BBA, byte-nya jangan diubah.
+scripts/fixtures/bba-papan-klip/*.txt -text
